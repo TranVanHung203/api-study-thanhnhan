@@ -15,6 +15,9 @@ const VideoSchema = new mongoose.Schema({
   description: {
     type: String
   },
+  cloudinaryPublicId: {
+    type: String // Để xóa video trên Cloudinary
+  },
   createdAt: { 
     type: Date, 
     default: Date.now 
