@@ -61,6 +61,10 @@ const swaggerOptions = {
     },
     servers: [
       {
+        url: 'https://api-study-thanhnhan.onrender.com',
+        description: 'Production server'
+      },
+      {
         url: 'http://localhost:5000',
         description: 'Local server'
       }
