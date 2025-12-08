@@ -1,0 +1,120 @@
+
+
+
+
+
+
+
+
+{
+    "questions": [
+        {
+            "question_title": "What is the capital of France?",
+            "answers": [
+                {
+                    "answer_text": "Paris",
+                    "is_correct": true
+                },
+                {
+                    "answer_text": "London",
+                    "is_correct": false
+                },
+                {
+                    "answer_text": "Berlin",
+                    "is_correct": false
+                },
+                {
+                    "answer_text": "Madrid",
+                    "is_correct": false
+                }
+            ]
+        },
+        {
+            "question_title": "Which planet is known as the Red Planet?",
+            "answers": [
+                {
+                    "answer_text": "Mars",
+                    "is_correct": true
+                },
+                {
+                    "answer_text": "Earth",
+                    "is_correct": false
+                },
+                {
+                    "answer_text": "Venus",
+                    "is_correct": false
+                },
+                {
+                    "answer_text": "Jupiter",
+                    "is_correct": false
+                }
+            ]
+        }
+    ]
+}
+-------------------------
+(Tạo và sửa khóa học) để ý đuôi @
+{
+    "courseName": "Introduction to Programming",
+    "description": "This course provides a basic introduction to programming.",
+    "startDate": "2024-01-01T00:00:00.000Z",
+    "endDate": "2024-03-01T00:00:00.000Z",
+    "emails": [
+        "tvhcptn@gmail.com",
+        "student1@example.com"
+    ]
+}
+---------------------------
+(tạo lesson)
+name: Lesson 1: Introduction to Variables
+number: 1
+lesson_details:This lesson covers the basics of variables in programming
+type: Video
+file: 
+-------------------------------------
+ submit câu hỏi
+{
+   
+  "answers": [
+    {
+      "questionId": "QUESTION_ID_1",
+      "answerId": "ANSWER_ID_1"
+    },
+    {
+      "questionId": "QUESTION_ID_2",
+      "answerId": "ANSWER_ID_2"
+    },
+    {
+      "questionId": "QUESTION_ID_3",
+      "answerId": "ANSWER_ID_3"
+    }
+    // Thêm các cặp questionId-answerId khác nếu quiz có thêm câu hỏi
+  ],
+  "startTime": "2024-11-06T10:00:00Z"
+}
+------------------------------------
+sửa câu hỏi và câu trả lời của nó
+{
+  "question_title": "Updated Question Title",
+  "answers": [
+    {
+      "answer_text": "Answer option 1",
+      "is_correct": false
+    },
+    {
+      "answer_text": "Answer option 2",
+      "is_correct": true
+    },
+    {
+      "answer_text": "Answer option 3",
+      "is_correct": false
+    },
+    {
+      "answer_text": "Answer option 4",
+      "is_correct": false
+    }
+  ]
+}
+--------------------------------
+FONTEND GỬI LÊN NHỚ LƯU LẠI DƯỚI DẠNG GIỜ VIỆT name
+-----------------------------------

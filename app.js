@@ -1,0 +1,113 @@
+import express from 'express';
+import cors from 'cors';
+import cookieParser from "cookie-parser";
+import jwt from "jsonwebtoken";
+import DatabaseConfig from './src/config/databaseConfig.js';
+import { errorHandler } from './src/errors/errorHandler.js';
+
+// Import models để đảm bảo tất cả schemas được register
+import User from './src/models/user.schema.js';
+import Class from './src/models/class.schema.js';
+import Skill from './src/models/skill.schema.js';
+import Progress from './src/models/progress.schema.js';
+import Video from './src/models/video.schema.js';
+import Exercise from './src/models/exercise.schema.js';
+import Quiz from './src/models/quiz.schema.js';
+import Question from './src/models/question.schema.js';
+import UserActivity from './src/models/userActivity.schema.js';
+import Reward from './src/models/reward.schema.js';
+
+// Import routes mới
+import authRoutes from './src/routes/authRoutes.js';
+import classRoutes from './src/routes/classRoutes.js';
+import skillRoutes from './src/routes/skillRoutes.js';
+import progressRoutes from './src/routes/progressRoutes.js';
+import videoRoutes from './src/routes/videoRoutes.js';
+import exerciseRoutes from './src/routes/exerciseRoutes.js';
+import quizNewRoutes from './src/routes/quizNewRoutes.js';
+import questionRoutes from './src/routes/questionRoutes.js';
+import activityRoutes from './src/routes/activityRoutes.js';
+import rewardRoutes from './src/routes/rewardRoutes.js';
+
+// Import Swagger
+import swaggerUi from 'swagger-ui-express';
+import swaggerJsdoc from 'swagger-jsdoc';
+
+const app = express();
+const databaseConfig = new DatabaseConfig();
+
+app.use(cookieParser());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+app.use(cors({
+  origin: 'http://localhost:3000',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
+}));
+
+// Kết nối đến cơ sở dữ liệu
+databaseConfig.connect();
+
+// Swagger configuration
+const swaggerOptions = {
+  definition: {
+    openapi: '3.0.0',
+    info: {
+      title: 'api-backend',
+      version: '1.0.0',
+      description: 'API dạy học online: quản lý khoá học, bài học, người dùng, quiz, thông báo...'
+    },
+    servers: [
+      {
+        url: 'http://localhost:5000',
+        description: 'Local server'
+      }
+    ],
+    components: {
+      securitySchemes: {
+        bearerAuth: {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT',
+          description: 'JWT Access Token - Lấy từ /auth/login'
+        },
+        cookieAuth: {
+          type: 'apiKey',
+          in: 'cookie',
+          name: 'access_token',
+          description: 'JWT stored in httpOnly cookie'
+        }
+      }
+    },
+    security: [
+      {
+        bearerAuth: []
+      }
+    ]
+  },
+  apis: ['./src/routes/*.js'],
+};
+
+const swaggerSpec = swaggerJsdoc(swaggerOptions);
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
+// Routes mới
+app.use('/auth', authRoutes);
+app.use('/classes', classRoutes);
+app.use('/skills', skillRoutes);
+app.use('/progress', progressRoutes);
+app.use('/videos', videoRoutes);
+app.use('/exercises', exerciseRoutes);
+app.use('/quizzes', quizNewRoutes);
+app.use('/questions', questionRoutes);
+app.use('/activities', activityRoutes);
+app.use('/rewards', rewardRoutes);
+
+app.use(errorHandler);
+
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
