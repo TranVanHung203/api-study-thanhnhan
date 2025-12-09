@@ -1,12 +1,12 @@
 import mongoose from 'mongoose';
 
-const SkillSchema = new mongoose.Schema({
-  chapterId: { 
+const ChapterSchema = new mongoose.Schema({
+  classId: { 
     type: mongoose.Schema.Types.ObjectId, 
-    ref: 'Chapter', 
+    ref: 'Class', 
     required: true 
   },
-  skillName: { 
+  chapterName: { 
     type: String, 
     required: true 
   },
@@ -23,4 +23,4 @@ const SkillSchema = new mongoose.Schema({
   }
 });
 
-export default mongoose.model('Skill', SkillSchema);
+export default mongoose.model('Chapter', ChapterSchema);

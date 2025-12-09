@@ -1,6 +1,6 @@
 import express from 'express';
 import {
-  getSkillsByClassController,
+  getSkillsByChapterController,
   createSkillController,
   updateSkillController,
   deleteSkillController
@@ -13,15 +13,15 @@ router.all('*', authToken);
 
 /**
  * @swagger
- * /skills/class/{classId}:
+ * /skills/chapter/{chapterId}:
  *   get:
- *     summary: Lấy danh sách kỹ năng của một lớp
+ *     summary: Lấy danh sách kỹ năng của một chapter
  *     tags: [Skills]
  *     security:
  *       - bearerAuth: []
  *     parameters:
  *       - in: path
- *         name: classId
+ *         name: chapterId
  *         required: true
  *         schema:
  *           type: string
@@ -31,7 +31,7 @@ router.all('*', authToken);
  *       401:
  *         description: Không có token hoặc token không hợp lệ
  */
-router.get('/class/:classId', getSkillsByClassController);
+router.get('/chapter/:chapterId', getSkillsByChapterController);
 
 /**
  * @swagger
@@ -45,8 +45,11 @@ router.get('/class/:classId', getSkillsByClassController);
  *         application/json:
  *           schema:
  *             type: object
+ *             required:
+ *               - chapterId
+ *               - skillName
  *             properties:
- *               classId:
+ *               chapterId:
  *                 type: string
  *               skillName:
  *                 type: string
@@ -54,6 +57,7 @@ router.get('/class/:classId', getSkillsByClassController);
  *                 type: string
  *               order:
  *                 type: number
+ *                 description: Nếu không truyền sẽ tự động lấy order cao nhất + 1
  *     responses:
  *       201:
  *         description: Kỹ năng được tạo thành công

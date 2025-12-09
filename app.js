@@ -8,6 +8,7 @@ import { errorHandler } from './src/errors/errorHandler.js';
 // Import models để đảm bảo tất cả schemas được register
 import User from './src/models/user.schema.js';
 import Class from './src/models/class.schema.js';
+import Chapter from './src/models/chapter.schema.js';
 import Skill from './src/models/skill.schema.js';
 import Progress from './src/models/progress.schema.js';
 import Video from './src/models/video.schema.js';
@@ -21,6 +22,7 @@ import RefreshToken from './src/models/refreshToken.schema.js';
 // Import routes mới
 import authRoutes from './src/routes/authRoutes.js';
 import classRoutes from './src/routes/classRoutes.js';
+import chapterRoutes from './src/routes/chapterRoutes.js';
 import skillRoutes from './src/routes/skillRoutes.js';
 import progressRoutes from './src/routes/progressRoutes.js';
 import videoRoutes from './src/routes/videoRoutes.js';
@@ -95,15 +97,39 @@ const swaggerOptions = {
       }
     ]
   },
-  apis: ['./src/routes/*.js'],
+  // Chỉ định file routes nào sẽ hiển thị trên Swagger
+  // Thêm/bớt file tùy ý
+  apis: [
+    './src/routes/authRoutes.js',
+    './src/routes/chapterRoutes.js',
+    //'./src/routes/classRoutes.js',
+    // './src/routes/skillRoutes.js',
+    // './src/routes/progressRoutes.js',
+    // './src/routes/videoRoutes.js',
+    // './src/routes/exerciseRoutes.js',
+    // './src/routes/quizNewRoutes.js',
+    // './src/routes/questionRoutes.js',
+     './src/routes/activityRoutes.js',
+    // './src/routes/rewardRoutes.js',
+  ],
 };
 
 const swaggerSpec = swaggerJsdoc(swaggerOptions);
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
+// Swagger UI với filter
+const swaggerUiOptions = {
+  filter: true,                    // Bật thanh filter để tìm kiếm
+  docExpansion: 'none',            // Thu gọn tất cả mặc định
+  defaultModelsExpandDepth: -1,    // Ẩn phần Models
+  operationsSorter: 'method'       // Sắp xếp: GET → POST → PUT → DELETE
+};
+
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, swaggerUiOptions));
 
 // Routes mới
 app.use('/auth', authRoutes);
 app.use('/classes', classRoutes);
+app.use('/chapters', chapterRoutes);
 app.use('/skills', skillRoutes);
 app.use('/progress', progressRoutes);
 app.use('/videos', videoRoutes);

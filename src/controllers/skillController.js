@@ -1,11 +1,11 @@
 import Skill from '../models/skill.schema.js';
 
-// Lấy danh sách skills của một class
-export const getSkillsByClassController = async (req, res) => {
+// Lấy danh sách skills của một chapter
+export const getSkillsByChapterController = async (req, res) => {
   try {
-    const { classId } = req.params;
+    const { chapterId } = req.params;
 
-    const skills = await Skill.find({ classId })
+    const skills = await Skill.find({ chapterId })
       .sort({ order: 1 });
 
     return res.status(200).json({ skills });
@@ -17,13 +17,24 @@ export const getSkillsByClassController = async (req, res) => {
 // Tạo skill mới
 export const createSkillController = async (req, res) => {
   try {
-    const { classId, skillName, description, order } = req.body;
+    const { chapterId, skillName, description, order } = req.body;
+
+    if (!chapterId || !skillName) {
+      return res.status(400).json({ message: 'chapterId và skillName là bắt buộc' });
+    }
+
+    // Nếu không truyền order, tự động lấy order cao nhất + 1
+    let skillOrder = order;
+    if (skillOrder === undefined) {
+      const maxOrderSkill = await Skill.findOne({ chapterId }).sort({ order: -1 });
+      skillOrder = maxOrderSkill ? maxOrderSkill.order + 1 : 1;
+    }
 
     const skill = new Skill({
-      classId,
+      chapterId,
       skillName,
       description,
-      order: order || 0
+      order: skillOrder
     });
 
     await skill.save();
