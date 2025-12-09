@@ -34,7 +34,46 @@ export const recordUserActivityController = async (req, res) => {
       });
     }
 
-    // Kiểm tra các step trước đã hoàn thành chưa
+    // Lấy skill hiện tại
+    const currentSkill = await Skill.findById(currentProgress.skillId);
+    if (!currentSkill) {
+      return res.status(404).json({ message: 'Skill không tìm thấy' });
+    }
+
+    // ========== KIỂM TRA SKILL TRƯỚC ĐÃ HOÀN THÀNH CHƯA ==========
+    if (currentSkill.order > 1) {
+      // Tìm skill trước đó (order nhỏ hơn 1)
+      const previousSkill = await Skill.findOne({
+        chapterId: currentSkill.chapterId,
+        order: currentSkill.order - 1
+      });
+
+      if (previousSkill) {
+        // Lấy tất cả progress của skill trước
+        const previousSkillProgresses = await Progress.find({ skillId: previousSkill._id });
+        const previousProgressIds = previousSkillProgresses.map(p => p._id);
+
+        // Kiểm tra user đã hoàn thành tất cả progress của skill trước chưa
+        const completedPreviousActivities = await UserActivity.find({
+          userId,
+          progressId: { $in: previousProgressIds },
+          isCompleted: true
+        });
+
+        // So sánh số lượng
+        if (completedPreviousActivities.length < previousSkillProgresses.length) {
+          return res.status(400).json({
+            message: `Bạn cần hoàn thành skill "${previousSkill.skillName}" trước khi học skill này`,
+            requiredSkillId: previousSkill._id,
+            requiredSkillName: previousSkill.skillName,
+            completedSteps: completedPreviousActivities.length,
+            totalSteps: previousSkillProgresses.length
+          });
+        }
+      }
+    }
+
+    // ========== KIỂM TRA CÁC STEP TRƯỚC TRONG CÙNG SKILL ==========
     const currentStepNumber = currentProgress.stepNumber;
     
     if (currentStepNumber > 1) {
