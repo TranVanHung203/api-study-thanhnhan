@@ -147,6 +147,9 @@ export const getChapterMapController = async (req, res) => {
     // 5. Tính toán trạng thái cho từng skill và progress
     let previousSkillCompleted = true; // Skill đầu tiên luôn mở
 
+    // Biến để theo dõi đã tìm thấy vị trí hiện tại chưa
+    let foundCurrent = false;
+
     const skillsWithStatus = skills.map((skill, skillIndex) => {
       // Lấy progress của skill này
       const skillProgresses = progresses.filter(p => p.skillId.toString() === skill._id.toString());
@@ -165,6 +168,14 @@ export const getChapterMapController = async (req, res) => {
         // 2. Progress trước chưa hoàn thành
         const isProgressLocked = isSkillLocked || !previousProgressCompleted;
         
+        // Xác định đây có phải là vị trí tiếp theo cần làm không
+        // (không bị khóa + chưa hoàn thành + chưa tìm thấy current)
+        const isCurrent = !isProgressLocked && !isProgressCompleted && !foundCurrent;
+        
+        if (isCurrent) {
+          foundCurrent = true;
+        }
+        
         previousProgressCompleted = isProgressCompleted;
         
         return {
@@ -173,7 +184,8 @@ export const getChapterMapController = async (req, res) => {
           contentType: progress.contentType,
           contentId: progress.contentId,
           isCompleted: isProgressCompleted,
-          isLocked: isProgressLocked
+          isLocked: isProgressLocked,
+          isCurrent  // Đánh dấu đây là bước tiếp theo cần làm
         };
       });
 
