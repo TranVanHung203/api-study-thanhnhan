@@ -16,26 +16,36 @@ router.all('*', authToken);
  * /activities:
  *   post:
  *     summary: Ghi nhận hoạt động của user (video, exercise, quiz)
+ *     description: contentType được tự động lấy từ progress, không cần truyền
  *     tags: [Activities]
+ *     security:
+ *       - bearerAuth: []
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
  *             type: object
+ *             required:
+ *               - progressId
+ *               - isCompleted
  *             properties:
  *               progressId:
  *                 type: string
- *               contentType:
- *                 type: string
- *                 enum: [video, exercise, quiz]
+ *                 description: ID của progress step
  *               score:
  *                 type: number
+ *                 description: Điểm số (cho exercise/quiz)
+ *                 example: 85
  *               isCompleted:
  *                 type: boolean
+ *                 description: Đã hoàn thành hay chưa
+ *                 example: true
  *     responses:
  *       201:
  *         description: Ghi nhận thành công
+ *       400:
+ *         description: Cần hoàn thành step trước hoặc đã hoàn thành rồi
  */
 router.post('/', recordUserActivityController);
 

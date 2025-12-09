@@ -4,7 +4,7 @@ import jwt from 'jsonwebtoken';
 const SECRET_KEY = process.env.SECRET_KEY || 'your-secret-key';
 
 const authToken = (req, res, next) => {
-    const white_lists = ["/", "/register", "/login", "/refresh", "/forgot-password", "/reset-password", "/verify-account", "/verify-email"];
+    const white_lists = ["/", "/register", "/login", "/refresh", "/forgot-password", "/reset-password", "/verify-account", "/verify-email", "/guest"];
     
     if (white_lists.find(item => '' + item === req.originalUrl) || req.originalUrl.startsWith('/api-docs')) {
         next();

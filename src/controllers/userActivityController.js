@@ -7,19 +7,76 @@ import Skill from '../models/skill.schema.js';
 export const recordUserActivityController = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { progressId, contentType, score, isCompleted } = req.body;
+    const { progressId, score, isCompleted } = req.body;
 
-    // Tìm progress để lấy bonusPoints
-    const progress = await Progress.findById(progressId)
+    // Tìm progress hiện tại
+    const currentProgress = await Progress.findById(progressId)
       .populate('contentId');
 
-    if (!progress) {
+    if (!currentProgress) {
       return res.status(404).json({ message: 'Progress không tìm thấy' });
     }
 
+    // Tự động lấy contentType từ progress
+    const contentType = currentProgress.contentType;
+
+    // Kiểm tra đã hoàn thành step này chưa
+    const existingActivity = await UserActivity.findOne({
+      userId,
+      progressId,
+      isCompleted: true
+    });
+
+    if (existingActivity) {
+      return res.status(400).json({ 
+        message: 'Bạn đã hoàn thành step này rồi',
+        activity: existingActivity
+      });
+    }
+
+    // Kiểm tra các step trước đã hoàn thành chưa
+    const currentStepNumber = currentProgress.stepNumber;
+    
+    if (currentStepNumber > 1) {
+      // Lấy tất cả các step trước của cùng skill
+      const previousSteps = await Progress.find({
+        skillId: currentProgress.skillId,
+        stepNumber: { $lt: currentStepNumber }
+      });
+
+      const previousStepIds = previousSteps.map(p => p._id);
+
+      // Kiểm tra user đã hoàn thành tất cả step trước chưa
+      const completedPreviousSteps = await UserActivity.find({
+        userId,
+        progressId: { $in: previousStepIds },
+        isCompleted: true
+      });
+
+      const completedStepNumbers = new Set();
+      for (const activity of completedPreviousSteps) {
+        const step = previousSteps.find(p => p._id.toString() === activity.progressId.toString());
+        if (step) {
+          completedStepNumbers.add(step.stepNumber);
+        }
+      }
+
+      // Tìm step chưa hoàn thành
+      for (let i = 1; i < currentStepNumber; i++) {
+        if (!completedStepNumbers.has(i)) {
+          return res.status(400).json({
+            message: `Bạn cần hoàn thành step ${i} trước khi làm step ${currentStepNumber}`,
+            requiredStep: i,
+            currentStep: currentStepNumber
+          });
+        }
+      }
+    }
+
+    // Tính điểm thưởng
     let bonusEarned = 0;
-    if (isCompleted && progress.contentId.bonusPoints) {
-      bonusEarned = progress.contentId.bonusPoints;
+    if (isCompleted && currentProgress.contentId && currentProgress.contentId.bonusPoints) {
+      bonusEarned = currentProgress.contentId.bonusPoints;
     }
 
     const userActivity = new UserActivity({
@@ -35,7 +92,7 @@ export const recordUserActivityController = async (req, res) => {
 
     // Cập nhật reward nếu có điểm thưởng
     if (bonusEarned > 0) {
-      const reward = await Reward.findOneAndUpdate(
+      await Reward.findOneAndUpdate(
         { userId },
         { $inc: { totalPoints: bonusEarned } },
         { new: true }
@@ -45,7 +102,8 @@ export const recordUserActivityController = async (req, res) => {
     return res.status(201).json({
       message: 'Ghi nhận hoạt động thành công',
       userActivity,
-      bonusEarned
+      bonusEarned,
+      nextStep: currentStepNumber + 1
     });
   } catch (error) {
     return res.status(500).json({ message: error.message });

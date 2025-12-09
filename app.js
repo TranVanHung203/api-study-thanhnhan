@@ -16,6 +16,7 @@ import Quiz from './src/models/quiz.schema.js';
 import Question from './src/models/question.schema.js';
 import UserActivity from './src/models/userActivity.schema.js';
 import Reward from './src/models/reward.schema.js';
+import RefreshToken from './src/models/refreshToken.schema.js';
 
 // Import routes mới
 import authRoutes from './src/routes/authRoutes.js';
@@ -32,6 +33,9 @@ import rewardRoutes from './src/routes/rewardRoutes.js';
 // Import Swagger
 import swaggerUi from 'swagger-ui-express';
 import swaggerJsdoc from 'swagger-jsdoc';
+
+// Import cleanup jobs
+import { startCleanupJob, startExpiredGuestCleanup } from './src/jobs/cleanupJob.js';
 
 const app = express();
 const databaseConfig = new DatabaseConfig();
@@ -110,6 +114,10 @@ app.use('/activities', activityRoutes);
 app.use('/rewards', rewardRoutes);
 
 app.use(errorHandler);
+
+// Start cleanup jobs
+startCleanupJob();        // Xóa dữ liệu orphan mỗi giờ
+startExpiredGuestCleanup(); // Xóa guest hết hạn mỗi ngày lúc 3:00 AM
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
