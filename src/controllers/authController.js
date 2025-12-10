@@ -121,14 +121,7 @@ export const loginController = async (req, res) => {
     return res.status(200).json({
       message: 'Đăng nhập thành công',
       accessToken,
-      refreshToken,
-      user: {
-        id: user._id,
-        username: user.username,
-        email: user.email,
-        fullName: user.fullName,
-        classId: user.classId
-      }
+      refreshToken
     });
   } catch (error) {
     return res.status(500).json({ message: error.message });
