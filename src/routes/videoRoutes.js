@@ -1,6 +1,7 @@
 import express from 'express';
 import {
   getVideosController,
+  getVideoByIdController,
   createVideoController,
   updateVideoController,
   deleteVideoController
@@ -25,6 +26,29 @@ router.all('*', authToken);
  *         description: Danh sách videos
  */
 router.get('/', getVideosController);
+
+/**
+ * @swagger
+ * /videos/{videoId}:
+ *   get:
+ *     summary: Lấy video theo ID
+ *     tags: [Videos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: videoId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID của video
+ *     responses:
+ *       200:
+ *         description: Thông tin video
+ *       404:
+ *         description: Video không tồn tại
+ */
+router.get('/:videoId', getVideoByIdController);
 
 /**
  * @swagger

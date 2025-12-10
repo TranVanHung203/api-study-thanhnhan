@@ -10,6 +10,22 @@ export const getExercisesController = async (req, res) => {
   }
 };
 
+// Lấy exercise theo ID
+export const getExerciseByIdController = async (req, res) => {
+  try {
+    const { exerciseId } = req.params;
+    const exercise = await Exercise.findById(exerciseId);
+    
+    if (!exercise) {
+      return res.status(404).json({ message: 'Exercise không tồn tại' });
+    }
+    
+    return res.status(200).json({ exercise });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
 // Tạo exercise
 export const createExerciseController = async (req, res) => {
   try {

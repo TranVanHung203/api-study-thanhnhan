@@ -1,6 +1,7 @@
 import express from 'express';
 import {
   getExercisesController,
+  getExerciseByIdController,
   createExerciseController,
   updateExerciseController,
   deleteExerciseController
@@ -22,6 +23,29 @@ router.all('*', authToken);
  *         description: Danh sách bài tập
  */
 router.get('/', getExercisesController);
+
+/**
+ * @swagger
+ * /exercises/{exerciseId}:
+ *   get:
+ *     summary: Lấy bài tập theo ID
+ *     tags: [Exercises]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: exerciseId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID của bài tập
+ *     responses:
+ *       200:
+ *         description: Thông tin bài tập
+ *       404:
+ *         description: Bài tập không tồn tại
+ */
+router.get('/:exerciseId', getExerciseByIdController);
 
 /**
  * @swagger

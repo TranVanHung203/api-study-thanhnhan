@@ -11,6 +11,22 @@ export const getVideosController = async (req, res) => {
   }
 };
 
+// Lấy video theo ID
+export const getVideoByIdController = async (req, res) => {
+  try {
+    const { videoId } = req.params;
+    const video = await Video.findById(videoId);
+    
+    if (!video) {
+      return res.status(404).json({ message: 'Video không tồn tại' });
+    }
+    
+    return res.status(200).json({ video });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
 // Upload video lên Cloudinary và tạo record
 export const createVideoController = async (req, res) => {
   try {
