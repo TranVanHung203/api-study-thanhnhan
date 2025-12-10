@@ -5,6 +5,10 @@ import RefreshToken from '../models/refreshToken.schema.js';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
+import BadRequestError from '../errors/badRequestError.js';
+import NotFoundError from '../errors/notFoundError.js';
+import UnauthorizedError from '../errors/unauthorizedError.js';
+import ForbiddenError from '../errors/forbiddenError.js';
 
 const SECRET_KEY = process.env.SECRET_KEY || 'your-secret-key';
 const ACCESS_TOKEN_EXPIRY = process.env.ACCESS_TOKEN_EXPIRY || '15m';
@@ -46,21 +50,19 @@ const createRefreshToken = async (user, deviceInfo = null) => {
 };
 
 // Đăng ký user
-export const registerController = async (req, res) => {
+export const registerController = async (req, res, next) => {
   try {
     const { username, email, password, fullName, classId } = req.body;
 
     // Validation - chỉ cần username, email, password, fullName
     if (!username || !email || !password || !fullName) {
-      return res.status(400).json({
-        message: 'Vui lòng điền đầy đủ thông tin: username, email, password, fullName'
-      });
+      throw new BadRequestError('Vui lòng điền đầy đủ thông tin: username, email, password, fullName');
     }
 
     // Kiểm tra user đã tồn tại
     const existingUser = await User.findOne({ $or: [{ username }, { email }] });
     if (existingUser) {
-      return res.status(400).json({ message: 'Username hoặc email đã tồn tại' });
+      throw new BadRequestError('Username hoặc email đã tồn tại');
     }
 
     // Hash password
@@ -92,12 +94,12 @@ export const registerController = async (req, res) => {
       }
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Đăng nhập
-export const loginController = async (req, res) => {
+export const loginController = async (req, res, next) => {
   try {
     const { username, password } = req.body;
     const deviceInfo = req.headers['user-agent'] || null;
@@ -105,13 +107,13 @@ export const loginController = async (req, res) => {
     // Tìm user
     const user = await User.findOne({ username }).populate('classId');
     if (!user) {
-      return res.status(401).json({ message: 'Username hoặc mật khẩu không đúng' });
+      throw new UnauthorizedError('Username hoặc mật khẩu không đúng');
     }
 
     // Kiểm tra password
     const isValidPassword = await bcrypt.compare(password, user.passwordHash);
     if (!isValidPassword) {
-      return res.status(401).json({ message: 'Username hoặc mật khẩu không đúng' });
+      throw new UnauthorizedError('Username hoặc mật khẩu không đúng');
     }
 
     // Tạo tokens
@@ -124,37 +126,37 @@ export const loginController = async (req, res) => {
       refreshToken
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Refresh Access Token
-export const refreshTokenController = async (req, res) => {
+export const refreshTokenController = async (req, res, next) => {
   try {
     const refreshToken = req.body.refreshToken;
     const deviceInfo = req.headers['user-agent'] || null;
 
     if (!refreshToken) {
-      return res.status(401).json({ message: 'Refresh token không tìm thấy' });
+      throw new UnauthorizedError('Refresh token không tìm thấy');
     }
 
     // Kiểm tra refresh token có trong database không
     const storedToken = await RefreshToken.findOne({ token: refreshToken });
     
     if (!storedToken) {
-      return res.status(401).json({ message: 'Refresh token không hợp lệ hoặc đã bị revoke' });
+      throw new UnauthorizedError('Refresh token không hợp lệ hoặc đã bị revoke');
     }
 
     // Kiểm tra token đã bị revoke chưa
     if (storedToken.isRevoked) {
-      return res.status(401).json({ message: 'Refresh token đã bị thu hồi' });
+      throw new UnauthorizedError('Refresh token đã bị thu hồi');
     }
 
     // Kiểm tra token đã hết hạn chưa (theo database)
     if (storedToken.expiresAt < new Date()) {
       // Xóa token hết hạn
       await RefreshToken.deleteOne({ _id: storedToken._id });
-      return res.status(401).json({ message: 'Refresh token đã hết hạn' });
+      throw new UnauthorizedError('Refresh token đã hết hạn');
     }
 
     // Verify refresh token với JWT
@@ -165,15 +167,15 @@ export const refreshTokenController = async (req, res) => {
       // Revoke token nếu JWT verification fail
       await RefreshToken.updateOne({ _id: storedToken._id }, { isRevoked: true });
       if (jwtError.name === 'TokenExpiredError') {
-        return res.status(401).json({ message: 'Refresh token đã hết hạn' });
+        throw new UnauthorizedError('Refresh token đã hết hạn');
       }
-      return res.status(401).json({ message: 'Refresh token không hợp lệ' });
+      throw new UnauthorizedError('Refresh token không hợp lệ');
     }
 
     const user = await User.findById(decoded.id);
 
     if (!user) {
-      return res.status(401).json({ message: 'User không tìm thấy' });
+      throw new NotFoundError('User không tìm thấy');
     }
 
     // Revoke token cũ trong database
@@ -189,57 +191,57 @@ export const refreshTokenController = async (req, res) => {
       refreshToken: newRefreshToken
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Lấy thông tin user
-export const getUserController = async (req, res) => {
+export const getUserController = async (req, res, next) => {
   try {
     const userId = req.user.id;
     const user = await User.findById(userId).populate('classId');
 
     if (!user) {
-      return res.status(404).json({ message: 'User không tìm thấy' });
+      throw new NotFoundError('User không tìm thấy');
     }
 
     return res.status(200).json({ user });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Đổi mật khẩu
-export const changePasswordController = async (req, res) => {
+export const changePasswordController = async (req, res, next) => {
   try {
     const userId = req.user.id;
     const { oldPassword, newPassword, confirmPassword } = req.body;
 
     // Kiểm tra các field bắt buộc
     if (!oldPassword || !newPassword || !confirmPassword) {
-      return res.status(400).json({ message: 'Vui lòng nhập đầy đủ thông tin' });
+      throw new BadRequestError('Vui lòng nhập đầy đủ thông tin');
     }
 
     // Kiểm tra mật khẩu mới và xác nhận khớp nhau
     if (newPassword !== confirmPassword) {
-      return res.status(400).json({ message: 'Mật khẩu mới không khớp' });
+      throw new BadRequestError('Mật khẩu mới không khớp');
     }
 
     // Kiểm tra mật khẩu mới có khác mật khẩu cũ
     if (oldPassword === newPassword) {
-      return res.status(400).json({ message: 'Mật khẩu mới phải khác mật khẩu cũ' });
+      throw new BadRequestError('Mật khẩu mới phải khác mật khẩu cũ');
     }
 
     // Tìm user
     const user = await User.findById(userId);
     if (!user) {
-      return res.status(404).json({ message: 'User không tìm thấy' });
+      throw new NotFoundError('User không tìm thấy');
     }
 
     // Kiểm tra mật khẩu cũ
     const isValidPassword = await bcrypt.compare(oldPassword, user.passwordHash);
     if (!isValidPassword) {
-      return res.status(401).json({ message: 'Mật khẩu cũ không đúng' });
+      throw new UnauthorizedError('Mật khẩu cũ không đúng');
     }
 
     // Hash mật khẩu mới
@@ -256,12 +258,12 @@ export const changePasswordController = async (req, res) => {
       message: 'Đổi mật khẩu thành công'
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Logout
-export const logoutController = async (req, res) => {
+export const logoutController = async (req, res, next) => {
   try {
     const userId = req.user?.id;
     const refreshToken = req.body.refreshToken;
@@ -289,17 +291,17 @@ export const logoutController = async (req, res) => {
 
     return res.status(200).json({ message: 'Đăng xuất thành công' });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Đăng nhập khách (Guest Login)
-export const guestLoginController = async (req, res) => {
+export const guestLoginController = async (req, res, next) => {
   try {
     const { fullName } = req.body;
 
     if (!fullName) {
-      return res.status(400).json({ message: 'Vui lòng nhập tên của bạn' });
+      throw new BadRequestError('Vui lòng nhập tên của bạn');
     }
 
     // Tạo thời gian hết hạn (7 ngày từ bây giờ)
@@ -343,7 +345,7 @@ export const guestLoginController = async (req, res) => {
       }
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
@@ -378,46 +380,44 @@ const deleteGuestData = async (userId) => {
 };
 
 // API để xóa guest thủ công (khi user xóa app hoặc muốn xóa tài khoản khách)
-export const deleteGuestController = async (req, res) => {
+export const deleteGuestController = async (req, res, next) => {
   try {
     const userId = req.user.id;
     
     const user = await User.findById(userId);
     if (!user) {
-      return res.status(404).json({ message: 'User không tìm thấy' });
+      throw new NotFoundError('User không tìm thấy');
     }
 
     if (!user.isGuest) {
-      return res.status(400).json({ message: 'Chỉ có thể xóa tài khoản khách' });
+      throw new BadRequestError('Chỉ có thể xóa tài khoản khách');
     }
 
     await deleteGuestData(userId);
 
     return res.status(200).json({ message: 'Xóa tài khoản khách thành công' });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Chuyển từ guest sang user thường (đăng ký chính thức)
-export const convertGuestToUserController = async (req, res) => {
+export const convertGuestToUserController = async (req, res, next) => {
   try {
     const userId = req.user.id;
     const { username, email, password } = req.body;
 
     if (!username || !email || !password) {
-      return res.status(400).json({
-        message: 'Vui lòng điền đầy đủ: username, email, password'
-      });
+      throw new BadRequestError('Vui lòng điền đầy đủ: username, email, password');
     }
 
     const user = await User.findById(userId);
     if (!user) {
-      return res.status(404).json({ message: 'User không tìm thấy' });
+      throw new NotFoundError('User không tìm thấy');
     }
 
     if (!user.isGuest) {
-      return res.status(400).json({ message: 'Tài khoản này đã là user thường' });
+      throw new BadRequestError('Tài khoản này đã là user thường');
     }
 
     // Kiểm tra username/email đã tồn tại
@@ -426,7 +426,7 @@ export const convertGuestToUserController = async (req, res) => {
       _id: { $ne: userId }
     });
     if (existingUser) {
-      return res.status(400).json({ message: 'Username hoặc email đã tồn tại' });
+      throw new BadRequestError('Username hoặc email đã tồn tại');
     }
 
     // Hash password
@@ -456,6 +456,6 @@ export const convertGuestToUserController = async (req, res) => {
       }
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
