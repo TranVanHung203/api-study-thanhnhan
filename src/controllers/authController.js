@@ -306,14 +306,17 @@ export const guestLoginController = async (req, res) => {
     const guestExpiresAt = new Date();
     guestExpiresAt.setDate(guestExpiresAt.getDate() + parseInt(GUEST_EXPIRY_DAYS));
 
-    // Tạo guest user
+    // Tạo unique ID cho guest để tránh trùng lặp
+    const guestId = `guest_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+
+    // Tạo guest user với username và email unique
     const guestUser = new User({
       fullName,
       isGuest: true,
       guestExpiresAt,
-      username: null,
+      username: guestId,
       passwordHash: null,
-      email: null
+      email: `${guestId}@guest.temp`
     });
 
     await guestUser.save();
@@ -389,9 +392,6 @@ export const deleteGuestController = async (req, res) => {
     }
 
     await deleteGuestData(userId);
-
-    res.clearCookie('access_token');
-    res.clearCookie('refresh_token');
 
     return res.status(200).json({ message: 'Xóa tài khoản khách thành công' });
   } catch (error) {
