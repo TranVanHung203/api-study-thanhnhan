@@ -118,19 +118,6 @@ export const loginController = async (req, res) => {
     const accessToken = createAccessToken(user);
     const refreshToken = await createRefreshToken(user, deviceInfo);
 
-    // Lưu tokens vào cookie
-    res.cookie('access_token', accessToken, {
-      httpOnly: true,
-      secure: false,
-      maxAge: 15 * 60 * 1000
-    });
-
-    res.cookie('refresh_token', refreshToken, {
-      httpOnly: true,
-      secure: false,
-      maxAge: 7 * 24 * 60 * 60 * 1000
-    });
-
     return res.status(200).json({
       message: 'Đăng nhập thành công',
       accessToken,
@@ -151,7 +138,7 @@ export const loginController = async (req, res) => {
 // Refresh Access Token
 export const refreshTokenController = async (req, res) => {
   try {
-    const refreshToken = req.cookies.refresh_token || req.body.refreshToken;
+    const refreshToken = req.body.refreshToken;
     const deviceInfo = req.headers['user-agent'] || null;
 
     if (!refreshToken) {
@@ -202,19 +189,6 @@ export const refreshTokenController = async (req, res) => {
     // Tạo cả access token và refresh token mới
     const newAccessToken = createAccessToken(user);
     const newRefreshToken = await createRefreshToken(user, deviceInfo);
-
-    // Lưu vào cookie
-    res.cookie('access_token', newAccessToken, {
-      httpOnly: true,
-      secure: false,
-      maxAge: 15 * 60 * 1000
-    });
-
-    res.cookie('refresh_token', newRefreshToken, {
-      httpOnly: true,
-      secure: false,
-      maxAge: 7 * 24 * 60 * 60 * 1000
-    });
 
     return res.status(200).json({
       message: 'Refresh token thành công',
@@ -297,7 +271,7 @@ export const changePasswordController = async (req, res) => {
 export const logoutController = async (req, res) => {
   try {
     const userId = req.user?.id;
-    const refreshToken = req.cookies.refresh_token || req.body.refreshToken;
+    const refreshToken = req.body.refreshToken;
     
     // Revoke refresh token trong database
     if (refreshToken) {
@@ -320,8 +294,6 @@ export const logoutController = async (req, res) => {
       }
     }
 
-    res.clearCookie('access_token');
-    res.clearCookie('refresh_token');
     return res.status(200).json({ message: 'Đăng xuất thành công' });
   } catch (error) {
     return res.status(500).json({ message: error.message });
@@ -362,21 +334,6 @@ export const guestLoginController = async (req, res) => {
     // Tạo tokens
     const accessToken = createAccessToken(guestUser);
     const refreshToken = await createRefreshToken(guestUser, deviceInfo);
-
-    // Set cookies
-    res.cookie('access_token', accessToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 15 * 60 * 1000
-    });
-
-    res.cookie('refresh_token', refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60 * 1000
-    });
 
     return res.status(201).json({
       message: 'Đăng nhập khách thành công',
