@@ -8,8 +8,12 @@ import {
   addStudentToClassController,
   removeStudentFromClassController
 } from '../controllers/classController.js';
+import { authToken } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
+
+// Tất cả routes đều cần authentication
+router.all('*', authToken);
 
 /**
  * @swagger
@@ -17,6 +21,8 @@ const router = express.Router();
  *   get:
  *     summary: Lấy danh sách tất cả lớp
  *     tags: [Class]
+ *     security:
+ *       - bearerAuth: []
  *     responses:
  *       200:
  *         description: Danh sách lớp
@@ -29,6 +35,8 @@ router.get('/', getAllClassesController);
  *   get:
  *     summary: Lấy chi tiết lớp và danh sách học viên
  *     tags: [Class]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -49,6 +57,8 @@ router.get('/:id', getClassByIdController);
  *   post:
  *     summary: Tạo lớp mới
  *     tags: [Class]
+ *     security:
+ *       - bearerAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -79,6 +89,8 @@ router.post('/', createClassController);
  *   put:
  *     summary: Cập nhật thông tin lớp
  *     tags: [Class]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -110,6 +122,8 @@ router.put('/:id', updateClassController);
  *   delete:
  *     summary: Xóa lớp
  *     tags: [Class]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -128,6 +142,8 @@ router.delete('/:id', deleteClassController);
  *   post:
  *     summary: Thêm học viên vào lớp
  *     tags: [Class]
+ *     security:
+ *       - bearerAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -154,6 +170,8 @@ router.post('/add-student', addStudentToClassController);
  *   post:
  *     summary: Xóa học viên khỏi lớp
  *     tags: [Class]
+ *     security:
+ *       - bearerAuth: []
  *     requestBody:
  *       required: true
  *       content:

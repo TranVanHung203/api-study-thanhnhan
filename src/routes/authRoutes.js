@@ -5,7 +5,10 @@ import {
   refreshTokenController,
   changePasswordController,
   getUserController,
-  logoutController
+  logoutController,
+  guestLoginController,
+  deleteGuestController,
+  convertGuestToUserController
 } from '../controllers/authController.js';
 import { authToken } from '../middlewares/authMiddleware.js';
 
@@ -97,7 +100,13 @@ router.post('/login', loginController);
  * @swagger
  * /auth/refresh:
  *   post:
- *     summary: Làm mới access token bằng refresh token
+ *     summary: Làm mới access token và refresh token
+ *     description: |
+ *       Khi refresh token còn hợp lệ, hệ thống sẽ:
+ *       1. Kiểm tra refresh token trong database
+ *       2. Revoke refresh token cũ
+ *       3. Tạo cả access token và refresh token mới
+ *       4. Trả về cả 2 token mới
  *     tags: [Auth]
  *     security: []
  *     requestBody:
@@ -111,7 +120,23 @@ router.post('/login', loginController);
  *                 description: Refresh token nhận từ login
  *     responses:
  *       200:
- *         description: Access token mới
+ *         description: Access token và refresh token mới
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Refresh token thành công
+ *                 accessToken:
+ *                   type: string
+ *                   description: Access token mới (15 phút)
+ *                 refreshToken:
+ *                   type: string
+ *                   description: Refresh token mới (7 ngày)
+ *       401:
+ *         description: Refresh token không hợp lệ hoặc đã hết hạn
  */
 router.post('/refresh', refreshTokenController);
 
@@ -188,5 +213,105 @@ router.get('/logout', authToken, logoutController);
  *         description: Không có token hoặc token không hợp lệ
  */
 router.post('/change-password', authToken, changePasswordController);
+
+/**
+ * @swagger
+ * /auth/guest:
+ *   post:
+ *     summary: Đăng nhập khách (không cần username/password)
+ *     tags: [Auth]
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - fullName
+ *             properties:
+ *               fullName:
+ *                 type: string
+ *                 example: "Khách Vãng Lai"
+ *                 description: Tên hiển thị của khách
+ *     responses:
+ *       201:
+ *         description: Đăng nhập khách thành công
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 accessToken:
+ *                   type: string
+ *                 user:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                     fullName:
+ *                       type: string
+ *                     isGuest:
+ *                       type: boolean
+ *                     expiresAt:
+ *                       type: string
+ *                       format: date-time
+ *                       description: Thời gian tài khoản khách hết hạn (7 ngày)
+ */
+router.post('/guest', guestLoginController);
+
+/**
+ * @swagger
+ * /auth/guest:
+ *   delete:
+ *     summary: Xóa tài khoản khách và tất cả dữ liệu liên quan
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Xóa tài khoản khách thành công
+ *       400:
+ *         description: Chỉ có thể xóa tài khoản khách
+ */
+router.delete('/guest', authToken, deleteGuestController);
+
+/**
+ * @swagger
+ * /auth/guest/convert:
+ *   post:
+ *     summary: Chuyển tài khoản khách thành user thường (giữ nguyên dữ liệu học tập)
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - username
+ *               - email
+ *               - password
+ *             properties:
+ *               username:
+ *                 type: string
+ *                 example: "newuser123"
+ *               email:
+ *                 type: string
+ *                 example: "newuser@example.com"
+ *               password:
+ *                 type: string
+ *                 example: "password123"
+ *     responses:
+ *       200:
+ *         description: Chuyển đổi thành công, dữ liệu học tập được giữ nguyên
+ *       400:
+ *         description: Tài khoản đã là user thường hoặc username/email đã tồn tại
+ */
+router.post('/guest/convert', authToken, convertGuestToUserController);
 
 export default router;

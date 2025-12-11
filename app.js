@@ -8,6 +8,7 @@ import { errorHandler } from './src/errors/errorHandler.js';
 // Import models để đảm bảo tất cả schemas được register
 import User from './src/models/user.schema.js';
 import Class from './src/models/class.schema.js';
+import Chapter from './src/models/chapter.schema.js';
 import Skill from './src/models/skill.schema.js';
 import Progress from './src/models/progress.schema.js';
 import Video from './src/models/video.schema.js';
@@ -16,10 +17,12 @@ import Quiz from './src/models/quiz.schema.js';
 import Question from './src/models/question.schema.js';
 import UserActivity from './src/models/userActivity.schema.js';
 import Reward from './src/models/reward.schema.js';
+import RefreshToken from './src/models/refreshToken.schema.js';
 
 // Import routes mới
 import authRoutes from './src/routes/authRoutes.js';
 import classRoutes from './src/routes/classRoutes.js';
+import chapterRoutes from './src/routes/chapterRoutes.js';
 import skillRoutes from './src/routes/skillRoutes.js';
 import progressRoutes from './src/routes/progressRoutes.js';
 import videoRoutes from './src/routes/videoRoutes.js';
@@ -33,6 +36,9 @@ import rewardRoutes from './src/routes/rewardRoutes.js';
 import swaggerUi from 'swagger-ui-express';
 import swaggerJsdoc from 'swagger-jsdoc';
 
+// Import cleanup jobs
+import { startCleanupJob, startExpiredGuestCleanup } from './src/jobs/cleanupJob.js';
+
 const app = express();
 const databaseConfig = new DatabaseConfig();
 
@@ -41,10 +47,9 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use(cors({
-  origin: 'http://localhost:3000',
+  origin: '*',  // Cho phép tất cả origin truy cập
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 // Kết nối đến cơ sở dữ liệu
@@ -60,6 +65,10 @@ const swaggerOptions = {
       description: 'API dạy học online: quản lý khoá học, bài học, người dùng, quiz, thông báo...'
     },
     servers: [
+      {
+        url: 'https://api-study-thanhnhan.onrender.com',
+        description: 'Production server'
+      },
       {
         url: 'http://localhost:5000',
         description: 'Local server'
@@ -87,15 +96,39 @@ const swaggerOptions = {
       }
     ]
   },
-  apis: ['./src/routes/*.js'],
+  // Chỉ định file routes nào sẽ hiển thị trên Swagger
+  // Thêm/bớt file tùy ý
+  apis: [
+    './src/routes/authRoutes.js',
+    './src/routes/chapterRoutes.js',
+    // './src/routes/classRoutes.js',
+    // './src/routes/skillRoutes.js',
+    // './src/routes/progressRoutes.js',
+    './src/routes/videoRoutes.js',
+    './src/routes/exerciseRoutes.js',
+    // './src/routes/quizNewRoutes.js',
+    // './src/routes/questionRoutes.js',
+     './src/routes/activityRoutes.js',
+    // './src/routes/rewardRoutes.js',
+  ],
 };
 
 const swaggerSpec = swaggerJsdoc(swaggerOptions);
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
+// Swagger UI với filter
+const swaggerUiOptions = {
+  filter: true,                    // Bật thanh filter để tìm kiếm
+  docExpansion: 'none',            // Thu gọn tất cả mặc định
+  defaultModelsExpandDepth: -1,    // Ẩn phần Models
+  operationsSorter: 'method'       // Sắp xếp: GET → POST → PUT → DELETE
+};
+
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, swaggerUiOptions));
 
 // Routes mới
 app.use('/auth', authRoutes);
 app.use('/classes', classRoutes);
+app.use('/chapters', chapterRoutes);
 app.use('/skills', skillRoutes);
 app.use('/progress', progressRoutes);
 app.use('/videos', videoRoutes);
@@ -106,6 +139,10 @@ app.use('/activities', activityRoutes);
 app.use('/rewards', rewardRoutes);
 
 app.use(errorHandler);
+
+// Start cleanup jobs
+startCleanupJob();        // Xóa dữ liệu orphan mỗi giờ
+startExpiredGuestCleanup(); // Xóa guest hết hạn mỗi ngày lúc 3:00 AM
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {

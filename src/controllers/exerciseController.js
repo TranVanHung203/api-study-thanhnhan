@@ -1,6 +1,6 @@
 import Exercise from '../models/exercise.schema.js';
 
-// Lấy danh sách exercises
+// Lấy danh sách exercises (KHÔNG bao gồm answer)
 export const getExercisesController = async (req, res) => {
   try {
     const exercises = await Exercise.find();
@@ -10,14 +10,36 @@ export const getExercisesController = async (req, res) => {
   }
 };
 
+// Lấy exercise theo ID - CHỈ trả về id, frontendRef, exerciseType (cho client chơi game)
+export const getExerciseByIdController = async (req, res) => {
+  try {
+    const { exerciseId } = req.params;
+    const exercise = await Exercise.findById(exerciseId).select('_id frontendRef exerciseType');
+    
+    if (!exercise) {
+      return res.status(404).json({ message: 'Exercise không tồn tại' });
+    }
+    
+    return res.status(200).json({ exercise });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
 // Tạo exercise
 export const createExerciseController = async (req, res) => {
   try {
-    const { title, frontendRef, description, bonusPoints } = req.body;
+    const { title, frontendRef, exerciseType, answer, description, bonusPoints } = req.body;
+
+    if (!answer && answer !== 0) {
+      return res.status(400).json({ message: 'Vui lòng nhập đáp án (answer)' });
+    }
 
     const exercise = new Exercise({
       title,
       frontendRef,
+      exerciseType: exerciseType || 'drag_count',
+      answer,
       description,
       bonusPoints: bonusPoints || 10
     });
@@ -37,11 +59,15 @@ export const createExerciseController = async (req, res) => {
 export const updateExerciseController = async (req, res) => {
   try {
     const { exerciseId } = req.params;
-    const { title, frontendRef, description, bonusPoints } = req.body;
+    const { title, frontendRef, exerciseType, answer, description, bonusPoints } = req.body;
+
+    const updateData = { title, frontendRef, description, bonusPoints };
+    if (exerciseType) updateData.exerciseType = exerciseType;
+    if (answer !== undefined) updateData.answer = answer;
 
     const exercise = await Exercise.findByIdAndUpdate(
       exerciseId,
-      { title, frontendRef, description, bonusPoints },
+      updateData,
       { new: true }
     );
 
