@@ -144,40 +144,29 @@ export const getChapterMapController = async (req, res) => {
     // Tạo Set để check nhanh
     const completedProgressIds = new Set(userActivities.map(ua => ua.progressId.toString()));
 
-    // 5. Tính toán trạng thái cho từng skill và progress
-    let previousSkillCompleted = true; // Skill đầu tiên luôn mở
+    // Tìm stepNumber lớn nhất mà user đã hoàn thành trong toàn bộ chapter
+    let maxCompletedStep = 0;
+    for (const ua of userActivities) {
+      const progress = progresses.find(p => p._id.toString() === ua.progressId.toString());
+      if (progress && progress.stepNumber > maxCompletedStep) {
+        maxCompletedStep = progress.stepNumber;
+      }
+    }
 
-    // Biến để theo dõi đã tìm thấy vị trí hiện tại chưa
+    let previousSkillCompleted = true;
     let foundCurrent = false;
-
     const skillsWithStatus = skills.map((skill, skillIndex) => {
-      // Lấy progress của skill này
       const skillProgresses = progresses.filter(p => p.skillId.toString() === skill._id.toString());
-      
-      // Skill bị khóa nếu skill trước chưa hoàn thành
       const isSkillLocked = !previousSkillCompleted;
-      
-      // Tính trạng thái cho từng progress
-      let previousProgressCompleted = true; // Progress đầu tiên trong skill mở nếu skill không bị khóa
-      
+      let previousProgressCompleted = true;
       const progressesWithStatus = skillProgresses.map((progress, progressIndex) => {
-        const isProgressCompleted = completedProgressIds.has(progress._id.toString());
-        
-        // Progress bị khóa nếu:
-        // 1. Skill bị khóa, hoặc
-        // 2. Progress trước chưa hoàn thành
+        // Đánh dấu hoàn thành nếu stepNumber <= maxCompletedStep
+        const isProgressCompleted = progress.stepNumber <= maxCompletedStep;
         const isProgressLocked = isSkillLocked || !previousProgressCompleted;
-        
-        // Xác định đây có phải là vị trí tiếp theo cần làm không
-        // (không bị khóa + chưa hoàn thành + chưa tìm thấy current)
-        const isCurrent = !isProgressLocked && !isProgressCompleted && !foundCurrent;
-        
-        if (isCurrent) {
-          foundCurrent = true;
-        }
-        
+        // Bước current là bước đầu tiên chưa hoàn thành sau maxCompletedStep
+        const isCurrent = !isProgressLocked && !isProgressCompleted && !foundCurrent && progress.stepNumber > maxCompletedStep;
+        if (isCurrent) foundCurrent = true;
         previousProgressCompleted = isProgressCompleted;
-        
         return {
           _id: progress._id,
           stepNumber: progress.stepNumber,
@@ -185,17 +174,11 @@ export const getChapterMapController = async (req, res) => {
           contentId: progress.contentId,
           isCompleted: isProgressCompleted,
           isLocked: isProgressLocked,
-          isCurrent  // Đánh dấu đây là bước tiếp theo cần làm
+          isCurrent
         };
       });
-
-      // Skill hoàn thành khi TẤT CẢ progress đều hoàn thành
-      const isSkillCompleted = skillProgresses.length > 0 && 
-        skillProgresses.every(p => completedProgressIds.has(p._id.toString()));
-      
-      // Cập nhật cho skill tiếp theo
+      const isSkillCompleted = skillProgresses.length > 0 && skillProgresses.every(p => p.stepNumber <= maxCompletedStep);
       previousSkillCompleted = isSkillCompleted;
-
       return {
         _id: skill._id,
         skillName: skill.skillName,
