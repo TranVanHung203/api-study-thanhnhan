@@ -133,9 +133,25 @@ export const recordUserActivityController = async (req, res) => {
     });
 
     if (existingActivity) {
-      return res.status(400).json({ 
-        message: 'Bạn đã hoàn thành step này rồi',
-        activity: existingActivity
+      // Return same shape as success but mark isCheck = true
+      const bonusEarnedExisting = existingActivity.bonusEarned || 0;
+      const nextStepExisting = currentProgress.stepNumber + 1;
+      if (existingActivity.contentType === 'exercise') {
+        return res.status(201).json({
+          isCorrect: true,
+          message: 'Bạn đã hoàn thành step này rồi',
+          bonusEarned: bonusEarnedExisting,
+          nextStep: nextStepExisting,
+          isCheck: true
+        });
+      }
+
+      return res.status(201).json({
+        message: 'Ghi nhận hoạt động thành công',
+        userActivity: existingActivity,
+        bonusEarned: bonusEarnedExisting,
+        nextStep: nextStepExisting,
+        isCheck: true
       });
     }
 
@@ -147,33 +163,45 @@ export const recordUserActivityController = async (req, res) => {
 
     // ========== KIỂM TRA SKILL TRƯỚC ĐÃ HOÀN THÀNH CHƯA ==========
     if (currentSkill.order > 1) {
-      // Tìm skill trước đó (order nhỏ hơn 1)
-      const previousSkill = await Skill.findOne({
-        chapterId: currentSkill.chapterId,
-        order: currentSkill.order - 1
+      // Nếu user đã bắt đầu (hoàn thành ít nhất 1 step) trong skill hiện tại,
+      // thì cho phép tiếp tục trong skill này mà không cần kiểm tra skill trước.
+      const currentSkillProgresses = await Progress.find({ skillId: currentSkill._id });
+      const currentSkillProgressIds = currentSkillProgresses.map(p => p._id);
+      const hasStartedCurrentSkill = await UserActivity.exists({
+        userId,
+        progressId: { $in: currentSkillProgressIds },
+        isCompleted: true
       });
 
-      if (previousSkill) {
-        // Lấy tất cả progress của skill trước
-        const previousSkillProgresses = await Progress.find({ skillId: previousSkill._id });
-        const previousProgressIds = previousSkillProgresses.map(p => p._id);
-
-        // Kiểm tra user đã hoàn thành tất cả progress của skill trước chưa
-        const completedPreviousActivities = await UserActivity.find({
-          userId,
-          progressId: { $in: previousProgressIds },
-          isCompleted: true
+      if (!hasStartedCurrentSkill) {
+        // Tìm skill trước đó (order nhỏ hơn 1)
+        const previousSkill = await Skill.findOne({
+          chapterId: currentSkill.chapterId,
+          order: currentSkill.order - 1
         });
 
-        // So sánh số lượng
-        if (completedPreviousActivities.length < previousSkillProgresses.length) {
-          return res.status(400).json({
-            message: `Bạn cần hoàn thành skill "${previousSkill.skillName}" trước khi học skill này`,
-            requiredSkillId: previousSkill._id,
-            requiredSkillName: previousSkill.skillName,
-            completedSteps: completedPreviousActivities.length,
-            totalSteps: previousSkillProgresses.length
+        if (previousSkill) {
+          // Lấy tất cả progress của skill trước
+          const previousSkillProgresses = await Progress.find({ skillId: previousSkill._id });
+          const previousProgressIds = previousSkillProgresses.map(p => p._id);
+
+          // Kiểm tra user đã hoàn thành tất cả progress của skill trước chưa
+          const completedPreviousActivities = await UserActivity.find({
+            userId,
+            progressId: { $in: previousProgressIds },
+            isCompleted: true
           });
+
+          // So sánh số lượng
+          if (completedPreviousActivities.length < previousSkillProgresses.length) {
+            return res.status(400).json({
+              message: `Bạn cần hoàn thành skill "${previousSkill.skillName}" trước khi học skill này`,
+              requiredSkillId: previousSkill._id,
+              requiredSkillName: previousSkill.skillName,
+              completedSteps: completedPreviousActivities.length,
+              totalSteps: previousSkillProgresses.length
+            });
+          }
         }
       }
     }
@@ -264,7 +292,8 @@ export const recordUserActivityController = async (req, res) => {
       if (!validationResult.isCorrect) {
         return res.status(200).json({
           isCorrect: false,
-          message: validationResult.message
+          message: validationResult.message,
+          isCheck: false
         });
       }
     } else {
@@ -304,7 +333,8 @@ export const recordUserActivityController = async (req, res) => {
         isCorrect: true,
         message: validationResult.message,
         bonusEarned,
-        nextStep: currentStepNumber + 1
+        nextStep: currentStepNumber + 1,
+        isCheck: false
       });
     }
 
@@ -313,7 +343,8 @@ export const recordUserActivityController = async (req, res) => {
       message: 'Ghi nhận hoạt động thành công',
       userActivity,
       bonusEarned,
-      nextStep: currentStepNumber + 1
+      nextStep: currentStepNumber + 1,
+      isCheck: false
     });
   } catch (error) {
     return res.status(500).json({ message: error.message });
