@@ -251,6 +251,23 @@ export const insertProgressController = async (req, res) => {
       return res.status(400).json({ message: 'skillId, contentType và contentId là bắt buộc' });
     }
 
+    // Kiểm tra contentId có tồn tại trong collection tương ứng
+    let ContentModel = null;
+    if (contentType === 'video') {
+      ContentModel = (await import('../models/video.schema.js')).default;
+    } else if (contentType === 'exercise') {
+      ContentModel = (await import('../models/exercise.schema.js')).default;
+    } else if (contentType === 'quiz') {
+      ContentModel = (await import('../models/quiz.schema.js')).default;
+    } else {
+      return res.status(400).json({ message: 'contentType không hợp lệ' });
+    }
+
+    const contentDoc = await ContentModel.findById(contentId);
+    if (!contentDoc) {
+      return res.status(404).json({ message: 'contentId không tồn tại trong bảng ' + contentType });
+    }
+
     // 1. Tăng stepNumber của các progress có stepNumber > afterStepNumber
     await Progress.updateMany(
       { skillId, stepNumber: { $gt: afterStepNumber || 0 } },
