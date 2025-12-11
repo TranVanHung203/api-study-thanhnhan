@@ -144,7 +144,7 @@ export const getChapterMapController = async (req, res) => {
     // Tạo Set để check nhanh
     const completedProgressIds = new Set(userActivities.map(ua => ua.progressId.toString()));
 
-    // Tìm stepNumber lớn nhất mà user đã hoàn thành trong toàn bộ chapter
+    // Tìm stepNumber lớn nhất mà user đã hoàn thành
     let maxCompletedStep = 0;
     for (const ua of userActivities) {
       const progress = progresses.find(p => p._id.toString() === ua.progressId.toString());
@@ -154,30 +154,36 @@ export const getChapterMapController = async (req, res) => {
     }
 
     let previousSkillCompleted = true;
-    let foundCurrent = false;
     const skillsWithStatus = skills.map((skill, skillIndex) => {
       const skillProgresses = progresses.filter(p => p.skillId.toString() === skill._id.toString());
       const isSkillLocked = !previousSkillCompleted;
-      let previousProgressCompleted = true;
-      const progressesWithStatus = skillProgresses.map((progress, progressIndex) => {
-        // Đánh dấu hoàn thành nếu stepNumber <= maxCompletedStep
-        const isProgressCompleted = progress.stepNumber <= maxCompletedStep;
-        const isProgressLocked = isSkillLocked || !previousProgressCompleted;
-        // Bước current là bước đầu tiên chưa hoàn thành sau maxCompletedStep
-        const isCurrent = !isProgressLocked && !isProgressCompleted && !foundCurrent && progress.stepNumber > maxCompletedStep;
-        if (isCurrent) foundCurrent = true;
-        previousProgressCompleted = isProgressCompleted;
-        return {
+      let progressesWithStatus = [];
+      for (let i = 0; i < skillProgresses.length; i++) {
+        const progress = skillProgresses[i];
+        const isProgressCompleted = completedProgressIds.has(progress._id.toString());
+        let isLocked = false;
+        let isCurrent = false;
+        if (progress.stepNumber <= maxCompletedStep) {
+          isLocked = false;
+          isCurrent = false;
+        } else if (progress.stepNumber === maxCompletedStep + 1) {
+          isLocked = false;
+          isCurrent = true;
+        } else {
+          isLocked = true;
+          isCurrent = false;
+        }
+        progressesWithStatus.push({
           _id: progress._id,
           stepNumber: progress.stepNumber,
           contentType: progress.contentType,
           contentId: progress.contentId,
           isCompleted: isProgressCompleted,
-          isLocked: isProgressLocked,
+          isLocked,
           isCurrent
-        };
-      });
-      const isSkillCompleted = skillProgresses.length > 0 && skillProgresses.every(p => p.stepNumber <= maxCompletedStep);
+        });
+      }
+      const isSkillCompleted = skillProgresses.length > 0 && skillProgresses.every(p => completedProgressIds.has(p._id.toString()));
       previousSkillCompleted = isSkillCompleted;
       return {
         _id: skill._id,
