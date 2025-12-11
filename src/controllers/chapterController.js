@@ -144,46 +144,98 @@ export const getChapterMapController = async (req, res) => {
     // Tạo Set để check nhanh
     const completedProgressIds = new Set(userActivities.map(ua => ua.progressId.toString()));
 
-    // Tìm stepNumber lớn nhất mà user đã hoàn thành
-    let maxCompletedStep = 0;
-    for (const ua of userActivities) {
-      const progress = progresses.find(p => p._id.toString() === ua.progressId.toString());
-      if (progress && progress.stepNumber > maxCompletedStep) {
-        maxCompletedStep = progress.stepNumber;
+    // Build a global ordered list of progresses by skill.order then stepNumber
+    const skillOrderMap = new Map(skills.map(s => [s._id.toString(), s.order]));
+    const orderedProgresses = progresses.slice().sort((a, b) => {
+      const ao = skillOrderMap.get(a.skillId.toString()) || 0;
+      const bo = skillOrderMap.get(b.skillId.toString()) || 0;
+      if (ao !== bo) return ao - bo;
+      return a.stepNumber - b.stepNumber;
+    });
+
+    // Find latest completed index in the global ordered list
+    let lastCompletedIndex = -1;
+    for (let i = 0; i < orderedProgresses.length; i++) {
+      const p = orderedProgresses[i];
+      if (completedProgressIds.has(p._id.toString())) lastCompletedIndex = i;
+    }
+
+    // Determine which index should be current: first uncompleted progress whose skill is not locked
+    // We'll compute skill-level completion after marking progress completions based on lastCompletedIndex
+    const progressStateById = new Map(); // progressId -> { isCompleted, index }
+    orderedProgresses.forEach((p, idx) => {
+      const isCompleted = idx <= lastCompletedIndex;
+      progressStateById.set(p._id.toString(), { isCompleted, index: idx });
+    });
+
+    // Compute skill-level completed based on progressStateById
+    const skillCompletedMap = new Map(); // skillId -> boolean
+    for (const skill of skills) {
+      const skillProg = orderedProgresses.filter(p => p.skillId.toString() === skill._id.toString());
+      const completedAll = skillProg.length === 0 ? false : skillProg.every(p => progressStateById.get(p._id.toString())?.isCompleted);
+      skillCompletedMap.set(skill._id.toString(), completedAll);
+    }
+
+    // Now determine current index: the first index > lastCompletedIndex where its skill is not locked
+    let currentIndex = -1;
+    // first find first skill that is not completed (in order)
+    let firstNotCompletedSkillOrder = null;
+    for (const skill of skills) {
+      if (!skillCompletedMap.get(skill._id.toString())) {
+        firstNotCompletedSkillOrder = skill.order;
+        break;
+      }
+    }
+    for (let i = lastCompletedIndex + 1; i < orderedProgresses.length; i++) {
+      const p = orderedProgresses[i];
+      const skillOrder = skillOrderMap.get(p.skillId.toString()) || 0;
+      if (firstNotCompletedSkillOrder === null || skillOrder === firstNotCompletedSkillOrder) {
+        currentIndex = i;
+        break;
       }
     }
 
+    // Build skillsWithStatus using computed states
     let previousSkillCompleted = true;
-    const skillsWithStatus = skills.map((skill, skillIndex) => {
-      const skillProgresses = progresses.filter(p => p.skillId.toString() === skill._id.toString());
+    const skillsWithStatus = skills.map(skill => {
+      const skillProgresses = orderedProgresses.filter(p => p.skillId.toString() === skill._id.toString());
+      const isSkillCompleted = skillCompletedMap.get(skill._id.toString()) || false;
       const isSkillLocked = !previousSkillCompleted;
-      let progressesWithStatus = [];
-      for (let i = 0; i < skillProgresses.length; i++) {
-        const progress = skillProgresses[i];
-        const isProgressCompleted = completedProgressIds.has(progress._id.toString());
-        let isLocked = false;
+      const progressesWithStatus = skillProgresses.map(p => {
+        const st = progressStateById.get(p._id.toString()) || { isCompleted: false, index: -1 };
+        const idx = st.index;
+        const isCompleted = st.isCompleted;
         let isCurrent = false;
-        if (progress.stepNumber <= maxCompletedStep) {
-          isLocked = false;
-          isCurrent = false;
-        } else if (progress.stepNumber === maxCompletedStep + 1) {
-          isLocked = false;
+        let isLocked = false;
+        if (idx === currentIndex) {
           isCurrent = true;
-        } else {
-          isLocked = true;
+          isLocked = false;
+        } else if (idx <= lastCompletedIndex) {
           isCurrent = false;
+          isLocked = false;
+        } else {
+          // idx > lastCompletedIndex
+          // locked if skill is locked or this progress is beyond the currentIndex
+          isCurrent = false;
+          if (isSkillLocked) {
+            isLocked = true;
+          } else if (currentIndex === -1) {
+            // no current (all completed) → unlocked
+            isLocked = false;
+          } else {
+            isLocked = idx > currentIndex;
+          }
         }
-        progressesWithStatus.push({
-          _id: progress._id,
-          stepNumber: progress.stepNumber,
-          contentType: progress.contentType,
-          contentId: progress.contentId,
-          isCompleted: isProgressCompleted,
+        return {
+          _id: p._id,
+          stepNumber: p.stepNumber,
+          contentType: p.contentType,
+          contentId: p.contentId,
+          isCompleted,
           isLocked,
           isCurrent
-        });
-      }
-      const isSkillCompleted = skillProgresses.length > 0 && skillProgresses.every(p => completedProgressIds.has(p._id.toString()));
+        };
+      });
       previousSkillCompleted = isSkillCompleted;
       return {
         _id: skill._id,

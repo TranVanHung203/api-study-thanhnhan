@@ -197,15 +197,30 @@ export const recordUserActivityController = async (req, res) => {
         isCompleted: true
       });
 
+      // Lấy tất cả progress của skill để tính max step đã hoàn thành trong skill này
+      const allSkillProgresses = await Progress.find({ skillId: currentProgress.skillId });
+      const allSkillProgressIds = allSkillProgresses.map(p => p._id);
+      const userCompletedInSkill = await UserActivity.find({
+        userId,
+        progressId: { $in: allSkillProgressIds },
+        isCompleted: true
+      });
+
+      // Tạo set các stepNumber đã hoàn thành (bao gồm những bước trước nếu user đã hoàn thành bước sau)
       const completedStepNumbers = new Set();
-      for (const activity of completedPreviousSteps) {
-        const step = previousSteps.find(p => p._id.toString() === activity.progressId.toString());
+      let maxCompletedInSkill = 0;
+      for (const activity of userCompletedInSkill) {
+        const step = allSkillProgresses.find(p => p._id.toString() === activity.progressId.toString());
         if (step) {
           completedStepNumbers.add(step.stepNumber);
+          if (step.stepNumber > maxCompletedInSkill) maxCompletedInSkill = step.stepNumber;
         }
       }
 
-      // Tìm step chưa hoàn thành
+      // Nếu user đã hoàn thành một step lớn hơn i, thì các step < = maxCompletedInSkill coi như hoàn thành
+      for (let s = 1; s <= maxCompletedInSkill; s++) completedStepNumbers.add(s);
+
+      // Tìm step chưa hoàn thành trong 1..currentStepNumber-1
       for (let i = 1; i < currentStepNumber; i++) {
         if (!completedStepNumbers.has(i)) {
           return res.status(400).json({
