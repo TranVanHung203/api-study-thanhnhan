@@ -105,7 +105,7 @@ const swaggerOptions = {
     // './src/routes/skillRoutes.js',
     // './src/routes/progressRoutes.js',
     './src/routes/videoRoutes.js',
-    // './src/routes/exerciseRoutes.js',
+    './src/routes/exerciseRoutes.js',
     // './src/routes/quizNewRoutes.js',
     // './src/routes/questionRoutes.js',
      './src/routes/activityRoutes.js',
