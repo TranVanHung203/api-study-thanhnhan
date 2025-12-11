@@ -101,9 +101,9 @@ const swaggerOptions = {
   apis: [
     './src/routes/authRoutes.js',
     './src/routes/chapterRoutes.js',
-    './src/routes/classRoutes.js',
-    './src/routes/skillRoutes.js',
-    './src/routes/progressRoutes.js',
+    // './src/routes/classRoutes.js',
+    // './src/routes/skillRoutes.js',
+    // './src/routes/progressRoutes.js',
     './src/routes/videoRoutes.js',
     // './src/routes/exerciseRoutes.js',
     // './src/routes/quizNewRoutes.js',
