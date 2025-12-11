@@ -28,19 +28,42 @@ router.all('*', authToken);
  *             type: object
  *             required:
  *               - progressId
- *               - isCompleted
  *             properties:
  *               progressId:
  *                 type: string
  *                 description: ID của progress step
- *               score:
- *                 type: number
- *                 description: Điểm số (cho exercise/quiz)
- *                 example: 85
+ *                 example: "657a1b2c3d4e5f6a7b8c9d0e"
  *               isCompleted:
  *                 type: boolean
- *                 description: Đã hoàn thành hay chưa
+ *                 description: Đã hoàn thành hay chưa (bắt buộc cho VIDEO/QUIZ, không cần cho EXERCISE)
  *                 example: true
+ *               userAnswer:
+ *                 type: array
+ *                 description: Đáp án của user (bắt buộc cho EXERCISE)
+ *                 items:
+ *                   type: string
+ *                 example: ["apple1", "apple2", "apple3"]
+ *               score:
+ *                 type: number
+ *                 description: Điểm số (bắt buộc cho QUIZ, tuỳ chọn cho EXERCISE)
+ *                 example: 85
+ *           examples:
+ *             video:
+ *               summary: Ghi nhận VIDEO
+ *               value:
+ *                 progressId: "657a1b2c3d4e5f6a7b8c9d0e"
+ *                 isCompleted: true
+ *             exercise:
+ *               summary: Ghi nhận EXERCISE dạng đếm kéo thả
+ *               value:
+ *                 progressId: "657a1b2c3d4e5f6a7b8c9d0e"
+ *                 userAnswer: ["apple1", "apple2", "apple3"]
+ *             quiz:
+ *               summary: Ghi nhận QUIZ
+ *               value:
+ *                 progressId: "657a1b2c3d4e5f6a7b8c9d0e"
+ *                 score: 80
+ *                 isCompleted: true
  *     responses:
  *       201:
  *         description: Ghi nhận thành công
