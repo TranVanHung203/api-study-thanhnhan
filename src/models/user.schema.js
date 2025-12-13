@@ -26,6 +26,33 @@ const UserSchema = new mongoose.Schema({
     ref: 'Class',
     required: false
   },
+  // OAuth fields (Google)
+  googleId: {
+    type: String,
+    required: false,
+    index: true,
+    sparse: true
+  },
+  provider: {
+    type: String,
+    required: false,
+    enum: ['local', 'google', 'guest'],
+    default: 'local'
+  },
+  avatar: {
+    type: String,
+    required: false
+  },
+  emailVerified: {
+    type: Boolean,
+    default: false
+  },
+  // Roles: only two roles in system: 'student' and 'teacher'
+  roles: {
+    type: [String],
+    enum: ['student', 'teacher'],
+    default: ['student']
+  },
   // Guest user fields
   isGuest: {
     type: Boolean,

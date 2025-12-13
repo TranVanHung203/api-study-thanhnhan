@@ -9,11 +9,14 @@ import BadRequestError from '../errors/badRequestError.js';
 import NotFoundError from '../errors/notFoundError.js';
 import UnauthorizedError from '../errors/unauthorizedError.js';
 import ForbiddenError from '../errors/forbiddenError.js';
+import { OAuth2Client } from 'google-auth-library';
 
 const SECRET_KEY = process.env.SECRET_KEY || 'your-secret-key';
 const ACCESS_TOKEN_EXPIRY = process.env.ACCESS_TOKEN_EXPIRY || '15m';
 const REFRESH_TOKEN_EXPIRY_DAYS = parseInt(process.env.REFRESH_TOKEN_EXPIRY_DAYS) || 7;
 const GUEST_EXPIRY_DAYS = parseInt(process.env.GUEST_EXPIRY_DAYS) || 7;
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
+const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 
 // Tạo Access Token
 const createAccessToken = (user) => {
@@ -342,6 +345,93 @@ export const guestLoginController = async (req, res, next) => {
         fullName: guestUser.fullName,
         isGuest: true,
         expiresAt: guestExpiresAt
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Verify Google ID token (Android / Flutter client)
+export const googleTokenController = async (req, res, next) => {
+  try {
+    const { idToken } = req.body;
+    const deviceInfo = req.headers['user-agent'] || null;
+
+    if (!idToken) {
+      throw new BadRequestError('Missing idToken');
+    }
+
+    // Verify idToken using google-auth-library
+    let ticket;
+    try {
+      ticket = await googleClient.verifyIdToken({ idToken, audience: GOOGLE_CLIENT_ID });
+    } catch (err) {
+      throw new UnauthorizedError('Invalid Google idToken');
+    }
+
+    const payload = ticket.getPayload();
+    const googleId = payload.sub;
+    const email = payload.email || null;
+    const email_verified = payload.email_verified || false;
+    const fullName = payload.name || payload.given_name || 'Google User';
+    const picture = payload.picture || null;
+
+    // Try to find user by googleId
+    let user = null;
+    if (googleId) {
+      user = await User.findOne({ googleId });
+    }
+
+    // If not found by googleId, try find by email
+    if (!user && email) {
+      user = await User.findOne({ email });
+      if (user && !user.googleId && email_verified) {
+        user.googleId = googleId;
+        user.provider = 'google';
+        user.avatar = picture;
+        user.emailVerified = true;
+        await user.save();
+      }
+    }
+
+    // If still not found, create new user
+    if (!user) {
+      const newUser = new User({
+        email: email || null,
+        passwordHash: null,
+        fullName: fullName || 'Google User',
+        classId: null,
+        googleId,
+        provider: 'google',
+        avatar: picture,
+        emailVerified: email_verified,
+        roles: ['student']
+      });
+
+      await newUser.save();
+
+      const reward = new Reward({ userId: newUser._id });
+      await reward.save();
+
+      user = newUser;
+    }
+
+    // Issue tokens
+    const accessToken = createAccessToken(user);
+    const refreshToken = await createRefreshToken(user, deviceInfo);
+
+    return res.status(200).json({
+      message: 'Google sign-in successful',
+      accessToken,
+      refreshToken,
+      user: {
+        id: user._id,
+        email: user.email,
+        fullName: user.fullName,
+        avatar: user.avatar,
+        provider: user.provider,
+        roles: user.roles
       }
     });
   } catch (error) {

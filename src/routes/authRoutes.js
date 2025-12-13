@@ -9,6 +9,7 @@ import {
   guestLoginController,
   deleteGuestController,
   convertGuestToUserController
+  , googleTokenController
 } from '../controllers/authController.js';
 import { authToken } from '../middlewares/authMiddleware.js';
 
@@ -261,6 +262,79 @@ router.post('/change-password', authToken, changePasswordController);
  *                       description: Thời gian tài khoản khách hết hạn (7 ngày)
  */
 router.post('/guest', guestLoginController);
+
+
+/**
+ * @swagger
+ * /auth/google/token:
+ *   post:
+ *     summary: Sign in with Google ID token (Android / Flutter / Web clients)
+ *     tags: [Auth]
+ *     description: >-
+ *       Exchange a Google ID token (JWT) obtained on the client for the application's
+ *       `accessToken` and `refreshToken`. On Android/Flutter, ensure the client requests
+ *       an ID token targeted to the Web Client ID (set `serverClientId` = Web client ID)
+ *       so the token `aud` matches the backend `GOOGLE_CLIENT_ID`.
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - idToken
+ *             properties:
+ *               idToken:
+ *                 type: string
+ *                 description: >-
+ *                   Google ID token returned from the client sign-in flow. On Flutter use
+ *                   `GoogleSignIn` with `serverClientId` set to the Web client ID, then
+ *                   send `authentication.idToken` here.
+ *           examples:
+ *             androidExample:
+ *               summary: Android / Flutter request
+ *               value:
+ *                 idToken: "eyJhbGciOiJSUzI1NiIsImtpZCI6Ij..."
+ *     responses:
+ *       200:
+ *         description: Sign-in successful, returns application tokens and user info
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 accessToken:
+ *                   type: string
+ *                 refreshToken:
+ *                   type: string
+ *                 user:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                     email:
+ *                       type: string
+ *                     fullName:
+ *                       type: string
+ *                     avatar:
+ *                       type: string
+ *                     provider:
+ *                       type: string
+ *                     roles:
+ *                       type: array
+ *                       items:
+ *                         type: string
+ *       400:
+ *         description: Missing or malformed request (e.g., missing idToken)
+ *       401:
+ *         description: Invalid or expired Google idToken
+ */
+router.post('/google/token', googleTokenController);
+
+// Firebase route removed - using Google ID token verification (Google-only flow)
 
 /**
  * @swagger
