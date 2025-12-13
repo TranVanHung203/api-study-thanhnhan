@@ -15,6 +15,10 @@ const VideoSchema = new mongoose.Schema({
   description: {
     type: String
   },
+  progressId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Progress'
+  },
   cloudinaryPublicId: {
     type: String // Để xóa video trên Cloudinary
   },

@@ -230,7 +230,6 @@ export const getChapterMapController = async (req, res) => {
           _id: p._id,
           stepNumber: p.stepNumber,
           contentType: p.contentType,
-          contentId: p.contentId,
           isCompleted,
           isLocked,
           isCurrent
@@ -332,20 +331,27 @@ export const insertProgressController = async (req, res) => {
       { $inc: { stepNumber: 1 } }
     );
 
-    // 2. Tạo progress mới
+    // 2. Tạo progress mới (không lưu contentId trên Progress)
     const newStepNumber = (afterStepNumber || 0) + 1;
     const progress = new Progress({
       skillId,
       stepNumber: newStepNumber,
-      contentType,
-      contentId
+      contentType
     });
 
     await progress.save();
 
+    // Link content -> progress (set progressId trên content document)
+    contentDoc.progressId = progress._id;
+    await contentDoc.save();
+
+    // Return compatibility payload including contentId
+    const cp = progress.toObject();
+    cp.contentId = contentDoc._id;
+
     return res.status(201).json({
       message: 'Chèn progress thành công',
-      progress
+      progress: cp
     });
   } catch (error) {
     return res.status(500).json({ message: error.message });

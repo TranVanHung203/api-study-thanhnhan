@@ -1,4 +1,5 @@
 import express from 'express';
+import { getContentByProgressId } from '../controllers/progressContentController.js';
 import {
   getProgressBySkillController,
   createProgressController,
@@ -9,25 +10,61 @@ import { authToken } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
 
+
+
+// Protected endpoints
 router.all('*', authToken);
+// Public content fetch
 
 /**
  * @swagger
- * /progress/skill/{skillId}:
+ * /progress/{id}/content:
  *   get:
- *     summary: Lấy danh sách các bước tiến trình của một kỹ năng
+ *     summary: Lấy nội dung (video/exercise/quiz) theo `progressId`
  *     tags: [Progress]
  *     parameters:
  *       - in: path
- *         name: skillId
+ *         name: id
  *         required: true
+ *         description: Progress ID cần lấy nội dung
  *         schema:
  *           type: string
  *     responses:
  *       200:
- *         description: Danh sách bước tiến trình
+ *         description: Nội dung tương ứng với progress
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 contentType:
+ *                   type: string
+ *                   enum: [video, exercise, quiz]
+ *                 content:
+ *                   type: object
+ *       404:
+ *         description: Progress hoặc nội dung không tìm thấy
+ *       500:
+ *         description: Lỗi server
  */
-router.get('/skill/:skillId', getProgressBySkillController);
+router.get('/:id/content', getContentByProgressId);
+// /**
+//  * @swagger
+//  * /progress/skill/{skillId}:
+//  *   get:
+//  *     summary: Lấy danh sách các bước tiến trình của một kỹ năng
+//  *     tags: [Progress]
+//  *     parameters:
+//  *       - in: path
+//  *         name: skillId
+//  *         required: true
+//  *         schema:
+//  *           type: string
+//  *     responses:
+//  *       200:
+//  *         description: Danh sách bước tiến trình
+//  */
+// router.get('/skill/:skillId', getProgressBySkillController);
 
 /**
  * @swagger

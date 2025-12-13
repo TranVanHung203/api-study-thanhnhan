@@ -10,10 +10,26 @@ export const getProgressBySkillController = async (req, res) => {
     const { skillId } = req.params;
 
     const progresses = await Progress.find({ skillId })
-      .populate('contentId')
       .sort({ stepNumber: 1 });
 
-    return res.status(200).json({ progresses });
+    // Attach contentId for compatibility: find content docs that reference these progresses
+    const progressIds = progresses.map(p => p._id);
+    const videos = await Video.find({ progressId: { $in: progressIds } }, '_id progressId');
+    const exercises = await Exercise.find({ progressId: { $in: progressIds } }, '_id progressId');
+    const quizzes = await Quiz.find({ progressId: { $in: progressIds } }, '_id progressId');
+    const contentMap = new Map();
+    for (const v of videos) contentMap.set(v.progressId.toString(), { _id: v._id });
+    for (const e of exercises) contentMap.set(e.progressId.toString(), { _id: e._id });
+    for (const q of quizzes) contentMap.set(q.progressId.toString(), { _id: q._id });
+
+    const out = progresses.map(p => {
+      const cp = p.toObject();
+      const content = contentMap.get(p._id.toString());
+      cp.contentId = content ? content._id : null;
+      return cp;
+    });
+
+    return res.status(200).json({ progresses: out });
   } catch (error) {
     return res.status(500).json({ message: error.message });
   }
@@ -41,16 +57,21 @@ export const createProgressController = async (req, res) => {
     const progress = new Progress({
       skillId,
       stepNumber,
-      contentType,
-      contentId
+      contentType
     });
 
     await progress.save();
-    await progress.populate('contentId');
+
+    // Link content -> progress
+    content.progressId = progress._id;
+    await content.save();
+
+    const cp = progress.toObject();
+    cp.contentId = content._id;
 
     return res.status(201).json({
       message: 'Tạo progress thành công',
-      progress
+      progress: cp
     });
   } catch (error) {
     return res.status(500).json({ message: error.message });
@@ -63,16 +84,40 @@ export const updateProgressController = async (req, res) => {
     const { progressId } = req.params;
     const { stepNumber, contentType, contentId } = req.body;
 
-    const progress = await Progress.findByIdAndUpdate(
-      progressId,
-      { stepNumber, contentType, contentId },
-      { new: true }
-    ).populate('contentId');
+    const progress = await Progress.findById(progressId);
+    if (!progress) return res.status(404).json({ message: 'Progress không tìm thấy' });
 
-    return res.status(200).json({
-      message: 'Cập nhật progress thành công',
-      progress
-    });
+    // If contentId changed, unlink previous content and link new content
+    if (contentId) {
+      // unlink any existing content that referenced this progress
+      const prevVideo = await Video.findOne({ progressId: progress._id });
+      if (prevVideo) { prevVideo.progressId = undefined; await prevVideo.save(); }
+      const prevEx = await Exercise.findOne({ progressId: progress._id });
+      if (prevEx) { prevEx.progressId = undefined; await prevEx.save(); }
+      const prevQ = await Quiz.findOne({ progressId: progress._id });
+      if (prevQ) { prevQ.progressId = undefined; await prevQ.save(); }
+
+      // link new content
+      let newContent = null;
+      if (contentType === 'video') newContent = await Video.findById(contentId);
+      else if (contentType === 'exercise') newContent = await Exercise.findById(contentId);
+      else if (contentType === 'quiz') newContent = await Quiz.findById(contentId);
+      if (!newContent) return res.status(404).json({ message: 'Nội dung mới không tìm thấy' });
+      newContent.progressId = progress._id;
+      await newContent.save();
+    }
+
+    // Update fields
+    progress.stepNumber = stepNumber !== undefined ? stepNumber : progress.stepNumber;
+    progress.contentType = contentType !== undefined ? contentType : progress.contentType;
+    await progress.save();
+
+    // attach contentId for compatibility
+    const content = await Video.findOne({ progressId: progress._id }) || await Exercise.findOne({ progressId: progress._id }) || await Quiz.findOne({ progressId: progress._id });
+    const out = progress.toObject();
+    out.contentId = content ? content._id : null;
+
+    return res.status(200).json({ message: 'Cập nhật progress thành công', progress: out });
   } catch (error) {
     return res.status(500).json({ message: error.message });
   }
@@ -83,11 +128,17 @@ export const deleteProgressController = async (req, res) => {
   try {
     const { progressId } = req.params;
 
+    // Unlink content documents that reference this progress
+    const prevVideo = await Video.findOne({ progressId });
+    if (prevVideo) { prevVideo.progressId = undefined; await prevVideo.save(); }
+    const prevEx = await Exercise.findOne({ progressId });
+    if (prevEx) { prevEx.progressId = undefined; await prevEx.save(); }
+    const prevQ = await Quiz.findOne({ progressId });
+    if (prevQ) { prevQ.progressId = undefined; await prevQ.save(); }
+
     await Progress.findByIdAndDelete(progressId);
 
-    return res.status(200).json({
-      message: 'Xóa progress thành công'
-    });
+    return res.status(200).json({ message: 'Xóa progress thành công' });
   } catch (error) {
     return res.status(500).json({ message: error.message });
   }

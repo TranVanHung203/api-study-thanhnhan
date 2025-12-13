@@ -264,34 +264,46 @@ const seedDatabase = async () => {
     console.log('✅ Questions Quiz 2 đã tạo:', questionsQuiz2.length);
 
     // ========== 13. TẠO PROGRESS CHO SKILL 1 (Chapter 1 - Số 1-5) ==========
+    // Create progresses without contentId, then link content.progressId -> progress._id
     const progressSkill1 = await Progress.insertMany([
-      { skillId: skillsChapter1[0]._id, stepNumber: 1, contentType: 'video', contentId: videos[0]._id },
-      { skillId: skillsChapter1[0]._id, stepNumber: 2, contentType: 'exercise', contentId: exercises[0]._id }
+      { skillId: skillsChapter1[0]._id, stepNumber: 1, contentType: 'video' },
+      { skillId: skillsChapter1[0]._id, stepNumber: 2, contentType: 'exercise' }
     ]);
-    console.log('✅ Progress Skill 1 đã tạo:', progressSkill1.length);
+    // Link content documents
+    await Video.findByIdAndUpdate(videos[0]._id, { progressId: progressSkill1[0]._id });
+    await Exercise.findByIdAndUpdate(exercises[0]._id, { progressId: progressSkill1[1]._id });
+    console.log('✅ Progress Skill 1 đã tạo and linked:', progressSkill1.length);
 
     // ========== 14. TẠO PROGRESS CHO SKILL 2 (Chapter 1 - Số 6-10) ==========
     const progressSkill2 = await Progress.insertMany([
-      { skillId: skillsChapter1[1]._id, stepNumber: 1, contentType: 'video', contentId: videos[1]._id },
-      { skillId: skillsChapter1[1]._id, stepNumber: 2, contentType: 'exercise', contentId: exercises[1]._id },
-      { skillId: skillsChapter1[1]._id, stepNumber: 3, contentType: 'quiz', contentId: quizzes[0]._id }
+      { skillId: skillsChapter1[1]._id, stepNumber: 1, contentType: 'video' },
+      { skillId: skillsChapter1[1]._id, stepNumber: 2, contentType: 'exercise' },
+      { skillId: skillsChapter1[1]._id, stepNumber: 3, contentType: 'quiz' }
     ]);
-    console.log('✅ Progress Skill 2 đã tạo:', progressSkill2.length);
+    await Video.findByIdAndUpdate(videos[1]._id, { progressId: progressSkill2[0]._id });
+    await Exercise.findByIdAndUpdate(exercises[1]._id, { progressId: progressSkill2[1]._id });
+    await Quiz.findByIdAndUpdate(quizzes[0]._id, { progressId: progressSkill2[2]._id });
+    console.log('✅ Progress Skill 2 đã tạo and linked:', progressSkill2.length);
 
     // ========== 15. TẠO PROGRESS CHO SKILL 3 (Chapter 2 - Cộng 1-10) ==========
     const progressSkill3 = await Progress.insertMany([
-      { skillId: skillsChapter2[0]._id, stepNumber: 1, contentType: 'video', contentId: videos[2]._id },
-      { skillId: skillsChapter2[0]._id, stepNumber: 2, contentType: 'exercise', contentId: exercises[2]._id }
+      { skillId: skillsChapter2[0]._id, stepNumber: 1, contentType: 'video' },
+      { skillId: skillsChapter2[0]._id, stepNumber: 2, contentType: 'exercise' }
     ]);
-    console.log('✅ Progress Skill 3 đã tạo:', progressSkill3.length);
+    await Video.findByIdAndUpdate(videos[2]._id, { progressId: progressSkill3[0]._id });
+    await Exercise.findByIdAndUpdate(exercises[2]._id, { progressId: progressSkill3[1]._id });
+    console.log('✅ Progress Skill 3 đã tạo and linked:', progressSkill3.length);
 
     // ========== 16. TẠO PROGRESS CHO SKILL 4 (Chapter 2 - Cộng 1-20) ==========
     const progressSkill4 = await Progress.insertMany([
-      { skillId: skillsChapter2[1]._id, stepNumber: 1, contentType: 'video', contentId: videos[3]._id },
-      { skillId: skillsChapter2[1]._id, stepNumber: 2, contentType: 'exercise', contentId: exercises[3]._id },
-      { skillId: skillsChapter2[1]._id, stepNumber: 3, contentType: 'quiz', contentId: quizzes[1]._id }
+      { skillId: skillsChapter2[1]._id, stepNumber: 1, contentType: 'video' },
+      { skillId: skillsChapter2[1]._id, stepNumber: 2, contentType: 'exercise' },
+      { skillId: skillsChapter2[1]._id, stepNumber: 3, contentType: 'quiz' }
     ]);
-    console.log('✅ Progress Skill 4 đã tạo:', progressSkill4.length);
+    await Video.findByIdAndUpdate(videos[3]._id, { progressId: progressSkill4[0]._id });
+    await Exercise.findByIdAndUpdate(exercises[3]._id, { progressId: progressSkill4[1]._id });
+    await Quiz.findByIdAndUpdate(quizzes[1]._id, { progressId: progressSkill4[2]._id });
+    console.log('✅ Progress Skill 4 đã tạo and linked:', progressSkill4.length);
 
     // ========== 17. TẠO USER ACTIVITIES (MẪU - User 1 đã học xong Skill 1 và đang học Skill 2) ==========
     const userActivities = [

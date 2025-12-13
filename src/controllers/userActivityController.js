@@ -3,6 +3,9 @@ import Reward from '../models/reward.schema.js';
 import Progress from '../models/progress.schema.js';
 import Skill from '../models/skill.schema.js';
 import Exercise from '../models/exercise.schema.js';
+import Video from '../models/video.schema.js';
+import Quiz from '../models/quiz.schema.js';
+import Question from '../models/question.schema.js';
 
 /**
  * Validate đáp án exercise dựa theo exerciseType
@@ -115,8 +118,7 @@ export const recordUserActivityController = async (req, res) => {
     const { progressId, score, isCompleted, exerciseType, userAnswer } = req.body;
 
     // Tìm progress hiện tại
-    const currentProgress = await Progress.findById(progressId)
-      .populate('contentId');
+    const currentProgress = await Progress.findById(progressId);
 
     if (!currentProgress) {
       return res.status(404).json({ message: 'Progress không tìm thấy' });
@@ -139,7 +141,7 @@ export const recordUserActivityController = async (req, res) => {
       if (existingActivity.contentType === 'exercise') {
         return res.status(201).json({
           isCorrect: true,
-          message: 'Bạn đã hoàn thành step này rồi',
+          message: 'Ghi nhận hoạt động thành công',
           bonusEarned: bonusEarnedExisting,
           nextStep: nextStepExisting,
           isCheck: true
@@ -265,46 +267,195 @@ export const recordUserActivityController = async (req, res) => {
     let validationResult = null;
 
     if (contentType === 'exercise') {
-      // Kiểm tra có gửi userAnswer không
-      if (!userAnswer) {
-        return res.status(400).json({ 
-          message: 'Vui lòng gửi đáp án (userAnswer)' 
-        });
+      // Expect body.answers to be an array of user answers for each exercise
+      // e.g. answers = [{ exerciseId: ..., userAnswer: [...] }, ...]
+      const { answers } = req.body;
+
+      if (!Array.isArray(answers) || answers.length === 0) {
+        return res.status(400).json({ message: 'Vui lòng gửi mảng answers chứa đáp án cho các exercise' });
       }
 
-      // Lấy exercise với answer (dùng +answer để lấy field ẩn)
-      const exercise = await Exercise.findById(currentProgress.contentId._id).select('+answer');
-      
-      if (!exercise) {
-        return res.status(404).json({ message: 'Exercise không tìm thấy' });
+      // Lấy tất cả các exercise liên quan tới progressId
+      const exercises = await Exercise.find({ progressId: currentProgress._id }).select('+answer');
+
+      if (!exercises || exercises.length === 0) {
+        return res.status(404).json({ message: 'Không tìm thấy exercise cho progress này' });
       }
 
-      // Validate đáp án
-      validationResult = validateExerciseAnswer(
-        exercise.exerciseType,
-        exercise.answer,
-        userAnswer
-      );
+      // Map exercises by id for quick lookup
+      const exerciseMap = new Map(exercises.map(e => [e._id.toString(), e]));
 
-      finalIsCompleted = validationResult.isCorrect;
+      // Validate each provided answer; require that every exercise for this progress
+      // has a corresponding entry in answers. If there are more exercises than answers,
+      // or any validation fails, return with failure and do NOT save activity.
+      if (answers.length !== exercises.length) {
+        return res.status(400).json({ message: `Số lượng answers (${answers.length}) không khớp với số exercise (${exercises.length})` });
+      }
 
-      // Nếu SAI → Trả về kết quả ngay (KHÔNG lưu activity)
-      if (!validationResult.isCorrect) {
+      // Validate all
+      const exerciseResults = [];
+      let allCorrect = true;
+      for (const ans of answers) {
+        if (!ans || !ans.exerciseId) {
+          return res.status(400).json({ message: 'Mỗi item trong answers cần có exerciseId và userAnswer' });
+        }
+
+        const ex = exerciseMap.get(ans.exerciseId.toString());
+        if (!ex) {
+          return res.status(404).json({ message: `Exercise không tồn tại: ${ans.exerciseId}` });
+        }
+
+        const result = validateExerciseAnswer(ex.exerciseType, ex.answer, ans.userAnswer);
+        exerciseResults.push({ exerciseId: ans.exerciseId, ...result });
+        if (!result.isCorrect) allCorrect = false;
+      }
+
+      // Nếu có exercise sai → trả về kết quả chi tiết (KHÔNG lưu activity)
+      if (!allCorrect) {
         return res.status(200).json({
           isCorrect: false,
-          message: validationResult.message,
+          message: 'Có đáp án chưa đúng',
+          details: exerciseResults,
           isCheck: false
         });
       }
+
+      // Nếu tất cả đúng
+      finalIsCompleted = true;
+      validationResult = { isCorrect: true, message: 'Tất cả đáp án đúng' };
+    } else if (contentType === 'quiz') {
+      // Expect body.answers for quizzes. Two supported shapes:
+      // - Single quiz for the progress: answers = [{ questionId, userAnswer }, ...]
+      // - Multiple quizzes: answers = [{ quizId, answers: [{ questionId, userAnswer }, ...] }, ...]
+      const { answers } = req.body;
+
+      if (!answers || (Array.isArray(answers) && answers.length === 0)) {
+        return res.status(400).json({ message: 'Vui lòng gửi answers cho quiz' });
+      }
+
+      // Load all quizzes for this progress
+      const quizzes = await Quiz.find({ progressId: currentProgress._id });
+      if (!quizzes || quizzes.length === 0) {
+        return res.status(404).json({ message: 'Không tìm thấy quiz cho progress này' });
+      }
+
+      // Helper to compare answers (support arrays)
+      const isAnswerCorrect = (userAns, correctAns) => {
+        if (Array.isArray(correctAns) && Array.isArray(userAns)) {
+          try {
+            const a = [...userAns].map(String).sort();
+            const b = [...correctAns].map(String).sort();
+            return JSON.stringify(a) === JSON.stringify(b);
+          } catch (e) {
+            return false;
+          }
+        }
+        return String(userAns) === String(correctAns);
+      };
+
+      const quizResults = [];
+      let allQuizzesCorrect = true;
+
+      // If single quiz, allow answers to be the flat array
+      if (quizzes.length === 1) {
+        const quiz = quizzes[0];
+        const questions = await Question.find({ quizId: quiz._id });
+        if (!Array.isArray(answers)) {
+          return res.status(400).json({ message: 'answers phải là mảng các câu trả lời' });
+        }
+
+        if (answers.length !== questions.length) {
+          return res.status(400).json({ message: `Số lượng answers (${answers.length}) không khớp với số câu hỏi (${questions.length})` });
+        }
+
+        const questionMap = new Map(questions.map(q => [q._id.toString(), q]));
+        const details = [];
+        let correctCount = 0;
+
+        for (const a of answers) {
+          if (!a || !a.questionId) {
+            return res.status(400).json({ message: 'Mỗi item trong answers cần có questionId và userAnswer' });
+          }
+          const q = questionMap.get(a.questionId.toString());
+          if (!q) return res.status(404).json({ message: `Question không tồn tại: ${a.questionId}` });
+          const ok = isAnswerCorrect(a.userAnswer, q.correctAnswer);
+          details.push({ questionId: a.questionId, isCorrect: ok });
+          if (!ok) allQuizzesCorrect = false; else correctCount++;
+        }
+
+        const scorePercent = questions.length > 0 ? Math.round((correctCount / questions.length) * 100) : 0;
+        quizResults.push({ quizId: quiz._id, correctCount, totalQuestions: questions.length, scorePercent, details });
+      } else {
+        // Multiple quizzes: require array of { quizId, answers: [...] }
+        if (!Array.isArray(answers)) {
+          return res.status(400).json({ message: 'Với nhiều quiz, answers phải là mảng các object { quizId, answers }' });
+        }
+
+        const quizMap = new Map(quizzes.map(q => [q._id.toString(), q]));
+
+        for (const qa of answers) {
+          if (!qa || !qa.quizId || !Array.isArray(qa.answers)) {
+            return res.status(400).json({ message: 'Mỗi item phải có quizId và mảng answers' });
+          }
+          const quiz = quizMap.get(qa.quizId.toString());
+          if (!quiz) return res.status(404).json({ message: `Quiz không tồn tại: ${qa.quizId}` });
+          const questions = await Question.find({ quizId: quiz._id });
+          if (qa.answers.length !== questions.length) {
+            return res.status(400).json({ message: `Số lượng answers cho quiz ${qa.quizId} không khớp (${qa.answers.length} vs ${questions.length})` });
+          }
+          const questionMap = new Map(questions.map(q => [q._id.toString(), q]));
+          const details = [];
+          let correctCount = 0;
+          for (const a of qa.answers) {
+            if (!a || !a.questionId) {
+              return res.status(400).json({ message: 'Mỗi item trong answers cần có questionId và userAnswer' });
+            }
+            const q = questionMap.get(a.questionId.toString());
+            if (!q) return res.status(404).json({ message: `Question không tồn tại: ${a.questionId}` });
+            const ok = isAnswerCorrect(a.userAnswer, q.correctAnswer);
+            details.push({ questionId: a.questionId, isCorrect: ok });
+            if (!ok) allQuizzesCorrect = false; else correctCount++;
+          }
+          const scorePercent = questions.length > 0 ? Math.round((correctCount / questions.length) * 100) : 0;
+          quizResults.push({ quizId: quiz._id, correctCount, totalQuestions: questions.length, scorePercent, details });
+        }
+      }
+
+      // If any incorrect, return detailed result and do NOT save activity
+      if (!allQuizzesCorrect) {
+        return res.status(200).json({ isCorrect: false, message: 'Có đáp án quiz chưa đúng', quizzes: quizResults, isCheck: false });
+      }
+
+      // All correct
+      finalIsCompleted = true;
+      validationResult = { isCorrect: true, message: 'Tất cả đáp án quiz đúng' };
+
     } else {
-      // VIDEO/QUIZ: lấy từ body
+      // VIDEO or other types: use provided isCompleted flag
       finalIsCompleted = isCompleted === true;
     }
 
     // Tính điểm thưởng (chỉ khi hoàn thành)
     let bonusEarned = 0;
-    if (finalIsCompleted && currentProgress.contentId && currentProgress.contentId.bonusPoints) {
-      bonusEarned = currentProgress.contentId.bonusPoints;
+    if (finalIsCompleted) {
+      // Fetch related content to read bonusPoints if exists
+      try {
+        if (contentType === 'video') {
+          const video = await Video.findOne({ progressId: currentProgress._id });
+          if (video && video.bonusPoints) bonusEarned = video.bonusPoints;
+        } else if (contentType === 'exercise') {
+          // For exercises we may have multiple exercises for a single progress
+          const exercisesForProgress = await Exercise.find({ progressId: currentProgress._id });
+          for (const ex of exercisesForProgress) {
+            if (ex && ex.bonusPoints) bonusEarned += ex.bonusPoints;
+          }
+        } else if (contentType === 'quiz') {
+          const quiz = await Quiz.findOne({ progressId: currentProgress._id });
+          if (quiz && quiz.bonusPoints) bonusEarned = quiz.bonusPoints;
+        }
+      } catch (err) {
+        // ignore missing content for bonus calculation
+      }
     }
 
     const userActivity = new UserActivity({
@@ -323,7 +474,7 @@ export const recordUserActivityController = async (req, res) => {
       await Reward.findOneAndUpdate(
         { userId },
         { $inc: { totalPoints: bonusEarned } },
-        { new: true }
+        { new: true, upsert: true }
       );
     }
 
