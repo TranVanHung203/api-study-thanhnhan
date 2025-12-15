@@ -26,7 +26,7 @@ router.all('*', authToken);
  * @swagger
  * /progress/{id}/content:
  *   get:
- *     summary: Lấy nội dung vide theo `progressId`.
+ *     summary: Lấy nội dung video theo `progressId`.
  *     tags: [Progress]
  *     parameters:
  *       - in: path
@@ -126,6 +126,53 @@ router.get('/:id/content', getContentByProgressId);
  */
 router.post('/:id/quiz/start', startQuizSession);
 
+
+/**
+ * @swagger
+ * /progress/{id}/quiz:
+ *   get:
+ *     summary: Lấy câu hỏi phân trang từ session đã tạo (phải truyền `sessionId` sau khi start)
+ *     tags: [Progress]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: sessionId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: page
+ *         required: false
+ *         schema:
+ *           type: integer
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Danh sách câu hỏi cho session (phân trang)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 page:
+ *                   type: integer
+ *                 perPage:
+ *                   type: integer
+ *                 total:
+ *                   type: integer
+ *                 totalPages:
+ *                   type: integer
+ *                 questions:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ */
+router.get('/:id/quiz', getSessionQuestions);
 
 
 
