@@ -374,7 +374,10 @@ export const googleTokenController = async (req, res, next) => {
     const googleId = payload.sub;
     const email = payload.email || null;
     const email_verified = payload.email_verified || false;
-    const fullName = payload.name || payload.given_name || 'Google User';
+    const emailLocalPart = email ? email.split('@')[0].replace(/[^a-zA-Z0-9_.-]/g, ' ') : null;
+    // allow client to send `fullName` when token payload omits name
+    const clientFullName = req.body.fullName || null;
+    const fullName = payload.name || payload.given_name || clientFullName || emailLocalPart || 'Google User';
     const picture = payload.picture || null;
 
     // Try to find user by googleId
@@ -391,6 +394,31 @@ export const googleTokenController = async (req, res, next) => {
         user.provider = 'google';
         user.avatar = picture;
         user.emailVerified = true;
+        await user.save();
+      }
+    }
+
+    // If we found an existing user, update profile fields from Google payload when present
+    if (user) {
+      let updated = false;
+      if (fullName && user.fullName !== fullName) {
+        user.fullName = fullName;
+        updated = true;
+      }
+      if (picture && user.avatar !== picture) {
+        user.avatar = picture;
+        updated = true;
+      }
+      if (email_verified && !user.emailVerified) {
+        user.emailVerified = true;
+        updated = true;
+      }
+      if (googleId && !user.googleId) {
+        user.googleId = googleId;
+        user.provider = 'google';
+        updated = true;
+      }
+      if (updated) {
         await user.save();
       }
     }
