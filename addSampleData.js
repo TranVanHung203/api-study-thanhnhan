@@ -95,11 +95,53 @@ const seed = async () => {
       { title: 'Quiz B', description: 'Quiz B', totalQuestions: 5, bonusPoints: 25 }
     ]);
 
-    await Question.insertMany([
-      { quizId: quizzes[0]._id, questionText: 'Q1', options: ['a','b','c'], correctAnswer: 'a', order: 1 },
-      { quizId: quizzes[0]._id, questionText: 'Q2', options: ['a','b','c'], correctAnswer: 'b', order: 2 },
-      { quizId: quizzes[0]._id, questionText: 'Q3', options: ['a','b','c'], correctAnswer: 'c', order: 3 }
-    ]);
+    // Insert many questions for quizzes using new schema
+    const sampleQuestions = [];
+    const choiceTexts = [
+      ['Red', 'Blue', 'Green', 'Yellow'],
+      ['Cat', 'Dog', 'Bird', 'Fish'],
+      ['Apple', 'Banana', 'Cherry', 'Date'],
+      ['One', 'Two', 'Three', 'Four']
+    ];
+
+    // helper to return a placeholder image URL
+    const placeholderImage = (id) => `https://placehold.co/80x80?text=img${id}`;
+
+    for (let q = 0; q < 60; q++) {
+      const quizIdx = q % quizzes.length;
+      const base = choiceTexts[q % choiceTexts.length];
+
+      // variable number of choices: 2..4
+      const choiceCount = 2 + (q % 3); // yields 2,3,4 repeating
+      const choicesArray = [];
+
+      // Choose a mode for this question: either all text choices or all image choices
+      const mode = (q % 2 === 0) ? 'text' : 'image';
+      if (mode === 'text') {
+        for (let i = 0; i < choiceCount; i++) {
+          choicesArray.push({ text: base[i % base.length] + (i > 0 ? ` ${i}` : '') });
+        }
+      } else {
+        for (let i = 0; i < choiceCount; i++) {
+          choicesArray.push({ imageUrl: placeholderImage(q * 10 + i) });
+        }
+      }
+
+      const correctIndex = q % choiceCount; // pick one valid index
+
+      sampleQuestions.push({
+        quizId: quizzes[quizIdx]._id,
+        questionText: `Sample question ${q+1} for ${quizzes[quizIdx].title}`,
+        questionVoice: null,
+        imageQuestion: (q % 7 === 0) ? placeholderImage(q) : null,
+        choices: choicesArray,
+        answer: correctIndex,
+        hintVoice: null,
+        order: q + 1
+      });
+    }
+
+    await Question.insertMany(sampleQuestions);
 
     // Create progresses and link content.progressId
     const p1 = await Progress.create({ skillId: skillsChapter1[0]._id, stepNumber: 1, contentType: 'video' });

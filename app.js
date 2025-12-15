@@ -64,14 +64,13 @@ const swaggerOptions = {
       version: '1.0.0',
       description: 'API dạy học online: quản lý khoá học, bài học, người dùng, quiz, thông báo...'
     },
+    // Dynamically select the server shown in Swagger UI.
+    // - In production set NODE_ENV=production (or set SWAGGER_SERVER_URL to an explicit URL).
+    // - Locally the default will be http://localhost:5000.
     servers: [
       {
-        url: 'https://api-study-thanhnhan.onrender.com',
-        description: 'Production server'
-      },
-      {
-        url: 'http://localhost:5000',
-        description: 'Local server'
+        url: process.env.SWAGGER_SERVER_URL || (process.env.NODE_ENV === 'production' ? 'https://api-study-thanhnhan.onrender.com' : 'http://localhost:5000'),
+        description: process.env.SWAGGER_SERVER_URL ? 'Configured server' : (process.env.NODE_ENV === 'production' ? 'Production server' : 'Local server')
       }
     ],
     components: {

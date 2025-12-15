@@ -15,12 +15,11 @@ const router = express.Router();
 // Protected endpoints
 router.all('*', authToken);
 // Public content fetch
-
 /**
  * @swagger
  * /progress/{id}/content:
  *   get:
- *     summary: Lấy nội dung (video/exercise/quiz) theo `progressId`
+ *     summary: Lấy nội dung (video/exercise/quiz) theo `progressId`. Quiz có thể random hoặc truyền `quizId` để giữ bộ đề.
  *     tags: [Progress]
  *     parameters:
  *       - in: path
@@ -29,19 +28,54 @@ router.all('*', authToken);
  *         description: Progress ID cần lấy nội dung
  *         schema:
  *           type: string
+ *       - in: query
+ *         name: quizId
+ *         required: false
+ *         description: (optional) Nếu truyền `quizId`, API sẽ trả câu hỏi của quiz đó; nếu không truyền, server sẽ chọn ngẫu nhiên 1 quiz.
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: page
+ *         required: false
+ *         description: Số trang (1-based). Mặc định là 1.
+ *         schema:
+ *           type: integer
  *     responses:
  *       200:
- *         description: Nội dung tương ứng với progress
+ *         description: Nội dung phân trang
  *         content:
  *           application/json:
  *             schema:
  *               type: object
  *               properties:
- *                 contentType:
- *                   type: string
- *                   enum: [video, exercise, quiz]
- *                 content:
+ *                 page:
+ *                   type: integer
+ *                 perPage:
+ *                   type: integer
+ *                 total:
+ *                   type: integer
+ *                 totalPages:
+ *                   type: integer
+ *                 quiz:
  *                   type: object
+ *                 questions:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *               example:
+ *                 page: 1
+ *                 perPage: 10
+ *                 total: 31
+ *                 totalPages: 4
+ *                 quiz:
+ *                   _id: "693f7801919124df0f179921"
+ *                   title: "Quiz A"
+ *                 questions:
+ *                   - _id: "693f7801919124df0f179924"
+ *                     questionText: "Sample question 1 for Quiz A"
+ *                     choices:
+ *                       - { text: "Red" }
+ *                       - { text: "Blue 1" }
  *       404:
  *         description: Progress hoặc nội dung không tìm thấy
  *       500:
