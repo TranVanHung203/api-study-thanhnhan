@@ -35,6 +35,8 @@ import rewardRoutes from './src/routes/rewardRoutes.js';
 // Import Swagger
 import swaggerUi from 'swagger-ui-express';
 import swaggerJsdoc from 'swagger-jsdoc';
+import path from 'path';
+import expressStatic from 'express';
 
 // Import cleanup jobs
 import { startCleanupJob, startExpiredGuestCleanup } from './src/jobs/cleanupJob.js';
@@ -122,7 +124,24 @@ const swaggerUiOptions = {
   operationsSorter: 'method'       // Sắp xếp: GET → POST → PUT → DELETE
 };
 
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, swaggerUiOptions));
+// Serve static files (for swagger custom script)
+app.use('/public', express.static(path.join(process.cwd(), 'public')));
+
+// Inject custom JS into Swagger UI to auto-attach access token
+const swaggerUiOptionsWithCustom = Object.assign({}, swaggerUiOptions, {
+  swaggerOptions: {
+    // Add our custom script for swagger UI
+    plugins: [],
+    // Allow submit methods so endpoints are executable
+    supportedSubmitMethods: ['get', 'post', 'put', 'delete', 'patch'],
+    // This customJs will be loaded by swagger-ui-express when provided as an option
+    // Note: swagger-ui-express supports `customJs` pointing to a path under the served static
+    // We'll pass a relative URL so swagger-ui can load it.
+  },
+  customJs: '/public/swagger-custom.js'
+});
+
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, swaggerUiOptionsWithCustom));
 
 // Routes mới
 app.use('/auth', authRoutes);

@@ -15,13 +15,10 @@ export const getContentByProgressId = async (req, res) => {
     if (!progress) return res.status(404).json({ message: 'Progress không tìm thấy' });
 
     if (progress.contentType === 'video') {
-      const [docs, total] = await Promise.all([
-        Video.find({ progressId: progress._id }).skip(skip).limit(perPage),
-        Video.countDocuments({ progressId: progress._id })
-      ]);
-      if (!docs || docs.length === 0) return res.status(404).json({ message: 'Video không tìm thấy cho progress này' });
-      const totalPages = Math.max(1, Math.ceil(total / perPage));
-      return res.status(200).json({ page, perPage, total, totalPages, content: docs });
+      // For video content, return the single video associated with this progress
+      const doc = await Video.findOne({ progressId: progress._id });
+      if (!doc) return res.status(404).json({ message: 'Video không tìm thấy cho progress này' });
+      return res.status(200).json({ content: doc });
     } else if (progress.contentType === 'exercise') {
       const [docs, total] = await Promise.all([
         Exercise.find({ progressId: progress._id }).skip(skip).limit(perPage),

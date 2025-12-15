@@ -51,7 +51,7 @@ export const createQuestionController = async (req, res) => {
       hintVoice,
       order
     } = req.body;
-    // Expected `choices` shape: [ { text?, imageUrl? }, ... ] with length >= 2
+    // Expected `choices` shape: [ { text }, ... ] with length >= 2. If value is an image URL, store URL string in `text`.
     if (!Array.isArray(choices) || choices.length < 2) {
       return res.status(400).json({ message: 'choices must be an array with at least two items' });
     }
@@ -162,17 +162,15 @@ export const checkAnswerController = async (req, res) => {
           isCorrect = (userAnswer === idx);
         } else if (typeof userAnswer === 'string') {
           isCorrect = (correctChoice.text === userAnswer);
-        } else if (userAnswer && userAnswer.imageUrl) {
-          isCorrect = (correctChoice.imageUrl === userAnswer.imageUrl);
+        } else if (userAnswer && userAnswer.text) {
+          isCorrect = (correctChoice.text === userAnswer.text);
         }
       }
     } else if (typeof storedAnswer === 'object') {
-      // stored as object { text?, imageUrl? }
+      // stored as object { text }
       if (storedAnswer.text) {
         if (typeof userAnswer === 'string') isCorrect = storedAnswer.text === userAnswer;
         else if (userAnswer && userAnswer.text) isCorrect = storedAnswer.text === userAnswer.text;
-      } else if (storedAnswer.imageUrl) {
-        if (userAnswer && userAnswer.imageUrl) isCorrect = storedAnswer.imageUrl === userAnswer.imageUrl;
       }
     }
 

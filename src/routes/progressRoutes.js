@@ -1,6 +1,11 @@
 import express from 'express';
 import { getContentByProgressId } from '../controllers/progressContentController.js';
 import {
+  startQuizSession,
+  getSessionQuestions,
+  submitQuizSession
+} from '../controllers/quizSessionController.js';
+import {
   getProgressBySkillController,
   createProgressController,
   updateProgressController,
@@ -14,12 +19,14 @@ const router = express.Router();
 
 // Protected endpoints
 router.all('*', authToken);
-// Public content fetch
+
+
+
 /**
  * @swagger
  * /progress/{id}/content:
  *   get:
- *     summary: Lấy nội dung (video/exercise/quiz) theo `progressId`. Quiz có thể random hoặc truyền `quizId` để giữ bộ đề.
+ *     summary: Lấy nội dung vide theo `progressId`.
  *     tags: [Progress]
  *     parameters:
  *       - in: path
@@ -28,60 +35,169 @@ router.all('*', authToken);
  *         description: Progress ID cần lấy nội dung
  *         schema:
  *           type: string
- *       - in: query
- *         name: quizId
- *         required: false
- *         description: (optional) Nếu truyền `quizId`, API sẽ trả câu hỏi của quiz đó; nếu không truyền, server sẽ chọn ngẫu nhiên 1 quiz.
+ *     responses:
+ *       200:
+ *         description: Nội dung theo progress
+ *         content:
+ *           application/json:
+ *             schema:
+ *               oneOf:
+ *                 - type: object
+ *                   properties:
+ *                     content:
+ *                       type: object
+ *                       description: Trả về một document video khi contentType === 'video'
+ *                 - type: object
+ *                   properties:
+ *                     page:
+ *                       type: integer
+ *                     perPage:
+ *                       type: integer
+ *                     total:
+ *                       type: integer
+ *                     totalPages:
+ *                       type: integer
+ *                     content:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                       description: Trả về danh sách exercise khi contentType === 'exercise'
+ *                 - type: object
+ *                   properties:
+ *                     page:
+ *                       type: integer
+ *                     perPage:
+ *                       type: integer
+ *                     total:
+ *                       type: integer
+ *                     totalPages:
+ *                       type: integer
+ *                     quiz:
+ *                       type: object
+ *                     questions:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                       description: Trả về quiz metadata và câu hỏi (ẩn đáp án) khi contentType === 'quiz'
+ *       404:
+ *         description: Progress/Content not found
+ *       500:
+ *         description: Lỗi server
+ */
+router.get('/:id/content', getContentByProgressId);
+
+
+
+/**
+ * @swagger
+ * /progress/{id}/quiz/start:
+ *   post:
+ *     summary: Bắt đầu một phiên làm quiz (server chọn random `count` câu từ quiz liên kết với progress)
+ *     tags: [Progress]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         description: Progress ID cần bắt đầu quiz
  *         schema:
  *           type: string
  *       - in: query
- *         name: page
+ *         name: count
  *         required: false
- *         description: Số trang (1-based). Mặc định là 1.
+ *         description: Số câu hỏi cần lấy (ví dụ ?count=10). Mặc định là `quiz.totalQuestions`.
  *         schema:
  *           type: integer
+ *     security:
+ *       - bearerAuth: []
  *     responses:
- *       200:
- *         description: Nội dung phân trang
+ *       201:
+ *         description: Phiên quiz đã được tạo
  *         content:
  *           application/json:
  *             schema:
  *               type: object
  *               properties:
- *                 page:
- *                   type: integer
- *                 perPage:
- *                   type: integer
+ *                 sessionId:
+ *                   type: string
+ *                 quizId:
+ *                   type: string
  *                 total:
  *                   type: integer
- *                 totalPages:
- *                   type: integer
- *                 quiz:
+ */
+router.post('/:id/quiz/start', startQuizSession);
+
+
+
+
+
+
+/**
+ * @swagger
+ * /progress/{id}/quiz/submit:
+ *   post:
+ *     summary: Nộp bài quiz, đánh giá đáp án và xóa session tạm
+ *     tags: [Progress]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               sessionId:
+ *                 type: string
+ *                 description: ID phiên quiz trả về từ /quiz/start
+ *               answers:
+ *                 type: array
+ *                 description: Danh sách đáp án do học sinh gửi. Mỗi phần tử chứa `questionId` và `userAnswer`.
+ *                 items:
  *                   type: object
- *                 questions:
+ *                   properties:
+ *                     questionId:
+ *                       type: string
+ *                     userAnswer:
+ *                       oneOf:
+ *                         - type: integer
+ *                         - type: string
+ *                         - type: object
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Kết quả nộp bài
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 totalQuestions:
+ *                   type: integer
+ *                 attempted:
+ *                   type: integer
+ *                 correct:
+ *                   type: integer
+ *                 details:
  *                   type: array
  *                   items:
  *                     type: object
- *               example:
- *                 page: 1
- *                 perPage: 10
- *                 total: 31
- *                 totalPages: 4
- *                 quiz:
- *                   _id: "693f7801919124df0f179921"
- *                   title: "Quiz A"
- *                 questions:
- *                   - _id: "693f7801919124df0f179924"
- *                     questionText: "Sample question 1 for Quiz A"
- *                     choices:
- *                       - { text: "Red" }
- *                       - { text: "Blue 1" }
- *       404:
- *         description: Progress hoặc nội dung không tìm thấy
- *       500:
- *         description: Lỗi server
+ *                     properties:
+ *                       questionId:
+ *                         type: string
+ *                       isCorrect:
+ *                         type: boolean
+ *                       correctAnswer:
+ *                         description: Stored correct answer (index or object)
+ *                         type: object
  */
-router.get('/:id/content', getContentByProgressId);
+router.post('/:id/quiz/submit', submitQuizSession);
+
+
 // /**
 //  * @swagger
 //  * /progress/skill/{skillId}:

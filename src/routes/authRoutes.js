@@ -72,10 +72,10 @@ router.post('/register', registerController);
  *             properties:
  *               username:
  *                 type: string
- *                 example: "user123"
+ *                 example: "admin"
  *               password:
  *                 type: string
- *                 example: "password123"
+ *                 example: "admin"
  *     responses:
  *       200:
  *         description: Đăng nhập thành công, trả về accessToken và refreshToken

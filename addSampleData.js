@@ -123,7 +123,8 @@ const seed = async () => {
         }
       } else {
         for (let i = 0; i < choiceCount; i++) {
-          choicesArray.push({ imageUrl: placeholderImage(q * 10 + i) });
+          // store image URL as text
+          choicesArray.push({ text: placeholderImage(q * 10 + i) });
         }
       }
 

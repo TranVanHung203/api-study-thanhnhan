@@ -1,8 +1,8 @@
 import mongoose from 'mongoose';
 
 const ChoiceSchema = new mongoose.Schema({
-  text: { type: String, required: false },
-  imageUrl: { type: String, required: false }
+  // Always store choice content in `text`. If it's an image URL, store the URL string here.
+  text: { type: String, required: true }
 }, { _id: false });
 
 const QuestionSchema = new mongoose.Schema({
@@ -10,7 +10,7 @@ const QuestionSchema = new mongoose.Schema({
   questionText: { type: String, required: false },
   questionVoice: { type: String, required: false },
   imageQuestion: { type: String, required: false },
-  // choices: array of objects { text?, imageUrl? } - must have at least 2
+  // choices: array of objects { text } - if a choice is an image, store the image URL string in `text`
   choices: {
     type: [ChoiceSchema],
     required: true,
@@ -21,7 +21,7 @@ const QuestionSchema = new mongoose.Schema({
       message: 'A question must have at least 2 choices'
     }
   },
-  // answer: either a numeric index (0-based) into `choices`, or an object { text?, imageUrl? }
+  // answer: either a numeric index (0-based) into `choices`, or an object { text }
   answer: { type: mongoose.Schema.Types.Mixed, required: true },
   hintVoice: { type: String, required: false },
   order: { type: Number, required: false },
