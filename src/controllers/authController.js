@@ -397,9 +397,19 @@ export const googleTokenController = async (req, res, next) => {
 
     // If still not found, create new user
     if (!user) {
+      // generate a safe unique username (avoid collisions by including timestamp)
+      const generatedUsername = email
+        ? (email.split('@')[0].replace(/[^a-zA-Z0-9_.-]/g, '') || `googleuser`) + `_${Date.now()}`
+        : `google_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
+
+      // create a random password hash so required passwordHash field is satisfied
+      const randomPassword = Math.random().toString(36) + Date.now().toString(36);
+      const passwordHashForOauth = await bcrypt.hash(randomPassword, 10);
+
       const newUser = new User({
+        username: generatedUsername,
         email: email || null,
-        passwordHash: null,
+        passwordHash: passwordHashForOauth,
         fullName: fullName || 'Google User',
         classId: null,
         googleId,
