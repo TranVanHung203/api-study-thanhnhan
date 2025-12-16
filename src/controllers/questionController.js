@@ -147,34 +147,39 @@ export const checkAnswerController = async (req, res) => {
     if (!question) {
       return res.status(404).json({ message: 'Câu hỏi không tìm thấy' });
     }
-
-    const storedAnswer = question.answer;
-    let isCorrect = false;
-
-    if (storedAnswer === undefined || storedAnswer === null) {
-      isCorrect = false;
-    } else if (typeof storedAnswer === 'number') {
-      // stored as index (0-based)
-      const idx = storedAnswer;
-      const correctChoice = question.choices[idx];
-      if (correctChoice) {
-        if (typeof userAnswer === 'number') {
-          isCorrect = (userAnswer === idx);
-        } else if (typeof userAnswer === 'string') {
-          isCorrect = (correctChoice.text === userAnswer);
-        } else if (userAnswer && userAnswer.text) {
-          isCorrect = (correctChoice.text === userAnswer.text);
-        }
-      }
-    } else if (typeof storedAnswer === 'object') {
-      // stored as object { text }
-      if (storedAnswer.text) {
-        if (typeof userAnswer === 'string') isCorrect = storedAnswer.text === userAnswer;
-        else if (userAnswer && userAnswer.text) isCorrect = storedAnswer.text === userAnswer.text;
-      }
+    // Normalize stored answer to string for direct comparison
+    let storedText = null;
+    const stored = question.answer;
+    if (stored === undefined || stored === null) storedText = null;
+    else if (typeof stored === 'number') {
+      const idx = stored;
+      const correctChoice = question.choices && question.choices[idx];
+      storedText = correctChoice ? (correctChoice.text || String(correctChoice)) : null;
+    } else if (typeof stored === 'object') {
+      if (stored.text) storedText = stored.text;
+      else storedText = String(stored);
+    } else {
+      storedText = String(stored);
     }
 
-    return res.status(200).json({ isCorrect, correctAnswer: storedAnswer });
+    // Normalize userAnswer to string
+    let userText = null;
+    if (userAnswer === undefined || userAnswer === null) userText = null;
+    else if (typeof userAnswer === 'number') {
+      // If user passed index, map to choice text
+      const idx = userAnswer;
+      const choice = question.choices && question.choices[idx];
+      userText = choice ? (choice.text || String(choice)) : String(userAnswer);
+    } else if (typeof userAnswer === 'object') {
+      if (userAnswer.text) userText = userAnswer.text;
+      else userText = String(userAnswer);
+    } else {
+      userText = String(userAnswer);
+    }
+
+    const isCorrect = (storedText !== null && userText !== null && storedText === userText);
+
+    return res.status(200).json({ isCorrect});
   } catch (error) {
     return res.status(500).json({ message: error.message });
   }
