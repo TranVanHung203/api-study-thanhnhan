@@ -144,7 +144,7 @@ export const submitQuizSession = async (req, res) => {
     const existingActivity = await UserActivity.findOne({ userId, progressId, isCompleted: true });
     if (existingActivity) {
       return res.status(201).json({
-        message: 'Quiz đã hoàn thành',
+        message: 'Quiz đã hoàn thành trước đây',
         userActivity: existingActivity,
         isCheck: true
       });
@@ -286,7 +286,7 @@ export const submitQuizSession = async (req, res) => {
       }
       return { isCorrect, correctAnswer: storedAnswer };
     };
-    const details = [];
+    
     let correctCount = 0;
     for (const qid of providedQuestionIds) {
       const q = questionById.get(qid);
@@ -297,7 +297,6 @@ export const submitQuizSession = async (req, res) => {
       }
       const result = evaluateAnswer(q, userAnswer);
       if (result.isCorrect) correctCount += 1;
-      details.push({ questionId: qid, isCorrect: result.isCorrect, correctAnswer: result.correctAnswer });
     }
 
     // Nếu đúng > 50% thì coi là hoàn thành, cộng điểm
@@ -339,8 +338,9 @@ export const submitQuizSession = async (req, res) => {
         isCorrect: true,
         message: shouldAddBonus ? 'Quiz hoàn thành (>50% đúng), đã cộng điểm thưởng' : 'Quiz hoàn thành (>50% đúng), không cộng thêm điểm',
         bonusEarned,
+        correctCount,
+        totalQuestions,
         percentCorrect,
-        details,
         isCheck: false
       });
     } else {
@@ -349,8 +349,9 @@ export const submitQuizSession = async (req, res) => {
       return res.status(200).json({
         isCorrect: false,
         message: 'Bạn cần đúng trên 50% số câu hỏi',
+        correctCount,
+        totalQuestions,
         percentCorrect,
-        details,
         isCheck: false
       });
     }
