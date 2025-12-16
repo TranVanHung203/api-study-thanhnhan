@@ -48,6 +48,7 @@ export const createQuestionController = async (req, res) => {
       imageQuestion,
       choices,
       answer,
+      questionType,
       hintVoice,
       order
     } = req.body;
@@ -56,9 +57,16 @@ export const createQuestionController = async (req, res) => {
       return res.status(400).json({ message: 'choices must be an array with at least two items' });
     }
 
-    if (typeof answer === 'number') {
-      if (answer < 0 || answer >= choices.length) {
-        return res.status(400).json({ message: 'answer index out of range' });
+    if (questionType === 'single') {
+      if (typeof answer === 'number') {
+        if (answer < 0 || answer >= choices.length) {
+          return res.status(400).json({ message: 'answer index out of range' });
+        }
+      }
+    } else if (questionType === 'multiple') {
+      // expected array of indices or array of texts
+      if (!Array.isArray(answer)) {
+        return res.status(400).json({ message: 'answer must be an array for multiple choice questions' });
       }
     }
 
@@ -70,6 +78,7 @@ export const createQuestionController = async (req, res) => {
       choices,
       // answer can be number (index) or object
       answer,
+      questionType,
       hintVoice,
       order: order || 0
     });

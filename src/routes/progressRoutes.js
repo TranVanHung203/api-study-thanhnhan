@@ -92,26 +92,54 @@ router.get('/:id/content', getContentByProgressId);
  * @swagger
  * /progress/{id}/quiz/start:
  *   post:
- *     summary: Bắt đầu một phiên làm quiz (server chọn random `count` câu từ quiz liên kết với progress)
+ *     summary: Create a quiz session for a progress (select questions by type and count)
  *     tags: [Progress]
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
- *         description: Progress ID cần bắt đầu quiz
+ *         description: Progress ID linked to quiz
  *         schema:
  *           type: string
- *       - in: query
- *         name: count
- *         required: false
- *         description: Số câu hỏi cần lấy (ví dụ ?count=10). Mặc định là `quiz.totalQuestions`.
- *         schema:
- *           type: integer
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               total:
+ *                 type: integer
+ *                 description: Total number of questions in the quiz
+ *               parts:
+ *                 type: array
+ *                 description: List of parts (each specifies `type`, `count`, and `order`)
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     type:
+ *                       type: string
+ *                       description: Question type to select (e.g. 'single', 'multiple', 'text', 'image')
+ *                     count:
+ *                       type: integer
+ *                       description: Number of questions for this part
+ *                     order:
+ *                       type: integer
+ *                       description: Order of this part in the quiz
+ *           example:
+ *             total: 15
+ *             parts:
+ *               - type: single
+ *                 count: 10
+ *                 order: 1
+ *               - type: multiple
+ *                 count: 5
+ *                 order: 2
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       201:
- *         description: Phiên quiz đã được tạo
+ *         description: Quiz session created
  *         content:
  *           application/json:
  *             schema:
@@ -119,11 +147,19 @@ router.get('/:id/content', getContentByProgressId);
  *               properties:
  *                 sessionId:
  *                   type: string
- *                 quizId:
- *                   type: string
  *                 total:
  *                   type: integer
+ *             example:
+ *               sessionId: "64f8a2f6c9a1b2d3e4f56789"
+ *               total: 15
+ *       400:
+ *         description: Invalid request (e.g. sum of parts does not match total or not enough questions)
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
  */
+
 router.post('/:id/quiz/start', startQuizSession);
 
 

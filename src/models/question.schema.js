@@ -21,6 +21,12 @@ const QuestionSchema = new mongoose.Schema({
       message: 'A question must have at least 2 choices'
     }
   },
+  // questionType indicates how the answer should be interpreted
+  // - single: single-choice (default)
+  // - multiple: multiple-choice (multiple correct answers)
+  // - text: free-text answer
+  // - image: image-based choice
+  questionType: { type: String, enum: ['single', 'multiple', 'text', 'image'], default: 'single' },
   // answer: either a numeric index (0-based) into `choices`, or an object { text }
   answer: { type: mongoose.Schema.Types.Mixed, required: true },
   hintVoice: { type: String, required: false },

@@ -41,11 +41,9 @@ export const errorHandler = (err, req, res, next) => {
 
     // Handle other types of errors (if any)
     res.status(statusCode).json({
-        error: {
-            status: statusCode,
-            message: message,
-            timestamp: new Date().toISOString(),
-            path: req.path,
-        }
+        status: statusCode,
+        message: message,
+        timestamp: new Date().toISOString(),
+        path: req.path
     });
 };
