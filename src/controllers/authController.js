@@ -110,13 +110,13 @@ export const loginController = async (req, res, next) => {
     // Tìm user
     const user = await User.findOne({ username }).populate('classId');
     if (!user) {
-      throw new UnauthorizedError('Username hoặc mật khẩu không đúng');
+      throw new UnauthorizedError('Không tìm thấy tên đăng nhập');
     }
 
     // Kiểm tra password
     const isValidPassword = await bcrypt.compare(password, user.passwordHash);
     if (!isValidPassword) {
-      throw new UnauthorizedError('Username hoặc mật khẩu không đúng');
+      throw new UnauthorizedError('Mật khẩu không đúng, vui lòng nhập lại');
     }
 
     // Tạo tokens
