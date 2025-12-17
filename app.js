@@ -112,7 +112,7 @@ const swaggerOptions = {
     // './src/routes/quizNewRoutes.js',
      './src/routes/questionRoutes.js',
     './src/routes/characterRoutes.js',
-    //  './src/routes/activityRoutes.js',
+      './src/routes/activityRoutes.js',
     // './src/routes/rewardRoutes.js',
   ],
 };

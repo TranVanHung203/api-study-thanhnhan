@@ -6,6 +6,7 @@ import Exercise from '../models/exercise.schema.js';
 import Video from '../models/video.schema.js';
 import Quiz from '../models/quiz.schema.js';
 import Question from '../models/question.schema.js';
+import QuizAttempt from '../models/quizAttempt.schema.js';
 
 /**
  * Validate đáp án exercise dựa theo exerciseType
@@ -515,6 +516,58 @@ export const getUserActivityHistoryController = async (req, res) => {
       .sort({ completedAt: -1 });
 
     return res.status(200).json({ activities });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+// Lấy lịch sử hoạt động cho một progress cụ thể (có phân trang)
+export const getProgressActivityHistoryController = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { progressId } = req.params;
+
+    // Pagination params
+    const page = Math.max(1, parseInt(req.query.page || '1', 10));
+    const limit = Math.max(1, Math.min(100, parseInt(req.query.limit || '20', 10)));
+    const skip = (page - 1) * limit;
+
+    // Verify progress exists and belongs to appropriate context (optional)
+    const progress = await Progress.findById(progressId);
+    if (!progress) {
+      return res.status(404).json({ message: 'Progress không tìm thấy' });
+    }
+
+    // Query QuizAttempt collection directly for per-attempt details
+    const query = { userId, progressId };
+
+    const [total, attemptsRaw] = await Promise.all([
+      QuizAttempt.countDocuments(query),
+      QuizAttempt.find(query)
+        .populate({ path: 'details.questionId' })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+    ]);
+
+    // Compute correctCount / totalQuestions for each attempt
+    const attempts = attemptsRaw.map(at => {
+      const totalQuestions = Array.isArray(at.details) ? at.details.length : 0;
+      const correctCount = Array.isArray(at.details) ? at.details.filter(d => d.isCorrect).length : 0;
+      const obj = at.toObject ? at.toObject() : JSON.parse(JSON.stringify(at));
+      obj.totalQuestions = totalQuestions;
+      obj.correctCount = correctCount;
+      return obj;
+    });
+
+    return res.status(200).json({
+      progressId,
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+      attempts
+    });
   } catch (error) {
     return res.status(500).json({ message: error.message });
   }

@@ -1,3 +1,4 @@
+import QuizAttempt from '../models/quizAttempt.schema.js';
 import QuizSession from '../models/quizSession.schema.js';
 import Quiz from '../models/quiz.schema.js';
 import Question from '../models/question.schema.js';
@@ -7,6 +8,10 @@ import UserActivity from '../models/userActivity.schema.js';
 import Progress from '../models/progress.schema.js';
 import Skill from '../models/skill.schema.js';
 import Reward from '../models/reward.schema.js';
+import BadRequestError from '../errors/badRequestError.js';
+import NotFoundError from '../errors/notFoundError.js';
+import UnauthorizedError from '../errors/unauthorizedError.js';
+import ForbiddenError from '../errors/forbiddenError.js';
 
 // Helper to compare ids (ObjectId or string)
 const idEquals = (a, b) => {
@@ -16,33 +21,33 @@ const idEquals = (a, b) => {
 };
 
 // Start a quiz session: select `count` random questions from a quiz under the given progress
-export const startQuizSession = async (req, res) => {
+export const startQuizSession = async (req, res, next) => {
   try {
     const { id: progressId } = req.params; // progressId
     // Expect body: { total: number, parts: [{ type, count, order }] }
     const { total, parts } = req.body || {};
     const userId = req.user && (req.user.id || req.user._id);
-    if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!userId) throw new UnauthorizedError('Unauthorized');
 
     // Find the quiz associated with this progressId
     const quiz = await Quiz.findOne({ progressId });
-    if (!quiz) return res.status(404).json({ message: 'Không tìm thấy quiz cho progress này' });
+    if (!quiz) throw new NotFoundError('Không tìm thấy quiz cho progress này');
 
     // New flow: require `total` and `parts` in request body (no fallback to old ?count)
     if (!total || !Array.isArray(parts) || parts.length === 0) {
-      return res.status(400).json({ message: 'Yêu cầu body chứa `total` và `parts` (mảng các phần)' });
+      throw new BadRequestError('Yêu cầu body chứa `total` và `parts` (mảng các phần)');
     }
 
     // Validate parts: each must have type (string), count (positive int), order (int)
     let sum = 0;
     for (const p of parts) {
       if (!p || typeof p.type !== 'string' || !Number.isInteger(p.count) || p.count <= 0 || !Number.isInteger(p.order)) {
-        return res.status(400).json({ message: 'Mỗi phần phải có `type`(string), `count`(positive int), `order`(int)' });
+        throw new BadRequestError('Mỗi phần phải có `type`(string), `count`(positive int), `order`(int)');
       }
       sum += p.count;
     }
     if (sum !== Number(total)) {
-      return res.status(400).json({ message: 'Tổng số câu các phần phải bằng `total`' });
+      throw new BadRequestError('Tổng số câu các phần phải bằng `total`');
     }
 
     // Process parts in order (by `order`) and sample randomly within each type
@@ -57,7 +62,7 @@ export const startQuizSession = async (req, res) => {
       // count available questions of this type for this quiz, excluding already selected
       const avail = await Question.countDocuments({ quizId: quiz._id, questionType: part.type, _id: { $nin: selectedObjectIds } });
       if (avail < part.count) {
-        return res.status(400).json({ message: `Không đủ câu cho phần type='${part.type}' (cần ${part.count}, có ${avail})` });
+        throw new BadRequestError(`Không đủ câu cho phần type='${part.type}' (cần ${part.count}, có ${avail})`);
       }
 
       // sample `part.count` randomly from remaining pool of this type
@@ -82,27 +87,27 @@ export const startQuizSession = async (req, res) => {
     // Minimal response as requested
     return res.status(201).json({ sessionId: session._id, total: questionIds.length });
   } catch (err) {
-    return res.status(500).json({ message: err.message });
+    next(err);
   }
 };
 
 // Get paginated questions from an existing session
-export const getSessionQuestions = async (req, res) => {
+export const getSessionQuestions = async (req, res, next) => {
   try {
     const { id: progressId } = req.params;
     const { page = 1, sessionId } = req.query;
     const perPage = 10;
     const userId = req.user && (req.user.id || req.user._id);
-    if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+    if (!userId) throw new UnauthorizedError('Unauthorized');
 
-    if (!sessionId) return res.status(400).json({ message: 'sessionId is required' });
+    if (!sessionId) throw new BadRequestError('sessionId is required');
 
     const session = await QuizSession.findById(sessionId);
-    if (!session) return res.status(404).json({ message: 'Session không tồn tại' });
+    if (!session) throw new NotFoundError('Session không tồn tại');
 
     // verify ownership and progress to be safe
     if (!idEquals(session.userId, userId) || !idEquals(session.progressId, progressId)) {
-      return res.status(404).json({ message: 'Session không tồn tại' });
+      throw new NotFoundError('Session không tồn tại');
     }
 
     const total = session.questionIds.length;
@@ -123,36 +128,30 @@ export const getSessionQuestions = async (req, res) => {
 
     return res.status(200).json({ page: p, perPage, total, totalPages, questions: questionsNoAnswer});
   } catch (err) {
-    return res.status(500).json({ message: err.message });
+    next(err);
   }
 };
 
 // Submit session (clear session data)
-export const submitQuizSession = async (req, res) => {
+export const submitQuizSession = async (req, res, next) => {
   try {
     const { id: progressId } = req.params;
     const { sessionId, answers } = req.body; // answers: [{ questionId, userAnswer }]
     const userId = req.user && (req.user.id || req.user._id);
-    if (!userId) return res.status(401).json({ message: 'Unauthorized' });
-    if (!sessionId) return res.status(400).json({ message: 'sessionId is required' });
+    if (!userId) throw new UnauthorizedError('Unauthorized');
+    if (!sessionId) throw new BadRequestError('sessionId is required');
 
     // Lấy progress hiện tại
     const currentProgress = await Progress.findById(progressId);
-    if (!currentProgress) return res.status(404).json({ message: 'Progress không tìm thấy' });
+    if (!currentProgress) throw new NotFoundError('Progress không tìm thấy');
 
-    // Kiểm tra đã hoàn thành quiz này chưa
-    const existingActivity = await UserActivity.findOne({ userId, progressId, isCompleted: true });
-    if (existingActivity) {
-      return res.status(201).json({
-        message: 'Quiz đã hoàn thành trước đây',
-        userActivity: existingActivity,
-        isCheck: true
-      });
-    }
+    // Previously we returned early if the quiz was already completed.
+    // Change: allow multiple attempts and always record each attempt in history.
+    // Bonus awarding is still guarded later so points are added only once.
 
     // Lấy skill hiện tại
     const currentSkill = await Skill.findById(currentProgress.skillId);
-    if (!currentSkill) return res.status(404).json({ message: 'Skill không tìm thấy' });
+    if (!currentSkill) throw new NotFoundError('Skill không tìm thấy');
 
     // ========== KIỂM TRA SKILL TRƯỚC ĐÃ HOÀN THÀNH CHƯA ==========
     if (currentSkill.order > 1) {
@@ -177,13 +176,12 @@ export const submitQuizSession = async (req, res) => {
             isCompleted: true
           });
           if (completedPreviousActivities.length < previousSkillProgresses.length) {
-            return res.status(400).json({
-              message: `Bạn cần hoàn thành skill trước: ${previousSkill.skillName}`,
-              requiredSkillId: previousSkill._id,
-              requiredSkillName: previousSkill.skillName,
-              completedSteps: completedPreviousActivities.length,
-              totalSteps: previousSkillProgresses.length
-            });
+            const e = new BadRequestError(`Bạn cần hoàn thành skill trước: ${previousSkill.skillName}`);
+            e.requiredSkillId = previousSkill._id;
+            e.requiredSkillName = previousSkill.skillName;
+            e.completedSteps = completedPreviousActivities.length;
+            e.totalSteps = previousSkillProgresses.length;
+            throw e;
           }
         }
       }
@@ -221,20 +219,19 @@ export const submitQuizSession = async (req, res) => {
       for (let s = 1; s <= maxCompletedInSkill; s++) completedStepNumbers.add(s);
       for (let i = 1; i < currentStepNumber; i++) {
         if (!completedStepNumbers.has(i)) {
-          return res.status(400).json({
-            message: `Bạn cần hoàn thành step ${i} trước khi làm step ${currentStepNumber}`,
-            requiredStep: i,
-            currentStep: currentStepNumber
-          });
+          const e = new BadRequestError(`Bạn cần hoàn thành step ${i} trước khi làm step ${currentStepNumber}`);
+          e.requiredStep = i;
+          e.currentStep = currentStepNumber;
+          throw e;
         }
       }
     }
 
     // ========== XỬ LÝ QUIZ SESSION ========== (giữ logic cũ)
     const session = await QuizSession.findById(sessionId);
-    if (!session) return res.status(404).json({ message: 'Session không tồn tại' });
+    if (!session) throw new NotFoundError('Session không tồn tại');
     if (!idEquals(session.userId, userId) || !idEquals(session.progressId, progressId)) {
-      return res.status(404).json({ message: 'Session không tồn tại' });
+      throw new NotFoundError('Session không tồn tại');
     }
 
     // Nếu không có answers thì chỉ xóa session
@@ -251,9 +248,18 @@ export const submitQuizSession = async (req, res) => {
     }
     const sessionQuestionIds = session.questionIds.map(q => String(q));
     const providedQuestionIds = Array.from(answerMap.keys()).filter(qid => sessionQuestionIds.includes(qid));
+
+    // If some session questions are missing from provided answers, report as bad request
+    const missingQuestionIds = sessionQuestionIds.filter(qid => !providedQuestionIds.includes(qid));
+    if (missingQuestionIds.length > 0) {
+      throw new BadRequestError(`Thiếu câu trả lời cho ${missingQuestionIds.length} câu hỏi: ${missingQuestionIds.join(',')}`);
+    }
     const questionDocs = await Question.find({ _id: { $in: providedQuestionIds } });
     const questionById = new Map();
     for (const q of questionDocs) questionById.set(String(q._id), q);
+    // Determine whether the user has any previous quiz activity for this progress
+    const hadAnyAttempt = await UserActivity.exists({ userId, progressId, contentType: 'quiz' });
+    const isCheckFlag = hadAnyAttempt ? true : false; // first attempt => false, subsequent => true
     const evaluateAnswer = (question, userAnswer) => {
       const storedAnswer = question.answer;
       let isCorrect = false;
@@ -292,71 +298,94 @@ export const submitQuizSession = async (req, res) => {
       const q = questionById.get(qid);
       const userAnswer = answerMap.get(qid);
       if (!q) {
-        details.push({ questionId: qid, isCorrect: false, reason: 'Question not found' });
+        // question doc not found; skip
         continue;
       }
       const result = evaluateAnswer(q, userAnswer);
       if (result.isCorrect) correctCount += 1;
     }
 
-    // Nếu đúng > 50% thì coi là hoàn thành, cộng điểm
+    // Tính phần trăm đúng và lưu attempt vào UserActivity dù pass hay fail
     const totalQuestions = session.questionIds.length;
     const percentCorrect = totalQuestions > 0 ? (correctCount / totalQuestions) * 100 : 0;
-    if (percentCorrect >= 50) {
-      // Kiểm tra đã từng cộng điểm thưởng cho progress này chưa
-      let bonusEarned = 0;
-      let shouldAddBonus = true;
-      const existedBonus = await UserActivity.findOne({ userId, progressId, isCompleted: true, bonusEarned: { $gt: 0 } });
-      if (existedBonus) {
-        shouldAddBonus = false;
+
+    // Build per-question details for attempt
+    const details = [];
+    for (const qid of sessionQuestionIds) {
+      const q = questionById.get(qid);
+      const userAnswer = answerMap.get(qid);
+      if (!q) {
+        details.push({ questionId: qid, userAnswer, isCorrect: false, correctAnswer: null });
+        continue;
       }
-      try {
-        if (shouldAddBonus) {
+      const evalRes = evaluateAnswer(q, userAnswer);
+      details.push({ questionId: q._id, userAnswer, isCorrect: !!evalRes.isCorrect, correctAnswer: evalRes.correctAnswer });
+    }
+
+    // Save QuizAttempt for this submit (always)
+    const attempt = new QuizAttempt({
+      userId,
+      progressId,
+      sessionId: session._id,
+      score: percentCorrect,
+      isCompleted: percentCorrect >= 50,
+      details
+    });
+    await attempt.save();
+
+    // Only create UserActivity for the first completed attempt
+    if (percentCorrect >= 50) {
+      const alreadyCompleted = await UserActivity.exists({ userId, progressId, contentType: 'quiz', isCompleted: true });
+      let bonusEarned = 0;
+      if (!alreadyCompleted) {
+        try {
           const quiz = await Quiz.findOne({ progressId: currentProgress._id });
           if (quiz && quiz.bonusPoints) bonusEarned = quiz.bonusPoints;
-        }
-      } catch (err) {}
+        } catch (err) {}
 
-      const userActivity = new UserActivity({
-        userId,
-        progressId,
-        contentType: 'quiz',
-        score: percentCorrect,
-        isCompleted: true,
-        bonusEarned
-      });
-      await userActivity.save();
-      if (shouldAddBonus && bonusEarned > 0) {
-        await Reward.findOneAndUpdate(
-          { userId },
-          { $inc: { totalPoints: bonusEarned } },
-          { new: true, upsert: true }
-        );
+        const userActivity = new UserActivity({
+          userId,
+          progressId,
+          contentType: 'quiz',
+          score: percentCorrect,
+          isCompleted: true,
+          bonusEarned
+        });
+        await userActivity.save();
+
+        if (bonusEarned > 0) {
+          await Reward.findOneAndUpdate(
+            { userId },
+            { $inc: { totalPoints: bonusEarned } },
+            { new: true, upsert: true }
+          );
+        }
       }
+
       await QuizSession.deleteOne({ _id: sessionId });
       return res.status(201).json({
         isCorrect: true,
-        message: shouldAddBonus ? 'Quiz hoàn thành (>50% đúng), đã cộng điểm thưởng' : 'Quiz hoàn thành (>50% đúng), không cộng thêm điểm',
-        bonusEarned,
+        message: alreadyCompleted ? 'Quiz hoàn thành (>50% đúng), đã hoàn thành trước đó' : 'Quiz hoàn thành (>50% đúng), đã ghi nhận và cộng điểm thưởng nếu có',
+        bonusEarned: alreadyCompleted ? 0 : bonusEarned,
         correctCount,
         totalQuestions,
         percentCorrect,
-        isCheck: false
-      });
-    } else {
-      // Không đủ 50% đúng
-      await QuizSession.deleteOne({ _id: sessionId });
-      return res.status(200).json({
-        isCorrect: false,
-        message: 'Bạn cần đúng trên 50% số câu hỏi',
-        correctCount,
-        totalQuestions,
-        percentCorrect,
-        isCheck: false
+        isCheck: isCheckFlag
       });
     }
+
+    // If not completed, still delete session and return failure (but attempt saved)
+    await QuizSession.deleteOne({ _id: sessionId });
+    return res.status(200).json({
+      isCorrect: false,
+      message: 'Bạn cần đúng trên 50% số câu hỏi',
+      correctCount,
+      totalQuestions,
+      percentCorrect,
+      isCheck: isCheckFlag
+    });
   } catch (err) {
-    return res.status(500).json({ message: err.message });
+    next(err);
   }
 };
 
