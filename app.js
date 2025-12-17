@@ -33,6 +33,7 @@ import questionRoutes from './src/routes/questionRoutes.js';
 import activityRoutes from './src/routes/activityRoutes.js';
 import rewardRoutes from './src/routes/rewardRoutes.js';
 import characterRoutes from './src/routes/characterRoutes.js';
+import ratingRoutes from './src/routes/ratingRoutes.js';
 
 // Import Swagger
 import swaggerUi from 'swagger-ui-express';
@@ -113,6 +114,7 @@ const swaggerOptions = {
      './src/routes/questionRoutes.js',
     './src/routes/characterRoutes.js',
       './src/routes/activityRoutes.js',
+      './src/routes/ratingRoutes.js',
     // './src/routes/rewardRoutes.js',
   ],
 };
@@ -159,6 +161,7 @@ app.use('/questions', questionRoutes);
 app.use('/activities', activityRoutes);
 app.use('/rewards', rewardRoutes);
 app.use('/characters', characterRoutes);
+app.use('/ratings', ratingRoutes);
 
 app.use(errorHandler);
 

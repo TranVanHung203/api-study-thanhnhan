@@ -333,40 +333,35 @@ export const submitQuizSession = async (req, res, next) => {
     });
     await attempt.save();
 
-    // Only create UserActivity for the first completed attempt
-    if (percentCorrect >= 50) {
-      const alreadyCompleted = await UserActivity.exists({ userId, progressId, contentType: 'quiz', isCompleted: true });
-      let bonusEarned = 0;
-      if (!alreadyCompleted) {
-        try {
-          const quiz = await Quiz.findOne({ progressId: currentProgress._id });
-          if (quiz && quiz.bonusPoints) bonusEarned = quiz.bonusPoints;
-        } catch (err) {}
+    // Upsert single UserActivity per progress: create if missing, otherwise update existing
+    let bonusEarned = 0;
+    const quiz = await Quiz.findOne({ progressId: currentProgress._id }).catch(() => null);
+    if (quiz && quiz.bonusPoints) bonusEarned = quiz.bonusPoints;
 
-        const userActivity = new UserActivity({
-          userId,
-          progressId,
-          contentType: 'quiz',
-          score: percentCorrect,
-          isCompleted: true,
-          bonusEarned
-        });
-        await userActivity.save();
+    const existingActivity = await UserActivity.findOne({ userId, progressId, contentType: 'quiz' });
 
-        if (bonusEarned > 0) {
-          await Reward.findOneAndUpdate(
-            { userId },
-            { $inc: { totalPoints: bonusEarned } },
-            { new: true, upsert: true }
-          );
-        }
+    if (!existingActivity) {
+      // Create new UserActivity (isCompleted true only if pass)
+      const ua = new UserActivity({
+        userId,
+        progressId,
+        contentType: 'quiz',
+        score: percentCorrect,
+        isCompleted: percentCorrect >= 50,
+        bonusEarned: percentCorrect >= 50 ? bonusEarned : 0
+      });
+      await ua.save();
+
+      // Award reward only if this record is completed now
+      if (percentCorrect >= 50 && bonusEarned > 0) {
+        await Reward.findOneAndUpdate({ userId }, { $inc: { totalPoints: bonusEarned } }, { new: true, upsert: true });
       }
 
       await QuizSession.deleteOne({ _id: sessionId });
-      return res.status(201).json({
-        isCorrect: true,
-        message: alreadyCompleted ? 'Quiz hoàn thành (>50% đúng), đã hoàn thành trước đó' : 'Quiz hoàn thành (>50% đúng), đã ghi nhận và cộng điểm thưởng nếu có',
-        bonusEarned: alreadyCompleted ? 0 : bonusEarned,
+      return res.status(percentCorrect >= 50 ? 201 : 200).json({
+        isCorrect: percentCorrect >= 50,
+        message: percentCorrect >= 50 ? 'Quiz hoàn thành (>50% đúng), đã ghi nhận và cộng điểm thưởng nếu có' : 'Quiz chưa hoàn thành, đã ghi nhận lần thử',
+        bonusEarned: percentCorrect >= 50 ? bonusEarned : 0,
         correctCount,
         totalQuestions,
         percentCorrect,
@@ -374,15 +369,45 @@ export const submitQuizSession = async (req, res, next) => {
       });
     }
 
-    // If not completed, still delete session and return failure (but attempt saved)
+    // existingActivity found
+    if (existingActivity.isCompleted) {
+      // Already completed before — do nothing (keep original completed state)
+      await QuizSession.deleteOne({ _id: sessionId });
+      return res.status(200).json({
+        isCorrect: true,
+        message: 'Quiz đã hoàn thành trước đó',
+        bonusEarned: existingActivity.bonusEarned || 0,
+        correctCount: existingActivity.score || correctCount,
+        totalQuestions,
+        percentCorrect: existingActivity.score || percentCorrect,
+        isCheck: true
+      });
+    }
+
+    // existingActivity exists but not completed yet — update it with latest attempt
+    existingActivity.score = percentCorrect;
+    // If this attempt completes the quiz, mark completed and award bonus
+    if (percentCorrect >= 50) {
+      existingActivity.isCompleted = true;
+      // If previously had no bonus, set and award
+      const prevBonus = existingActivity.bonusEarned || 0;
+      if (prevBonus <= 0 && bonusEarned > 0) {
+        existingActivity.bonusEarned = bonusEarned;
+        await Reward.findOneAndUpdate({ userId }, { $inc: { totalPoints: bonusEarned } }, { new: true, upsert: true });
+      }
+    }
+
+    await existingActivity.save();
     await QuizSession.deleteOne({ _id: sessionId });
-    return res.status(200).json({
-      isCorrect: false,
-      message: 'Bạn cần đúng trên 50% số câu hỏi',
+
+    return res.status(percentCorrect >= 50 ? 201 : 200).json({
+      isCorrect: percentCorrect >= 50,
+      message: percentCorrect >= 50 ? 'Quiz hoàn thành — đã cập nhật trạng thái hoàn thành' : 'Quiz chưa hoàn thành — đã cập nhật lần thử',
+      bonusEarned: percentCorrect >= 50 ? (existingActivity.bonusEarned || 0) : 0,
       correctCount,
       totalQuestions,
       percentCorrect,
-      isCheck: isCheckFlag
+      isCheck: true
     });
   } catch (err) {
     next(err);

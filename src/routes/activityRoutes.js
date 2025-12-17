@@ -16,116 +16,59 @@ router.all('*', authToken);
 
 
 
-// /**
-//  * @swagger
-//  * /activities:
-//  *   post:
-//  *     summary: Ghi nhận hoạt động của user (video, exercise, quiz)
-//  *     description: |
-//  *       Endpoint này nhận dữ liệu tương ứng với `contentType` của `Progress`.
-//  *       - Video: gửi `progressId` và `isCompleted: true`.
-//  *       - Exercise: gửi `progressId` và `exerciseAnswers` (mảng các object { exerciseId, userAnswer }).
-//  *       - Quiz: nếu progress chứa một quiz thì gửi `quizAnswers` là mảng { questionId, userAnswer }.
-//  *         Nếu progress chứa nhiều quiz thì gửi `quizAnswers` là mảng { quizId, answers: [{ questionId, userAnswer }] }.
-//  *     tags: [Activities]
-//  *     security:
-//  *       - bearerAuth: []
-//  *     requestBody:
-//  *       required: true
-//  *       content:
-//  *         application/json:
-//  *           schema:
-//  *             type: object
-//  *             required:
-//  *               - progressId
-//  *             properties:
-//  *               progressId:
-//  *                 type: string
-//  *                 description: ID của progress
-//  *               isCompleted:
-//  *                 type: boolean
-//  *                 description: Dùng cho Video/Quiz khi client muốn báo hoàn thành trực tiếp
-//  *               exerciseAnswers:
-//  *                 type: array
-//  *                 description: Mảng đáp án cho các Exercise thuộc progress
-//  *                 items:
-//  *                   type: object
-//  *                   required: [exerciseId, userAnswer]
-//  *                   properties:
-//  *                     exerciseId:
-//  *                       type: string
-//  *                     userAnswer:
-//  *                       type: object
-//  *               quizAnswers:
-//  *                 type: array
-//  *                 description: |
-//  *                   Khi progress có 1 quiz: gửi mảng { questionId, userAnswer }.
-//  *                   Khi progress có nhiều quiz: gửi mảng object { quizId, answers }.
-//  *                 items:
-//  *                   type: object
-//  *                   properties:
-//  *                     quizId:
-//  *                       type: string
-//  *                     questionId:
-//  *                       type: string
-//  *                     answers:
-//  *                       type: array
-//  *                       items:
-//  *                         type: object
-//  *                         required: [questionId, userAnswer]
-//  *                         properties:
-//  *                           questionId:
-//  *                             type: string
-//  *                           userAnswer:
-//  *                             type: object
-//  *                     userAnswer:
-//  *                       type: object
-//  *           examples:
-//  *             video:
-//  *               summary: Ghi nhận VIDEO
-//  *               value: {"progressId":"<id>","isCompleted":true}
-//  *             exercise:
-//  *               summary: Ghi nhận EXERCISE (nhiều exercise trong 1 progress)
-//  *               value: {"progressId":"<id>","exerciseAnswers":[{"exerciseId":"<id>","userAnswer":["a","b"]}]}
-//  *             quiz_single:
-//  *               summary: Ghi nhận QUIZ (1 quiz trong progress)
-//  *               value: {"progressId":"<id>","quizAnswers":[{"questionId":"<id>","userAnswer":"a"}]}
-//  *             quiz_multiple:
-//  *               summary: Ghi nhận QUIZ (nhiều quiz trong progress)
-//  *               value: {"progressId":"<id>","quizAnswers":[{"quizId":"<id>","answers":[{"questionId":"<id>","userAnswer":"a"}]}]}
-//  *     responses:
-//  *       '201':
-//  *         description: Ghi nhận thành công — lưu UserActivity và cập nhật reward (nếu có bonus)
-//  *         content:
-//  *           application/json:
-//  *             schema:
-//  *               type: object
-//  *               properties:
-//  *                 message:
-//  *                   type: string
-//  *                 userActivity:
-//  *                   type: object
-//  *                 bonusEarned:
-//  *                   type: number
-//  *                 nextStep:
-//  *                   type: integer
-//  *       '200':
-//  *         description: Có đáp án sai — trả về chi tiết, không lưu activity
-//  *         content:
-//  *           application/json:
-//  *             schema:
-//  *               type: object
-//  *               properties:
-//  *                 isCorrect:
-//  *                   type: boolean
-//  *                 message:
-//  *                   type: string
-//  *                 details:
-//  *                   type: array
-//  *                 quizzes:
-//  *                   type: array
-//  */
-// router.post('/', recordUserActivityController);
+
+/**
+ * @swagger
+ * /activities:
+ *   post:
+ *     summary: Ghi nhận hoàn thành video (chỉ video)
+ *     tags: [Activities]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - progressId
+ *               - isCompleted
+ *             properties:
+ *               progressId:
+ *                 type: string
+ *                 description: ID của progress thuộc video
+ *               isCompleted:
+ *                 type: boolean
+ *                 description: Ghi `true` để báo hoàn thành video
+ *           examples:
+ *             video:
+ *               summary: Ghi nhận VIDEO
+ *               value: {"progressId":"<id>","isCompleted":true}
+ *     responses:
+ *       '201':
+ *         description: Ghi nhận thành công — lưu UserActivity và cập nhật reward (nếu có bonus)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 userActivity:
+ *                   type: object
+ *                 bonusEarned:
+ *                   type: number
+ *                 nextStep:
+ *                   type: integer
+ *                 isCheck:
+ *                   type: boolean
+ *       '400':
+ *         description: Yêu cầu không hợp lệ (ví dụ progress không phải video hoặc thiếu isCompleted)
+ *       '404':
+ *         description: Progress không tìm thấy
+ */
+router.post('/', recordUserActivityController);
 // /**
 //  * @swagger
 //  * /activities/history:
@@ -165,6 +108,8 @@ router.all('*', authToken);
  *         description: Lịch sử hoạt động của progress
  */
 router.get('/progress/:progressId/history', getProgressActivityHistoryController);
+
+
 
 // /**
 //  * @swagger
