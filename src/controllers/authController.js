@@ -202,13 +202,21 @@ export const refreshTokenController = async (req, res, next) => {
 export const getUserController = async (req, res, next) => {
   try {
     const userId = req.user.id;
-    const user = await User.findById(userId).populate('classId');
+    const user = await User.findById(userId)
+      .populate('classId')
+      .select('_id fullName email classId characterUrl');
 
-    if (!user) {
-      throw new NotFoundError('User không tìm thấy');
-    }
+    if (!user) throw new NotFoundError('User không tìm thấy');
 
-    return res.status(200).json({ user });
+    return res.status(200).json({
+     
+        _id: user._id,
+        fullName: user.fullName,
+        email: user.email,
+        classId: user.classId || null,
+        characterUrl: user.characterUrl || null
+      
+    });
   } catch (error) {
     next(error);
   }
