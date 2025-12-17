@@ -4,7 +4,7 @@ import Progress from '../models/progress.schema.js';
 import UserActivity from '../models/userActivity.schema.js';
 
 // Tạo chapter mới
-export const createChapterController = async (req, res) => {
+export const createChapterController = async (req, res, next) => {
   try {
     const { classId, chapterName, description, order } = req.body;
 
@@ -33,12 +33,12 @@ export const createChapterController = async (req, res) => {
       chapter
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Lấy tất cả chapters của một class
-export const getChaptersByClassController = async (req, res) => {
+export const getChaptersByClassController = async (req, res, next) => {
   try {
     const { classId } = req.params;
 
@@ -46,12 +46,12 @@ export const getChaptersByClassController = async (req, res) => {
 
     return res.status(200).json({ chapters });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Lấy chi tiết chapter
-export const getChapterByIdController = async (req, res) => {
+export const getChapterByIdController = async (req, res, next) => {
   try {
     const { id } = req.params;
 
@@ -63,12 +63,12 @@ export const getChapterByIdController = async (req, res) => {
 
     return res.status(200).json({ chapter });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Cập nhật chapter
-export const updateChapterController = async (req, res) => {
+export const updateChapterController = async (req, res, next) => {
   try {
     const { id } = req.params;
     const { chapterName, description, order } = req.body;
@@ -88,12 +88,12 @@ export const updateChapterController = async (req, res) => {
       chapter
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Xóa chapter
-export const deleteChapterController = async (req, res) => {
+export const deleteChapterController = async (req, res, next) => {
   try {
     const { id } = req.params;
 
@@ -108,14 +108,14 @@ export const deleteChapterController = async (req, res) => {
 
     return res.status(200).json({ message: 'Xóa chapter thành công' });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // =====================================================
 // API CHÍNH: Lấy map chapter với trạng thái học của user
 // =====================================================
-export const getChapterMapController = async (req, res) => {
+export const getChapterMapController = async (req, res, next) => {
   try {
     const { chapterId } = req.params;
     const userId = req.user.id;
@@ -257,12 +257,12 @@ export const getChapterMapController = async (req, res) => {
       skills: skillsWithStatus
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Chèn skill mới vào giữa (reorder)
-export const insertSkillController = async (req, res) => {
+export const insertSkillController = async (req, res, next) => {
   try {
     const { chapterId, skillName, description, afterOrder } = req.body;
 
@@ -295,12 +295,12 @@ export const insertSkillController = async (req, res) => {
       skill
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Chèn progress mới vào giữa (reorder)
-export const insertProgressController = async (req, res) => {
+export const insertProgressController = async (req, res, next) => {
   try {
     const { skillId, contentType, contentId, afterStepNumber } = req.body;
 
@@ -354,6 +354,6 @@ export const insertProgressController = async (req, res) => {
       progress: cp
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };

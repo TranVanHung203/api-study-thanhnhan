@@ -2,7 +2,7 @@ import Class from '../models/class.schema.js';
 import User from '../models/user.schema.js';
 
 // Lấy tất cả classes
-export const getAllClassesController = async (req, res) => {
+export const getAllClassesController = async (req, res, next) => {
   try {
     const classes = await Class.find();
     return res.status(200).json({
@@ -10,12 +10,12 @@ export const getAllClassesController = async (req, res) => {
       data: classes
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Lấy chi tiết 1 class với danh sách học viên
-export const getClassByIdController = async (req, res) => {
+export const getClassByIdController = async (req, res, next) => {
   try {
     const { id } = req.params;
     const classData = await Class.findById(id);
@@ -34,12 +34,12 @@ export const getClassByIdController = async (req, res) => {
       }
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Tạo class mới (chỉ giáo viên)
-export const createClassController = async (req, res) => {
+export const createClassController = async (req, res, next) => {
   try {
     const { name, description, level } = req.body;
 
@@ -60,12 +60,12 @@ export const createClassController = async (req, res) => {
       data: newClass
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Cập nhật class
-export const updateClassController = async (req, res) => {
+export const updateClassController = async (req, res, next) => {
   try {
     const { id } = req.params;
     const { name, description, level } = req.body;
@@ -85,12 +85,12 @@ export const updateClassController = async (req, res) => {
       data: classData
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Xóa class
-export const deleteClassController = async (req, res) => {
+export const deleteClassController = async (req, res, next) => {
   try {
     const { id } = req.params;
 
@@ -107,12 +107,12 @@ export const deleteClassController = async (req, res) => {
       message: 'Xóa lớp thành công'
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Thêm học viên vào class
-export const addStudentToClassController = async (req, res) => {
+export const addStudentToClassController = async (req, res, next) => {
   try {
     const { classId, userId } = req.body;
 
@@ -139,12 +139,12 @@ export const addStudentToClassController = async (req, res) => {
       user
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Xóa học viên khỏi class
-export const removeStudentFromClassController = async (req, res) => {
+export const removeStudentFromClassController = async (req, res, next) => {
   try {
     const { userId } = req.body;
 
@@ -165,6 +165,6 @@ export const removeStudentFromClassController = async (req, res) => {
       user
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };

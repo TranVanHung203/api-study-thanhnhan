@@ -2,7 +2,7 @@ import Progress from '../models/progress.schema.js';
 import Video from '../models/video.schema.js';
 // only need Video for this endpoint
 
-export const getContentByProgressId = async (req, res) => {
+export const getContentByProgressId = async (req, res, next) => {
   try {
     const { id } = req.params; // progressId
     const page = parseInt(req.query.page, 10) || 1;
@@ -27,7 +27,7 @@ export const getContentByProgressId = async (req, res) => {
     // For any other contentType, return 400
     return res.status(400).json({ message: 'contentType không hợp lệ' });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 

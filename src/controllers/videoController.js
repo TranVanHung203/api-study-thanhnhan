@@ -2,17 +2,17 @@ import Video from '../models/video.schema.js';
 import cloudinary from '../config/cloudinaryConfig.js';
 
 // Lấy danh sách videos
-export const getVideosController = async (req, res) => {
+export const getVideosController = async (req, res, next) => {
   try {
     const videos = await Video.find();
     return res.status(200).json({ videos });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Lấy video theo ID
-export const getVideoByIdController = async (req, res) => {
+export const getVideoByIdController = async (req, res, next) => {
   try {
     const { videoId } = req.params;
     const video = await Video.findById(videoId);
@@ -23,12 +23,12 @@ export const getVideoByIdController = async (req, res) => {
     
     return res.status(200).json({ video });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Upload video lên Cloudinary và tạo record
-export const createVideoController = async (req, res) => {
+export const createVideoController = async (req, res, next) => {
   try {
     const { title, description } = req.body;
 
@@ -67,12 +67,12 @@ export const createVideoController = async (req, res) => {
       video
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Cập nhật video (có thể upload video mới)
-export const updateVideoController = async (req, res) => {
+export const updateVideoController = async (req, res, next) => {
   try {
     const { videoId } = req.params;
     const { title, description } = req.body;
@@ -119,12 +119,12 @@ export const updateVideoController = async (req, res) => {
       video
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Xóa video (cả trên Cloudinary)
-export const deleteVideoController = async (req, res) => {
+export const deleteVideoController = async (req, res, next) => {
   try {
     const { videoId } = req.params;
     
@@ -144,6 +144,6 @@ export const deleteVideoController = async (req, res) => {
       message: 'Xóa video thành công'
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };

@@ -2,7 +2,7 @@ import Reward from '../models/reward.schema.js';
 import User from '../models/user.schema.js';
 
 // Lấy điểm thưởng của user
-export const getRewardController = async (req, res) => {
+export const getRewardController = async (req, res, next) => {
   try {
     const userId = req.user.id;
 
@@ -14,12 +14,12 @@ export const getRewardController = async (req, res) => {
 
     return res.status(200).json({ reward });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Lấy bảng xếp hạng theo điểm
-export const getLeaderboardController = async (req, res) => {
+export const getLeaderboardController = async (req, res, next) => {
   try {
     const { classId } = req.params;
     const { limit = 10 } = req.query;
@@ -38,12 +38,12 @@ export const getLeaderboardController = async (req, res) => {
 
     return res.status(200).json({ rewards });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Thêm điểm thưởng (admin only)
-export const addRewardPointsController = async (req, res) => {
+export const addRewardPointsController = async (req, res, next) => {
   try {
     const { userId, points } = req.body;
 
@@ -58,12 +58,12 @@ export const addRewardPointsController = async (req, res) => {
       reward
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Reset điểm thưởng (admin only)
-export const resetRewardController = async (req, res) => {
+export const resetRewardController = async (req, res, next) => {
   try {
     const { userId } = req.params;
 
@@ -78,6 +78,6 @@ export const resetRewardController = async (req, res) => {
       reward
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };

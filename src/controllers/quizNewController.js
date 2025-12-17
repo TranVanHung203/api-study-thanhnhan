@@ -2,17 +2,17 @@ import Quiz from '../models/quiz.schema.js';
 import Question from '../models/question.schema.js';
 
 // Lấy danh sách quizzes
-export const getQuizzesController = async (req, res) => {
+export const getQuizzesController = async (req, res, next) => {
   try {
     const quizzes = await Quiz.find();
     return res.status(200).json({ quizzes });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Tạo quiz
-export const createQuizController = async (req, res) => {
+export const createQuizController = async (req, res, next) => {
   try {
     const { title, description, totalQuestions, bonusPoints } = req.body;
 
@@ -30,12 +30,12 @@ export const createQuizController = async (req, res) => {
       quiz
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Lấy chi tiết quiz (kèm theo câu hỏi)
-export const getQuizDetailController = async (req, res) => {
+export const getQuizDetailController = async (req, res, next) => {
   try {
     const { quizId } = req.params;
 
@@ -53,12 +53,12 @@ export const getQuizDetailController = async (req, res) => {
       questions
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Cập nhật quiz
-export const updateQuizController = async (req, res) => {
+export const updateQuizController = async (req, res, next) => {
   try {
     const { quizId } = req.params;
     const { title, description, totalQuestions, bonusPoints } = req.body;
@@ -74,12 +74,12 @@ export const updateQuizController = async (req, res) => {
       quiz
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Xóa quiz
-export const deleteQuizController = async (req, res) => {
+export const deleteQuizController = async (req, res, next) => {
   try {
     const { quizId } = req.params;
     await Quiz.findByIdAndDelete(quizId);
@@ -89,6 +89,6 @@ export const deleteQuizController = async (req, res) => {
       message: 'Xóa quiz thành công'
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };

@@ -2,7 +2,7 @@ import Rating from '../models/rating.schema.js';
 import Progress from '../models/progress.schema.js';
 import UserActivity from '../models/userActivity.schema.js';
 
-export const postRatingController = async (req, res) => {
+export const postRatingController = async (req, res, next) => {
   try {
     const userId = req.user.id;
     const { progressId } = req.params;
@@ -25,17 +25,17 @@ export const postRatingController = async (req, res) => {
     await r.save();
     return res.status(201).json({ message: 'Đã ghi nhận đánh giá', rating: r });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
-export const getRatingsForProgressController = async (req, res) => {
+export const getRatingsForProgressController = async (req, res, next) => {
   try {
     const { progressId } = req.params;
     const ratings = await Rating.find({ progressId }).populate('userId', 'fullName');
     return res.status(200).json({ ratings });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 

@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 import Question from '../models/question.schema.js';
 
 // Lấy câu hỏi của một quiz
-export const getQuestionsByQuizController = async (req, res) => {
+export const getQuestionsByQuizController = async (req, res, next) => {
   try {
     const { quizId } = req.params;
     const page = parseInt(req.query.page) || 1;
@@ -34,12 +34,12 @@ export const getQuestionsByQuizController = async (req, res) => {
 
     return res.status(200).json({ page, perPage: limit, total, totalPages, questions });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Tạo câu hỏi
-export const createQuestionController = async (req, res) => {
+export const createQuestionController = async (req, res, next) => {
   try {
     const {
       quizId,
@@ -90,12 +90,12 @@ export const createQuestionController = async (req, res) => {
       question
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Lấy câu hỏi (ẩn đáp án đúng)
-export const getQuestionForStudentController = async (req, res) => {
+export const getQuestionForStudentController = async (req, res, next) => {
   try {
     const { questionId } = req.params;
 
@@ -108,12 +108,12 @@ export const getQuestionForStudentController = async (req, res) => {
 
     return res.status(200).json({ question });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Cập nhật câu hỏi
-export const updateQuestionController = async (req, res) => {
+export const updateQuestionController = async (req, res, next) => {
   try {
     const { questionId } = req.params;
     const { questionText, questionVoice, imageQuestion, choices, answer, hintVoice, order } = req.body;
@@ -129,12 +129,12 @@ export const updateQuestionController = async (req, res) => {
       question
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Xóa câu hỏi
-export const deleteQuestionController = async (req, res) => {
+export const deleteQuestionController = async (req, res, next) => {
   try {
     const { questionId } = req.params;
     await Question.findByIdAndDelete(questionId);
@@ -143,12 +143,12 @@ export const deleteQuestionController = async (req, res) => {
       message: 'Xóa câu hỏi thành công'
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Kiểm tra đáp án
-export const checkAnswerController = async (req, res) => {
+export const checkAnswerController = async (req, res, next) => {
   try {
     const { questionId, userAnswer } = req.body;
 
@@ -190,6 +190,6 @@ export const checkAnswerController = async (req, res) => {
 
     return res.status(200).json({ isCorrect});
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };

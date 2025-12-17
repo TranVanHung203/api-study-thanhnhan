@@ -5,7 +5,7 @@ import Exercise from '../models/exercise.schema.js';
 import Quiz from '../models/quiz.schema.js';
 
 // Lấy danh sách progress của một skill
-export const getProgressBySkillController = async (req, res) => {
+export const getProgressBySkillController = async (req, res, next) => {
   try {
     const { skillId } = req.params;
 
@@ -31,12 +31,12 @@ export const getProgressBySkillController = async (req, res) => {
 
     return res.status(200).json({ progresses: out });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Tạo progress item (video, exercise, quiz)
-export const createProgressController = async (req, res) => {
+export const createProgressController = async (req, res, next) => {
   try {
     const { skillId, stepNumber, contentType, contentId } = req.body;
 
@@ -74,12 +74,12 @@ export const createProgressController = async (req, res) => {
       progress: cp
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Cập nhật progress
-export const updateProgressController = async (req, res) => {
+export const updateProgressController = async (req, res, next) => {
   try {
     const { progressId } = req.params;
     const { stepNumber, contentType, contentId } = req.body;
@@ -119,12 +119,12 @@ export const updateProgressController = async (req, res) => {
 
     return res.status(200).json({ message: 'Cập nhật progress thành công', progress: out });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Xóa progress
-export const deleteProgressController = async (req, res) => {
+export const deleteProgressController = async (req, res, next) => {
   try {
     const { progressId } = req.params;
 
@@ -140,6 +140,6 @@ export const deleteProgressController = async (req, res) => {
 
     return res.status(200).json({ message: 'Xóa progress thành công' });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };

@@ -234,7 +234,7 @@ export const recordUserActivityController = async (req, res, next) => {
 };
 
 // Lấy lịch sử hoạt động của user
-export const getUserActivityHistoryController = async (req, res) => {
+export const getUserActivityHistoryController = async (req, res, next) => {
   try {
     const userId = req.user.id;
 
@@ -247,12 +247,12 @@ export const getUserActivityHistoryController = async (req, res) => {
 
     return res.status(200).json({ activities });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Lấy lịch sử hoạt động cho một progress cụ thể (có phân trang)
-export const getProgressActivityHistoryController = async (req, res) => {
+export const getProgressActivityHistoryController = async (req, res, next) => {
   try {
     const userId = req.user.id;
     const { progressId } = req.params;
@@ -299,14 +299,14 @@ export const getProgressActivityHistoryController = async (req, res) => {
       attempts
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // rating endpoints moved to src/controllers/ratingController.js
 
 // Lấy tiến độ hoàn thành của một kỹ năng
-export const getSkillProgressController = async (req, res) => {
+export const getSkillProgressController = async (req, res, next) => {
   try {
     const userId = req.user.id;
     const { skillId } = req.params;
@@ -340,12 +340,12 @@ export const getSkillProgressController = async (req, res) => {
       }))
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Lấy tiến độ hoàn thành của cả lớp
-export const getClassProgressController = async (req, res) => {
+export const getClassProgressController = async (req, res, next) => {
   try {
     const { classId } = req.params;
 
@@ -379,6 +379,6 @@ export const getClassProgressController = async (req, res) => {
       skillProgress
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
