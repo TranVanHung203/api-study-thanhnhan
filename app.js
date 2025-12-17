@@ -18,6 +18,7 @@ import Question from './src/models/question.schema.js';
 import UserActivity from './src/models/userActivity.schema.js';
 import Reward from './src/models/reward.schema.js';
 import RefreshToken from './src/models/refreshToken.schema.js';
+import Character from './src/models/character.schema.js';
 
 // Import routes mới
 import authRoutes from './src/routes/authRoutes.js';
@@ -31,6 +32,7 @@ import quizNewRoutes from './src/routes/quizNewRoutes.js';
 import questionRoutes from './src/routes/questionRoutes.js';
 import activityRoutes from './src/routes/activityRoutes.js';
 import rewardRoutes from './src/routes/rewardRoutes.js';
+import characterRoutes from './src/routes/characterRoutes.js';
 
 // Import Swagger
 import swaggerUi from 'swagger-ui-express';
@@ -109,6 +111,7 @@ const swaggerOptions = {
     // './src/routes/exerciseRoutes.js',
     // './src/routes/quizNewRoutes.js',
      './src/routes/questionRoutes.js',
+    './src/routes/characterRoutes.js',
     //  './src/routes/activityRoutes.js',
     // './src/routes/rewardRoutes.js',
   ],
@@ -155,6 +158,7 @@ app.use('/quizzes', quizNewRoutes);
 app.use('/questions', questionRoutes);
 app.use('/activities', activityRoutes);
 app.use('/rewards', rewardRoutes);
+app.use('/characters', characterRoutes);
 
 app.use(errorHandler);
 

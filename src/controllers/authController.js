@@ -587,3 +587,27 @@ export const convertGuestToUserController = async (req, res, next) => {
     next(error);
   }
 };
+
+// Đổi tên đầy đủ (fullName) của user
+export const changeFullNameController = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const { fullName } = req.body;
+
+    if (!fullName || typeof fullName !== 'string' || fullName.trim().length === 0) {
+      throw new BadRequestError('fullName không được để trống');
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      throw new NotFoundError('User không tìm thấy');
+    }
+
+    user.fullName = fullName.trim();
+    await user.save();
+
+    return res.status(200).json({ message: 'Cập nhật tên thành công', fullName: user.fullName });
+  } catch (error) {
+    next(error);
+  }
+};
