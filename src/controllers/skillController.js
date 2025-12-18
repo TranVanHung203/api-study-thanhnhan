@@ -17,7 +17,7 @@ export const getSkillsByChapterController = async (req, res, next) => {
 // Tạo skill mới
 export const createSkillController = async (req, res, next) => {
   try {
-    const { chapterId, skillName, description, order } = req.body;
+    const { chapterId, skillName, description, order, skillVoice } = req.body;
 
     if (!chapterId || !skillName) {
       return res.status(400).json({ message: 'chapterId và skillName là bắt buộc' });
@@ -34,7 +34,8 @@ export const createSkillController = async (req, res, next) => {
       chapterId,
       skillName,
       description,
-      order: skillOrder
+      order: skillOrder,
+      skillVoice: skillVoice || null
     });
 
     await skill.save();
@@ -52,11 +53,11 @@ export const createSkillController = async (req, res, next) => {
 export const updateSkillController = async (req, res, next) => {
   try {
     const { skillId } = req.params;
-    const { skillName, description, order } = req.body;
+    const { skillName, description, order, skillVoice } = req.body;
 
     const skill = await Skill.findByIdAndUpdate(
       skillId,
-      { skillName, description, order },
+      { skillName, description, order, skillVoice },
       { new: true }
     );
 

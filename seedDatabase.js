@@ -118,13 +118,15 @@ const seedDatabase = async () => {
         chapterId: chapters[0]._id,
         skillName: 'Số từ 1 đến 5',
         description: 'Học các số 1, 2, 3, 4, 5',
-        order: 1
+        order: 1,
+        skillVoice: null
       },
       {
         chapterId: chapters[0]._id,
         skillName: 'Số từ 6 đến 10',
         description: 'Học các số 6, 7, 8, 9, 10',
-        order: 2
+        order: 2,
+        skillVoice: null
       }
     ]);
     console.log('✅ Skills Chương 1 đã tạo:', skillsChapter1.length);
@@ -135,13 +137,15 @@ const seedDatabase = async () => {
         chapterId: chapters[1]._id,
         skillName: 'Cộng trong phạm vi 10',
         description: 'Các phép cộng có kết quả không quá 10',
-        order: 1
+        order: 1,
+        skillVoice: null
       },
       {
         chapterId: chapters[1]._id,
         skillName: 'Cộng trong phạm vi 20',
         description: 'Các phép cộng có kết quả không quá 20',
-        order: 2
+        order: 2,
+        skillVoice: null
       }
     ]);
     console.log('✅ Skills Chương 2 đã tạo:', skillsChapter2.length);
@@ -152,13 +156,15 @@ const seedDatabase = async () => {
         chapterId: chapters[2]._id,
         skillName: 'Cộng trong phạm vi 50',
         description: 'Các phép cộng có kết quả không quá 50',
-        order: 1
+        order: 1,
+        skillVoice: null
       },
       {
         chapterId: chapters[2]._id,
         skillName: 'Cộng trong phạm vi 100',
         description: 'Các phép cộng có kết quả không quá 100',
-        order: 2
+        order: 2,
+        skillVoice: null
       }
     ]);
     console.log('✅ Skills Chương 3 đã tạo:', skillsChapter3.length);

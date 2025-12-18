@@ -67,12 +67,12 @@ const seed = async () => {
 
     // Skills
     const skillsChapter1 = await Skill.insertMany([
-      { chapterId: chapters[0]._id, skillName: 'Kỹ năng 1', description: 'Mô tả 1', order: 1 },
-      { chapterId: chapters[0]._id, skillName: 'Kỹ năng 2', description: 'Mô tả 2', order: 2 }
+      { chapterId: chapters[0]._id, skillName: 'Kỹ năng 1', description: 'Mô tả 1', order: 1, skillVoice: null },
+      { chapterId: chapters[0]._id, skillName: 'Kỹ năng 2', description: 'Mô tả 2', order: 2, skillVoice: null }
     ]);
     const skillsChapter2 = await Skill.insertMany([
-      { chapterId: chapters[1]._id, skillName: 'Kỹ năng 3', description: 'Mô tả 3', order: 1 },
-      { chapterId: chapters[1]._id, skillName: 'Kỹ năng 4', description: 'Mô tả 4', order: 2 }
+      { chapterId: chapters[1]._id, skillName: 'Kỹ năng 3', description: 'Mô tả 3', order: 1, skillVoice: null },
+      { chapterId: chapters[1]._id, skillName: 'Kỹ năng 4', description: 'Mô tả 4', order: 2, skillVoice: null }
     ]);
 
     // Videos, Exercises, Quizzes

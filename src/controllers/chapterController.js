@@ -239,6 +239,7 @@ export const getChapterMapController = async (req, res, next) => {
       return {
         _id: skill._id,
         skillName: skill.skillName,
+        skillVoice: skill.skillVoice || null,
         description: skill.description,
         order: skill.order,
         isCompleted: isSkillCompleted,
@@ -264,7 +265,7 @@ export const getChapterMapController = async (req, res, next) => {
 // Chèn skill mới vào giữa (reorder)
 export const insertSkillController = async (req, res, next) => {
   try {
-    const { chapterId, skillName, description, afterOrder } = req.body;
+    const { chapterId, skillName, description, afterOrder, skillVoice } = req.body;
 
     if (!chapterId || !skillName) {
       return res.status(400).json({ message: 'chapterId và skillName là bắt buộc' });
@@ -285,7 +286,8 @@ export const insertSkillController = async (req, res, next) => {
       chapterId,
       skillName,
       description,
-      order: newOrder
+      order: newOrder,
+      skillVoice: skillVoice || null
     });
 
     await skill.save();

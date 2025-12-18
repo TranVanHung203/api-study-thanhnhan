@@ -10,6 +10,10 @@ const SkillSchema = new mongoose.Schema({
     type: String, 
     required: true 
   },
+  skillVoice: {
+    type: String,
+    default: null
+  },
   description: {
     type: String
   },
