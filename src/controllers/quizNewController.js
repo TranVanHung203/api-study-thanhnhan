@@ -14,13 +14,14 @@ export const getQuizzesController = async (req, res, next) => {
 // Tạo quiz
 export const createQuizController = async (req, res, next) => {
   try {
-    const { title, description, totalQuestions, bonusPoints } = req.body;
+    const { title, description, totalQuestions, bonusPoints, voiceDescription } = req.body;
 
     const quiz = new Quiz({
       title,
       description,
       totalQuestions: totalQuestions || 15,
-      bonusPoints: bonusPoints || 100
+      bonusPoints: bonusPoints || 100,
+      voiceDescription: voiceDescription || null
     });
 
     await quiz.save();
@@ -61,11 +62,11 @@ export const getQuizDetailController = async (req, res, next) => {
 export const updateQuizController = async (req, res, next) => {
   try {
     const { quizId } = req.params;
-    const { title, description, totalQuestions, bonusPoints } = req.body;
+    const { title, description, totalQuestions, bonusPoints, voiceDescription } = req.body;
 
     const quiz = await Quiz.findByIdAndUpdate(
       quizId,
-      { title, description, totalQuestions, bonusPoints },
+      { title, description, totalQuestions, bonusPoints, voiceDescription },
       { new: true }
     );
 

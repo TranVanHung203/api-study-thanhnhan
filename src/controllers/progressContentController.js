@@ -33,6 +33,7 @@ export const getContentByProgressId = async (req, res, next) => {
           type: 'video',
           title: v.title,
           description: v.description || null,
+          voiceDescription: v.voiceDescription || null,
           url: v.url || null,
           totalQuestion: null,
           progressId: v.progressId
@@ -44,6 +45,7 @@ export const getContentByProgressId = async (req, res, next) => {
           type: 'quiz',
           title: q.title,
           description: q.description || null,
+          voiceDescription: q.voiceDescription || null,
           url: null,
           totalQuestion: q.totalQuestions || null,
           progressId: q.progressId

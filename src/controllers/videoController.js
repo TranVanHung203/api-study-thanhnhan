@@ -36,7 +36,7 @@ export const getVideoByIdController = async (req, res, next) => {
 // Upload video lên Cloudinary và tạo record
 export const createVideoController = async (req, res, next) => {
   try {
-    const { title, description } = req.body;
+    const { title, description, voiceDescription } = req.body;
 
     if (!req.file) {
       return res.status(400).json({ message: 'Vui lòng upload file video' });
@@ -62,6 +62,7 @@ export const createVideoController = async (req, res, next) => {
       title,
       url: uploadResult.secure_url,
       description,
+      voiceDescription: voiceDescription || null,
       cloudinaryPublicId: uploadResult.public_id
     });
 
@@ -82,14 +83,14 @@ export const createVideoController = async (req, res, next) => {
 export const updateVideoController = async (req, res, next) => {
   try {
     const { videoId } = req.params;
-    const { title, description } = req.body;
+    const { title, description, voiceDescription } = req.body;
 
     const existingVideo = await Video.findById(videoId);
     if (!existingVideo) {
       return res.status(404).json({ message: 'Video không tồn tại' });
     }
 
-    let updateData = { title, description };
+    let updateData = { title, description, voiceDescription };
 
     // Nếu có file mới, upload lên Cloudinary
     if (req.file) {

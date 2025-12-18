@@ -12,6 +12,10 @@ const VideoSchema = new mongoose.Schema({
   description: {
     type: String
   },
+  voiceDescription: {
+    type: String,
+    default: null
+  },
   progressId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Progress'
