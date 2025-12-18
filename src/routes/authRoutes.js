@@ -11,6 +11,7 @@ import {
   convertGuestToUserController
   , googleTokenController
   , changeFullNameController
+  , changeFullNameAndAttachCharacterController
 } from '../controllers/authController.js';
 import { authToken } from '../middlewares/authMiddleware.js';
 
@@ -241,6 +242,33 @@ router.post('/change-password', authToken, changePasswordController);
  *         description: Cập nhật tên thành công
  */
 router.post('/change-fullname', authToken, changeFullNameController);
+/**
+ * @swagger
+ * /auth/change-fullname-and-attach:
+ *   post:
+ *     summary: Đổi tên và gán character cùng lúc
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - fullName
+ *               - characterId
+ *             properties:
+ *               fullName:
+ *                 type: string
+ *               characterId:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Cập nhật tên và gán character thành công
+ */
+router.post('/change-fullname-and-attach', authToken, changeFullNameAndAttachCharacterController);
 
 // /**
 //  * @swagger

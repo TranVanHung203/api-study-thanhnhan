@@ -10,6 +10,7 @@ import NotFoundError from '../errors/notFoundError.js';
 import UnauthorizedError from '../errors/unauthorizedError.js';
 import ForbiddenError from '../errors/forbiddenError.js';
 import { OAuth2Client } from 'google-auth-library';
+import Character from '../models/character.schema.js';
 
 const SECRET_KEY = process.env.SECRET_KEY || 'your-secret-key';
 const ACCESS_TOKEN_EXPIRY = process.env.ACCESS_TOKEN_EXPIRY || '15m';
@@ -614,6 +615,37 @@ export const changeFullNameController = async (req, res, next) => {
     await user.save();
 
     return res.status(200).json({ message: 'Cập nhật tên thành công', fullName: user.fullName });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Change full name and attach a character in one request
+export const changeFullNameAndAttachCharacterController = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const { fullName, characterId } = req.body;
+
+    if (!fullName || typeof fullName !== 'string' || fullName.trim().length === 0) {
+      throw new BadRequestError('fullName không được để trống');
+    }
+
+    if (!characterId) {
+      throw new BadRequestError('characterId là bắt buộc');
+    }
+
+    const user = await User.findById(userId);
+    if (!user) throw new NotFoundError('User không tìm thấy');
+
+    const character = await Character.findById(characterId);
+    if (!character) throw new NotFoundError('Character không tìm thấy');
+
+    // Apply updates
+    user.fullName = fullName.trim();
+    user.characterUrl = character.url;
+    await user.save();
+
+    return res.status(200).json({ message: 'Cập nhật tên và gán character thành công', fullName: user.fullName, characterUrl: user.characterUrl });
   } catch (error) {
     next(error);
   }
