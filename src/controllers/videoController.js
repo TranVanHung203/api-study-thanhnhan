@@ -5,7 +5,12 @@ import cloudinary from '../config/cloudinaryConfig.js';
 export const getVideosController = async (req, res, next) => {
   try {
     const videos = await Video.find();
-    return res.status(200).json({ videos });
+    const out = videos.map(v => {
+      const o = v.toObject ? v.toObject() : JSON.parse(JSON.stringify(v));
+      delete o.duration;
+      return o;
+    });
+    return res.status(200).json({ videos: out });
   } catch (error) {
     next(error);
   }
@@ -20,8 +25,9 @@ export const getVideoByIdController = async (req, res, next) => {
     if (!video) {
       return res.status(404).json({ message: 'Video không tồn tại' });
     }
-    
-    return res.status(200).json({ video });
+    const out = video.toObject ? video.toObject() : JSON.parse(JSON.stringify(video));
+    delete out.duration;
+    return res.status(200).json({ video: out });
   } catch (error) {
     next(error);
   }
@@ -55,16 +61,17 @@ export const createVideoController = async (req, res, next) => {
     const video = new Video({
       title,
       url: uploadResult.secure_url,
-      duration: Math.round(uploadResult.duration || 0),
       description,
       cloudinaryPublicId: uploadResult.public_id
     });
 
     await video.save();
 
+    const out = video.toObject ? video.toObject() : JSON.parse(JSON.stringify(video));
+    delete out.duration;
     return res.status(201).json({
       message: 'Upload video thành công',
-      video
+      video: out
     });
   } catch (error) {
     next(error);
@@ -108,15 +115,15 @@ export const updateVideoController = async (req, res, next) => {
       });
 
       updateData.url = uploadResult.secure_url;
-      updateData.duration = Math.round(uploadResult.duration || 0);
       updateData.cloudinaryPublicId = uploadResult.public_id;
     }
 
     const video = await Video.findByIdAndUpdate(videoId, updateData, { new: true });
-
+    const out = video.toObject ? video.toObject() : JSON.parse(JSON.stringify(video));
+    delete out.duration;
     return res.status(200).json({
       message: 'Cập nhật video thành công',
-      video
+      video: out
     });
   } catch (error) {
     next(error);

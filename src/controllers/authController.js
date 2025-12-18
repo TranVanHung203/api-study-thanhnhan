@@ -145,7 +145,7 @@ export const refreshTokenController = async (req, res, next) => {
 
     // Kiểm tra refresh token có trong database không
     const storedToken = await RefreshToken.findOne({ token: refreshToken });
-    
+
     if (!storedToken) {
       throw new UnauthorizedError('Refresh token không hợp lệ hoặc đã bị revoke');
     }
@@ -209,13 +209,12 @@ export const getUserController = async (req, res, next) => {
     if (!user) throw new NotFoundError('User không tìm thấy');
 
     return res.status(200).json({
-     
-        _id: user._id,
-        fullName: user.fullName,
-        email: user.email,
-        classId: user.classId || null,
-        characterUrl: user.characterUrl || null
-      
+      _id: user._id,
+      fullName: user.fullName,
+      email: user.email,
+      classId: user.classId || null,
+      characterUrl: user.characterUrl || null
+
     });
   } catch (error) {
     next(error);
@@ -278,7 +277,7 @@ export const logoutController = async (req, res, next) => {
   try {
     const userId = req.user?.id;
     const refreshToken = req.body.refreshToken;
-    
+
     // Revoke refresh token trong database
     if (refreshToken) {
       await RefreshToken.updateOne(
@@ -289,7 +288,7 @@ export const logoutController = async (req, res, next) => {
 
     // Nếu có userId, xóa tất cả refresh tokens của user (optional - logout khỏi tất cả thiết bị)
     // await RefreshToken.updateMany({ userId }, { isRevoked: true });
-    
+
     // Nếu là guest, xóa tất cả dữ liệu liên quan
     if (userId) {
       const user = await User.findById(userId);
@@ -436,7 +435,7 @@ export const googleTokenController = async (req, res, next) => {
       // generate a safe unique username (avoid collisions by including timestamp)
       const generatedUsername = email
         ? (email.split('@')[0].replace(/[^a-zA-Z0-9_.-]/g, '') || `googleuser`) + `_${Date.now()}`
-        : `google_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
+        : `google_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
       // create a random password hash so required passwordHash field is satisfied
       const randomPassword = Math.random().toString(36) + Date.now().toString(36);
@@ -490,13 +489,13 @@ const deleteGuestData = async (userId) => {
   try {
     // Xóa UserActivity - lịch sử hoạt động của user
     const deletedActivities = await UserActivity.deleteMany({ userId });
-    
+
     // Xóa Reward - điểm thưởng của user
     const deletedRewards = await Reward.deleteMany({ userId });
-    
+
     // Xóa User
     await User.findByIdAndDelete(userId);
-    
+
     console.log(`Deleted guest user ${userId}:`, {
       userActivities: deletedActivities.deletedCount,
       rewards: deletedRewards.deletedCount
@@ -519,7 +518,7 @@ const deleteGuestData = async (userId) => {
 export const deleteGuestController = async (req, res, next) => {
   try {
     const userId = req.user.id;
-    
+
     const user = await User.findById(userId);
     if (!user) {
       throw new NotFoundError('User không tìm thấy');
@@ -557,7 +556,7 @@ export const convertGuestToUserController = async (req, res, next) => {
     }
 
     // Kiểm tra username/email đã tồn tại
-    const existingUser = await User.findOne({ 
+    const existingUser = await User.findOne({
       $or: [{ username }, { email }],
       _id: { $ne: userId }
     });

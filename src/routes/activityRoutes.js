@@ -17,11 +17,12 @@ router.all('*', authToken);
 
 
 
+
 /**
  * @swagger
  * /activities:
  *   post:
- *     summary: Ghi nhận hoàn thành video (chỉ video)
+ *     summary: Ghi nhận hoạt động của user (video completion)
  *     tags: [Activities]
  *     security:
  *       - bearerAuth: []
@@ -31,23 +32,39 @@ router.all('*', authToken);
  *         application/json:
  *           schema:
  *             type: object
- *             required:
- *               - progressId
- *               - isCompleted
  *             properties:
  *               progressId:
  *                 type: string
- *                 description: ID của progress thuộc video
+ *                 description: ID của progress
+ *               videoId:
+ *                 type: string
+ *                 description: ID của video để đánh dấu đã xem (bắt buộc khi contentType === video)
  *               isCompleted:
  *                 type: boolean
- *                 description: Ghi `true` để báo hoàn thành video
- *           examples:
- *             video:
- *               summary: Ghi nhận VIDEO
- *               value: {"progressId":"<id>","isCompleted":true}
+ *                 description: Gửi true để ghi nhận đã xem
+ *             required:
+ *               - progressId
+ *               - isCompleted
+ *             description: |
+ *               If the progress contains multiple videos, `videoId` is required. If the progress has exactly one video, `videoId` may be omitted and the server will infer it.
  *     responses:
- *       '201':
- *         description: Ghi nhận thành công — lưu UserActivity và cập nhật reward (nếu có bonus)
+ *       200:
+ *         description: Video marked watched (not all videos completed yet)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 watchedCount:
+ *                   type: integer
+ *                 totalVideos:
+ *                   type: integer
+ *                 completed:
+ *                   type: boolean
+ *       201:
+ *         description: Progress completed (all videos watched), returns created UserActivity and bonus
  *         content:
  *           application/json:
  *             schema:
@@ -58,15 +75,7 @@ router.all('*', authToken);
  *                 userActivity:
  *                   type: object
  *                 bonusEarned:
- *                   type: number
- *                 nextStep:
  *                   type: integer
- *                 isCheck:
- *                   type: boolean
- *       '400':
- *         description: Yêu cầu không hợp lệ (ví dụ progress không phải video hoặc thiếu isCompleted)
- *       '404':
- *         description: Progress không tìm thấy
  */
 router.post('/', recordUserActivityController);
 // /**

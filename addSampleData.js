@@ -77,10 +77,10 @@ const seed = async () => {
 
     // Videos, Exercises, Quizzes
     const videos = await Video.insertMany([
-      { title: 'Video A', url: 'https://example.com/a', duration: 60, description: 'Video A' },
-      { title: 'Video B', url: 'https://example.com/b', duration: 90, description: 'Video B' },
-      { title: 'Video C', url: 'https://example.com/c', duration: 120, description: 'Video C' },
-      { title: 'Video D', url: 'https://example.com/d', duration: 150, description: 'Video D' }
+      { title: 'Video A', url: 'https://example.com/a', description: 'Video A' },
+      { title: 'Video B', url: 'https://example.com/b', description: 'Video B' },
+      { title: 'Video C', url: 'https://example.com/c', description: 'Video C' },
+      { title: 'Video D', url: 'https://example.com/d', description: 'Video D' }
     ]);
 
     const exercises = await Exercise.insertMany([

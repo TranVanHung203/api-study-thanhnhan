@@ -1,5 +1,6 @@
 import Progress from '../models/progress.schema.js';
 import Video from '../models/video.schema.js';
+import VideoWatch from '../models/videoWatch.schema.js';
 // only need Video for this endpoint
 
 export const getContentByProgressId = async (req, res, next) => {
@@ -20,7 +21,21 @@ export const getContentByProgressId = async (req, res, next) => {
       ]);
       if (!docs || docs.length === 0) return res.status(404).json({ message: 'Video không tìm thấy cho progress này' });
       const totalPages = Math.max(1, Math.ceil(total / perPage));
-      const result = docs.map(doc => doc.toObject());
+      // Enrich each video with isWatched and watchedAt for the requesting user (if authenticated)
+      const userId = req.user && (req.user.id || req.user._id);
+      let result = docs.map(doc => doc.toObject());
+      if (userId) {
+        const videoIds = result.map(r => r._id);
+        const watches = await VideoWatch.find({ userId, videoId: { $in: videoIds } });
+        const watchMap = new Map(watches.map(w => [w.videoId.toString(), w]));
+        result = result.map(r => {
+          const w = watchMap.get(r._id.toString());
+          return Object.assign(r, { isWatched: !!w, watchedAt: w ? w.watchedAt : null });
+        });
+      } else {
+        result = result.map(r => Object.assign(r, { isWatched: false, watchedAt: null }));
+      }
+
       return res.status(200).json({ page, perPage, total, totalPages, content: result });
     }
 

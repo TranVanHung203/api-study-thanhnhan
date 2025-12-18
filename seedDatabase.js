@@ -168,25 +168,21 @@ const seedDatabase = async () => {
       {
         title: 'Giới thiệu số 1-5',
         url: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
-        duration: 180,
         description: 'Video giới thiệu các số từ 1 đến 5'
       },
       {
         title: 'Giới thiệu số 6-10',
         url: 'https://www.youtube.com/embed/jNQXAC9IVRw',
-        duration: 200,
         description: 'Video giới thiệu các số từ 6 đến 10'
       },
       {
         title: 'Học cộng trong phạm vi 10',
         url: 'https://www.youtube.com/embed/abc123xyz',
-        duration: 300,
         description: 'Video hướng dẫn phép cộng cơ bản'
       },
       {
         title: 'Học cộng trong phạm vi 20',
         url: 'https://www.youtube.com/embed/xyz456abc',
-        duration: 350,
         description: 'Video hướng dẫn phép cộng nâng cao'
       }
     ]);

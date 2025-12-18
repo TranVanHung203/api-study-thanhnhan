@@ -7,6 +7,7 @@ import Video from '../models/video.schema.js';
 import Quiz from '../models/quiz.schema.js';
 import Question from '../models/question.schema.js';
 import QuizAttempt from '../models/quizAttempt.schema.js';
+import VideoWatch from '../models/videoWatch.schema.js';
 import BadRequestError from '../errors/badRequestError.js';
 import NotFoundError from '../errors/notFoundError.js';
 import UnauthorizedError from '../errors/unauthorizedError.js';
@@ -132,22 +133,11 @@ export const recordUserActivityController = async (req, res, next) => {
 
     // Kiểm tra đã hoàn thành step này chưa
     const existingActivity = await UserActivity.findOne({ userId, progressId, isCompleted: true });
-
     if (existingActivity) {
       const bonusEarnedExisting = existingActivity.bonusEarned || 0;
       const nextStepExisting = currentProgress.stepNumber + 1;
-      if (existingActivity.contentType === 'exercise') {
-        return res.status(201).json({
-          isCorrect: true,
-          message: 'Ghi nhận hoạt động thành công',
-          bonusEarned: bonusEarnedExisting,
-          nextStep: nextStepExisting,
-          isCheck: true
-        });
-      }
-
-      return res.status(201).json({
-        message: 'Ghi nhận hoạt động thành công',
+      return res.status(200).json({
+        message: 'Ghi nhận hoạt động đã tồn tại',
         userActivity: existingActivity,
         bonusEarned: bonusEarnedExisting,
         nextStep: nextStepExisting,
@@ -212,22 +202,66 @@ export const recordUserActivityController = async (req, res, next) => {
     // ========== XỬ LÝ THEO LOẠI CONTENT ==========
     if (contentType !== 'video') throw new BadRequestError('Endpoint này chỉ dùng để ghi nhận video. Exercise và Quiz xử lý ở endpoints riêng.');
 
-    // VIDEO handling (require isCompleted === true)
+    // VIDEO handling expects a `videoId` in body to mark a specific video as watched
     if (isCompleted !== true) throw new BadRequestError('Vui lòng gửi isCompleted: true để ghi nhận hoàn thành video');
 
-    // Tính điểm thưởng cho video
-    let bonusEarned = 0;
-    try {
-      const video = await Video.findOne({ progressId: currentProgress._id });
-      if (video && video.bonusPoints) bonusEarned = video.bonusPoints;
-    } catch (err) {}
+    let { videoId } = req.body;
+    // If videoId not provided, allow it when the progress has exactly one video (convenience)
+    if (!videoId) {
+      const videosForProgress = await Video.find({ progressId: currentProgress._id }).limit(2);
+      if (videosForProgress.length === 0) {
+        throw new NotFoundError('Progress chưa có video nào');
+      }
+      if (videosForProgress.length === 1) {
+        videoId = videosForProgress[0]._id;
+      } else {
+        throw new BadRequestError('videoId là bắt buộc khi progress có nhiều hơn 1 video');
+      }
+    }
 
-    // Create or update UserActivity
-    const newActivity = new UserActivity({ userId, progressId, contentType: 'video', score: score || 100, isCompleted: true, bonusEarned });
-    await newActivity.save();
-    if (bonusEarned > 0) await Reward.findOneAndUpdate({ userId }, { $inc: { totalPoints: bonusEarned } }, { new: true, upsert: true });
+    // Verify video belongs to this progress
+    const video = await Video.findById(videoId);
+    if (!video) throw new NotFoundError('Video không tìm thấy');
+    if (video.progressId?.toString() !== currentProgress._id.toString()) {
+      throw new BadRequestError('Video không thuộc progress được gửi');
+    }
 
-    return res.status(201).json({ message: 'Ghi nhận hoàn thành video', userActivity: newActivity, bonusEarned, nextStep: currentStepNumber + 1, isCheck: false });
+    // Upsert VideoWatch (only one per user+video)
+    await VideoWatch.updateOne(
+      { userId, videoId },
+      { $setOnInsert: { userId, videoId, progressId, watchedAt: new Date() } },
+      { upsert: true }
+    );
+
+    // Count total videos for this progress and watched videos by user
+    const [totalVideos, watchedCount] = await Promise.all([
+      Video.countDocuments({ progressId: currentProgress._id }),
+      VideoWatch.countDocuments({ userId, progressId: currentProgress._id })
+    ]);
+
+    // If user has watched all videos for this progress, create UserActivity (progress completion)
+    if (totalVideos > 0 && watchedCount >= totalVideos) {
+      // Check existing UserActivity again (idempotency)
+      let createdActivity = await UserActivity.findOne({ userId, progressId, isCompleted: true });
+      let bonusEarned = 0;
+      if (!createdActivity) {
+        // Sum bonus points across videos if any
+        const videosForProgress = await Video.find({ progressId: currentProgress._id });
+        for (const v of videosForProgress) {
+          if (v.bonusPoints) bonusEarned += v.bonusPoints;
+        }
+
+        createdActivity = new UserActivity({ userId, progressId, contentType: 'video', score: score || 100, isCompleted: true, bonusEarned });
+        await createdActivity.save();
+
+        if (bonusEarned > 0) await Reward.findOneAndUpdate({ userId }, { $inc: { totalPoints: bonusEarned } }, { new: true, upsert: true });
+      }
+
+      return res.status(201).json({ message: 'Hoàn thành progress (tất cả video đã xem)', userActivity: createdActivity, bonusEarned, nextStep: currentStepNumber + 1, isCheck: false });
+    }
+
+    // Not yet completed all videos — return watched progress
+    return res.status(200).json({ message: 'Đã đánh dấu video là đã xem', watchedCount, totalVideos, completed: false });
   } catch (error) {
     next(error);
   }
