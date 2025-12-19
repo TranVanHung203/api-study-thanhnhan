@@ -257,11 +257,11 @@ export const recordUserActivityController = async (req, res, next) => {
         if (bonusEarned > 0) await Reward.findOneAndUpdate({ userId }, { $inc: { totalPoints: bonusEarned } }, { new: true, upsert: true });
       }
 
-      return res.status(201).json({ message: 'Hoàn thành progress (tất cả video đã xem)', userActivity: createdActivity, bonusEarned, nextStep: currentStepNumber + 1, isCheck: false });
+      return res.status(201).json({ message: 'Hoàn thành progress (tất cả video đã xem)', userActivity: createdActivity, bonusEarned, nextStep: currentStepNumber + 1, isCheck: false, isDone: true });
     }
 
     // Not yet completed all videos — return watched progress
-    return res.status(200).json({ message: 'Đã đánh dấu video là đã xem', watchedCount, totalVideos, completed: false });
+    return res.status(200).json({ message: 'Đã đánh dấu video là đã xem', watchedCount, totalVideos, completed: false, isDone: false });
   } catch (error) {
     next(error);
   }
