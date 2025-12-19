@@ -131,19 +131,8 @@ export const recordUserActivityController = async (req, res, next) => {
     // Tự động lấy contentType từ progress
     const contentType = currentProgress.contentType;
 
-    // Kiểm tra đã hoàn thành step này chưa
-    const existingActivity = await UserActivity.findOne({ userId, progressId, isCompleted: true });
-    if (existingActivity) {
-      const bonusEarnedExisting = existingActivity.bonusEarned || 0;
-      const nextStepExisting = currentProgress.stepNumber + 1;
-      return res.status(200).json({
-        message: 'Ghi nhận hoạt động đã tồn tại',
-        userActivity: existingActivity,
-        bonusEarned: bonusEarnedExisting,
-        nextStep: nextStepExisting,
-        isCheck: true
-      });
-    }
+    // Don't return early on existing UserActivity here; we'll determine `isCheck` from VideoWatch later
+    // existingActivity will be queried later when needed for completion idempotency
 
     // Lấy skill hiện tại
     const currentSkill = await Skill.findById(currentProgress.skillId);
@@ -227,11 +216,15 @@ export const recordUserActivityController = async (req, res, next) => {
     }
 
     // Upsert VideoWatch (only one per user+video)
-    await VideoWatch.updateOne(
-      { userId, videoId },
-      { $setOnInsert: { userId, videoId, progressId, watchedAt: new Date() } },
-      { upsert: true }
-    );
+      const existingWatch = await VideoWatch.findOne({ userId, videoId, progressId });
+      const isCheck = !!existingWatch;
+
+      // Upsert VideoWatch (only one per user+video)
+      await VideoWatch.updateOne(
+        { userId, videoId },
+        { $setOnInsert: { userId, videoId, progressId, watchedAt: new Date() } },
+        { upsert: true }
+      );
 
     // Count total videos for this progress and watched videos by user
     const [totalVideos, watchedCount] = await Promise.all([
@@ -257,11 +250,11 @@ export const recordUserActivityController = async (req, res, next) => {
         if (bonusEarned > 0) await Reward.findOneAndUpdate({ userId }, { $inc: { totalPoints: bonusEarned } }, { new: true, upsert: true });
       }
 
-      return res.status(201).json({ message: 'Hoàn thành progress (tất cả video đã xem)', userActivity: createdActivity, bonusEarned, nextStep: currentStepNumber + 1, isCheck: false, isDone: true });
+      return res.status(201).json({ message: 'Hoàn thành progress (tất cả video đã xem)', userActivity: createdActivity, bonusEarned, nextStep: currentStepNumber + 1, isCheck });
     }
 
     // Not yet completed all videos — return watched progress
-    return res.status(200).json({ message: 'Đã đánh dấu video là đã xem', watchedCount, totalVideos, completed: false, isDone: false });
+      return res.status(200).json({ message: 'Đã đánh dấu video là đã xem', watchedCount, totalVideos, completed: false, isCheck });
   } catch (error) {
     next(error);
   }
