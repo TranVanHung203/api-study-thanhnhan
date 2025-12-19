@@ -94,7 +94,7 @@ router.post('/', recordUserActivityController);
  * @swagger
  * /activities/progress/{progressId}/history:
  *   get:
- *     summary: Lấy lịch sử hoạt động cho một progress cụ thể (phân trang)
+ *     summary: Lấy lịch sử hoạt động cho một progress cụ thể của quiz 
  *     tags: [Activities]
  *     parameters:
  *       - in: path

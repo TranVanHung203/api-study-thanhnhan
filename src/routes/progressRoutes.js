@@ -12,6 +12,7 @@ import {
   deleteProgressController
 } from '../controllers/progressController.js';
 import { authToken } from '../middlewares/authMiddleware.js';
+import { getQuizConfigByProgress, upsertQuizConfigForProgress,createQuizConfigForProgress } from '../controllers/quizConfigController.js';
 
 const router = express.Router();
 
@@ -165,6 +166,123 @@ router.post('/:id/quiz/start', startQuizSession);
 
 /**
  * @swagger
+ * /progress/{id}/quiz/config:
+ *   get:
+ *     summary: Lấy cấu hình chọn câu cho quiz của một progress
+ *     tags: [Progress]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         description: Progress ID cần lấy cấu hình
+ *         schema:
+ *           type: string
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Quiz config
+ *       404:
+ *         description: Không tìm thấy cấu hình
+ */
+router.get('/:id/quiz/config', getQuizConfigByProgress);
+
+
+// /**
+//  * @swagger
+//  * /progress/{id}/quiz/config:
+//  *   put:
+//  *     summary: Tạo hoặc cập nhật cấu hình chọn câu cho quiz của một progress
+//  *     tags: [Progress]
+//  *     parameters:
+//  *       - in: path
+//  *         name: id
+//  *         required: true
+//  *         description: Progress ID
+//  *         schema:
+//  *           type: string
+//  *     requestBody:
+//  *       required: true
+//  *       content:
+//  *         application/json:
+//  *           schema:
+//  *             type: object
+//  *             properties:
+//  *               total:
+//  *                 type: integer
+//  *               parts:
+//  *                 type: array
+//  *                 items:
+//  *                   type: object
+//  *                   properties:
+//  *                     type:
+//  *                       type: string
+//  *                     count:
+//  *                       type: integer
+//  *                     order:
+//  *                       type: integer
+//  *           example:
+//  *             total: 15
+//  *             parts:
+//  *               - type: single
+//  *                 count: 10
+//  *                 order: 1
+//  *               - type: multiple
+//  *                 count: 5
+//  *                 order: 2
+//  *     security:
+//  *       - bearerAuth: []
+//  *     responses:
+//  *       200:
+//  *         description: Saved
+//  */
+// router.put('/:id/quiz/config', upsertQuizConfigForProgress);
+
+
+// /**
+//  * @swagger
+//  * /progress/{id}/quiz/config:
+//  *   post:
+//  *     summary: Tạo mới cấu hình chọn câu cho quiz của một progress (lỗi nếu đã tồn tại)
+//  *     tags: [Progress]
+//  *     parameters:
+//  *       - in: path
+//  *         name: id
+//  *         required: true
+//  *         description: Progress ID
+//  *         schema:
+//  *           type: string
+//  *     requestBody:
+//  *       required: true
+//  *       content:
+//  *         application/json:
+//  *           schema:
+//  *             type: object
+//  *             properties:
+//  *               total:
+//  *                 type: integer
+//  *               parts:
+//  *                 type: array
+//  *                 items:
+//  *                   type: object
+//  *                   properties:
+//  *                     type:
+//  *                       type: string
+//  *                     count:
+//  *                       type: integer
+//  *                     order:
+//  *                       type: integer
+//  *     security:
+//  *       - bearerAuth: []
+//  *     responses:
+//  *       201:
+//  *         description: Created
+//  */
+// router.post('/:id/quiz/config', createQuizConfigForProgress);
+
+
+/**
+ * @swagger
  * /progress/{id}/quiz:
  *   get:
  *     summary: Lấy câu hỏi phân trang từ session đã tạo (phải truyền `sessionId` sau khi start)
@@ -299,68 +417,68 @@ router.post('/:id/quiz/submit', submitQuizSession);
 //  */
 // router.get('/skill/:skillId', getProgressBySkillController);
 
-/**
- * @swagger
- * /progress:
- *   post:
- *     summary: Tạo bước tiến trình mới (video, exercise, quiz)
- *     tags: [Progress]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               skillId:
- *                 type: string
- *               stepNumber:
- *                 type: number
- *               contentType:
- *                 type: string
- *                 enum: [video, exercise, quiz]
- *               contentId:
- *                 type: string
- *     responses:
- *       201:
- *         description: Bước tiến trình được tạo thành công
- */
-router.post('/', createProgressController);
+// /**
+//  * @swagger
+//  * /progress:
+//  *   post:
+//  *     summary: Tạo bước tiến trình mới (video, exercise, quiz)
+//  *     tags: [Progress]
+//  *     requestBody:
+//  *       required: true
+//  *       content:
+//  *         application/json:
+//  *           schema:
+//  *             type: object
+//  *             properties:
+//  *               skillId:
+//  *                 type: string
+//  *               stepNumber:
+//  *                 type: number
+//  *               contentType:
+//  *                 type: string
+//  *                 enum: [video, exercise, quiz]
+//  *               contentId:
+//  *                 type: string
+//  *     responses:
+//  *       201:
+//  *         description: Bước tiến trình được tạo thành công
+//  */
+// router.post('/', createProgressController);
 
-/**
- * @swagger
- * /progress/{progressId}:
- *   patch:
- *     summary: Cập nhật bước tiến trình
- *     tags: [Progress]
- *     parameters:
- *       - in: path
- *         name: progressId
- *         required: true
- *         schema:
- *           type: string
- *     responses:
- *       200:
- *         description: Cập nhật thành công
- */
-router.patch('/:progressId', updateProgressController);
+// /**
+//  * @swagger
+//  * /progress/{progressId}:
+//  *   patch:
+//  *     summary: Cập nhật bước tiến trình
+//  *     tags: [Progress]
+//  *     parameters:
+//  *       - in: path
+//  *         name: progressId
+//  *         required: true
+//  *         schema:
+//  *           type: string
+//  *     responses:
+//  *       200:
+//  *         description: Cập nhật thành công
+//  */
+// router.patch('/:progressId', updateProgressController);
 
-/**
- * @swagger
- * /progress/{progressId}:
- *   delete:
- *     summary: Xóa bước tiến trình
- *     tags: [Progress]
- *     parameters:
- *       - in: path
- *         name: progressId
- *         required: true
- *         schema:
- *           type: string
- *     responses:
- *       200:
- *         description: Xóa thành công
- */
-router.delete('/:progressId', deleteProgressController);
+// /**
+//  * @swagger
+//  * /progress/{progressId}:
+//  *   delete:
+//  *     summary: Xóa bước tiến trình
+//  *     tags: [Progress]
+//  *     parameters:
+//  *       - in: path
+//  *         name: progressId
+//  *         required: true
+//  *         schema:
+//  *           type: string
+//  *     responses:
+//  *       200:
+//  *         description: Xóa thành công
+//  */
+// router.delete('/:progressId', deleteProgressController);
 
 export default router;

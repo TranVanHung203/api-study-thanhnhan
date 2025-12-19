@@ -2,6 +2,7 @@ import Chapter from '../models/chapter.schema.js';
 import Skill from '../models/skill.schema.js';
 import Progress from '../models/progress.schema.js';
 import UserActivity from '../models/userActivity.schema.js';
+import Video from '../models/video.schema.js';
 
 // Tạo chapter mới
 export const createChapterController = async (req, res, next) => {
@@ -176,6 +177,20 @@ export const getChapterMapController = async (req, res, next) => {
       skillCompletedMap.set(skill._id.toString(), completedAll);
     }
 
+    // Precompute number of videos per progress (for progresses that reference videos)
+    const videoCountMap = new Map();
+    try {
+      if (progressIds && progressIds.length > 0) {
+        const agg = await Video.aggregate([
+          { $match: { progressId: { $in: progressIds } } },
+          { $group: { _id: '$progressId', count: { $sum: 1 } } }
+        ]);
+        for (const a of agg) videoCountMap.set(String(a._id), a.count);
+      }
+    } catch (e) {
+      // if aggregation fails for any reason, we silently ignore and leave map empty
+    }
+
     // Now determine current index: the first index > lastCompletedIndex where its skill is not locked
     let currentIndex = -1;
     // first find first skill that is not completed (in order)
@@ -231,6 +246,7 @@ export const getChapterMapController = async (req, res, next) => {
           stepNumber: p.stepNumber,
           contentType: p.contentType,
           isCompleted,
+          totalVideo: p.contentType === 'video' ? (videoCountMap.get(p._id.toString()) || 0) : null,
           isLocked,
           isCurrent
         };
