@@ -210,48 +210,24 @@ export const getChapterMapController = async (req, res, next) => {
       }
     }
 
-    // Build skillsWithStatus using computed states
-    let previousSkillCompleted = true;
+    // Build skillsWithStatus using computed states (removed isLocked fields)
     const skillsWithStatus = skills.map(skill => {
       const skillProgresses = orderedProgresses.filter(p => p.skillId.toString() === skill._id.toString());
       const isSkillCompleted = skillCompletedMap.get(skill._id.toString()) || false;
-      const isSkillLocked = !previousSkillCompleted;
       const progressesWithStatus = skillProgresses.map(p => {
         const st = progressStateById.get(p._id.toString()) || { isCompleted: false, index: -1 };
         const idx = st.index;
         const isCompleted = st.isCompleted;
-        let isCurrent = false;
-        let isLocked = false;
-        if (idx === currentIndex) {
-          isCurrent = true;
-          isLocked = false;
-        } else if (idx <= lastCompletedIndex) {
-          isCurrent = false;
-          isLocked = false;
-        } else {
-          // idx > lastCompletedIndex
-          // locked if skill is locked or this progress is beyond the currentIndex
-          isCurrent = false;
-          if (isSkillLocked) {
-            isLocked = true;
-          } else if (currentIndex === -1) {
-            // no current (all completed) → unlocked
-            isLocked = false;
-          } else {
-            isLocked = idx > currentIndex;
-          }
-        }
+        const isCurrent = idx === currentIndex;
         return {
           _id: p._id,
           stepNumber: p.stepNumber,
           contentType: p.contentType,
           isCompleted,
           totalVideo: p.contentType === 'video' ? (videoCountMap.get(p._id.toString()) || 0) : null,
-          isLocked,
           isCurrent
         };
       });
-      previousSkillCompleted = isSkillCompleted;
       return {
         _id: skill._id,
         skillName: skill.skillName,
@@ -259,7 +235,6 @@ export const getChapterMapController = async (req, res, next) => {
         description: skill.description,
         order: skill.order,
         isCompleted: isSkillCompleted,
-        isLocked: isSkillLocked,
         progresses: progressesWithStatus
       };
     });

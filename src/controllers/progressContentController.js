@@ -3,6 +3,8 @@ import Video from '../models/video.schema.js';
 import Quiz from '../models/quiz.schema.js';
 import VideoWatch from '../models/videoWatch.schema.js';
 import QuizAttempt from '../models/quizAttempt.schema.js';
+import Skill from '../models/skill.schema.js';
+import UserActivity from '../models/userActivity.schema.js';
 // only need Video for this endpoint
 
 export const getContentByProgressId = async (req, res, next) => {
@@ -66,6 +68,40 @@ export const getContentByProgressId = async (req, res, next) => {
       const userId = req.user && (req.user.id || req.user._id);
       let result = pageItems.map(i => ({ ...i }));
 
+      // Compute whether THIS progress is locked for the current user
+      let isLocked = false;
+      if (userId) {
+        try {
+          const currentSkill = await Skill.findById(progress.skillId);
+          if (currentSkill) {
+            // 1) Check previous steps in the same skill
+            const prevSteps = await Progress.find({ skillId: currentSkill._id, stepNumber: { $lt: progress.stepNumber } });
+            if (prevSteps.length > 0) {
+              const completedPrev = await UserActivity.countDocuments({ userId, progressId: { $in: prevSteps.map(p => p._id) }, isCompleted: true });
+              if (completedPrev < prevSteps.length) isLocked = true;
+            }
+
+            // 2) If still not locked, check immediate previous skill completion
+            if (!isLocked && currentSkill.order > 1) {
+              const previousSkill = await Skill.findOne({ chapterId: currentSkill.chapterId, order: currentSkill.order - 1 });
+              if (previousSkill) {
+                const prevSkillProgresses = await Progress.find({ skillId: previousSkill._id });
+                if (prevSkillProgresses.length > 0) {
+                  const completedPrevSkill = await UserActivity.countDocuments({ userId, progressId: { $in: prevSkillProgresses.map(p => p._id) }, isCompleted: true });
+                  if (completedPrevSkill < prevSkillProgresses.length) isLocked = true;
+                }
+              }
+            }
+          }
+        } catch (e) {
+          // If any error occurs, default to not locked (avoid blocking content due to computation errors)
+          isLocked = false;
+        }
+      } else {
+        // no user -> treat as not locked for listing purposes (frontend can decide access)
+        isLocked = false;
+      }
+
       if (userId) {
         const videoIds = result.filter(r => r.type === 'video').map(r => r._id);
         const quizIds = result.filter(r => r.type === 'quiz').map(r => r._id);
@@ -82,15 +118,15 @@ export const getContentByProgressId = async (req, res, next) => {
         result = result.map(r => {
           if (r.type === 'video') {
             const w = watchMap.get(r._id.toString());
-            return Object.assign(r, { isCompleted: !!w });
+            return Object.assign(r, { isCompleted: !!w, isLocked });
           }
           if (r.type === 'quiz') {
-            return Object.assign(r, { isCompleted: !!hasAnyAttempt });
+            return Object.assign(r, { isCompleted: !!hasAnyAttempt, isLocked });
           }
-          return r;
+          return Object.assign(r, { isLocked });
         });
       } else {
-        result = result.map(r => Object.assign(r, { isCompleted: false }));
+        result = result.map(r => Object.assign(r, { isCompleted: false, isLocked }));
       }
 
       return res.status(200).json({ page, perPage, total, totalPages, content: result });
