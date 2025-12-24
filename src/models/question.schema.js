@@ -27,6 +27,8 @@ const QuestionSchema = new mongoose.Schema({
   // - text: free-text answer
   // - image: image-based choice
   questionType: { type: String, enum: ['single', 'multiple', 'text', 'image'], default: 'single' },
+  // detailType: optional string to describe a more specific subtype of the question
+  detailType: { type: String, required: false },
   // answer: either a numeric index (0-based) into `choices`, or an object { text }
   answer: { type: mongoose.Schema.Types.Mixed, required: true },
   hintVoice: { type: String, required: false },

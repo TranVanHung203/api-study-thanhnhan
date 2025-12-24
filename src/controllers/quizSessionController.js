@@ -59,15 +59,22 @@ export const startQuizSession = async (req, res, next) => {
       const selectedObjectIds = selectedIds.map(id =>
         (typeof id === 'string' || typeof id === 'number') ? new mongoose.Types.ObjectId(id) : id
       );
-      // count available questions of this type for this quiz, excluding already selected
-      const avail = await Question.countDocuments({ quizId: quiz._id, questionType: part.type, _id: { $nin: selectedObjectIds } });
-      if (avail < part.count) {
-        throw new BadRequestError(`Không đủ câu cho phần type='${part.type}' (cần ${part.count}, có ${avail})`);
+      // New behavior: use detailType (not questionType) to select questions.
+      // First check if there are any questions of this detailType at all for this quiz
+      const totalOfDetail = await Question.countDocuments({ quizId: quiz._id, detailType: part.type });
+      if (totalOfDetail === 0) {
+        throw new NotFoundError(`Không tìm thấy detailType='${part.type}' trong quiz này`);
       }
 
-      // sample `part.count` randomly from remaining pool of this type
+      // count available questions of this detailType for this quiz, excluding already selected
+      const avail = await Question.countDocuments({ quizId: quiz._id, detailType: part.type, _id: { $nin: selectedObjectIds } });
+      if (avail < part.count) {
+        throw new BadRequestError(`Không đủ câu cho phần detailType='${part.type}' (cần ${part.count}, có ${avail})`);
+      }
+
+      // sample `part.count` randomly from remaining pool of this detailType
       const sample = await Question.aggregate([
-        { $match: { quizId: quiz._id, questionType: part.type, _id: { $nin: selectedObjectIds } } },
+        { $match: { quizId: quiz._id, detailType: part.type, _id: { $nin: selectedObjectIds } } },
         { $sample: { size: part.count } },
         { $project: { _id: 1 } }
       ]);
@@ -117,16 +124,22 @@ export const getSessionQuestions = async (req, res, next) => {
     const end = start + perPage;
     const slice = session.questionIds.slice(start, end);
 
-    // fetch question docs
-    const questions = await Question.find({ _id: { $in: slice } }).sort({ order: 1 });
-    const questionsNoAnswer = questions.map(q => {
+    // fetch question docs and preserve the order as in session.questionIds
+    const questionDocs = await Question.find({ _id: { $in: slice } });
+    // Build a map from id -> doc for quick lookup
+    const questionMap = new Map();
+    for (const q of questionDocs) questionMap.set(String(q._id), q);
+
+    const questionsNoAnswer = slice.map(id => {
+      const q = questionMap.get(String(id));
+      if (!q) return null;
       const obj = q.toObject();
       if ('answer' in obj) delete obj.answer;
       if ('correctAnswer' in obj) delete obj.correctAnswer;
       return obj;
-    });
+    }).filter(Boolean);
 
-    return res.status(200).json({ page: p, perPage, total, totalPages, questions: questionsNoAnswer});
+    return res.status(200).json({ page: p, perPage, total, totalPages, questions: questionsNoAnswer });
   } catch (err) {
     next(err);
   }
