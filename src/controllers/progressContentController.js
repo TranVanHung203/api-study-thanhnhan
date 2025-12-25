@@ -129,7 +129,7 @@ export const getContentByProgressId = async (req, res, next) => {
         result = result.map(r => Object.assign(r, { isCompleted: false, isLocked }));
       }
 
-      return res.status(200).json({ page, perPage, total, totalPages, content: result });
+      return res.status(200).json({ page, perPage, total, totalPages, progressName: progress.progressName || null, content: result });
     }
 
     // For any other contentType, return 400
