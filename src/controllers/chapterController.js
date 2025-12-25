@@ -221,6 +221,7 @@ export const getChapterMapController = async (req, res, next) => {
         const isCurrent = idx === currentIndex;
         return {
           _id: p._id,
+             progressName: p.progressName || null,
           stepNumber: p.stepNumber,
           contentType: p.contentType,
           isCompleted,
