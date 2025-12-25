@@ -8,6 +8,7 @@ const ChoiceSchema = new mongoose.Schema({
 const QuestionSchema = new mongoose.Schema({
   quizId: { type: mongoose.Schema.Types.ObjectId, ref: 'Quiz', required: true },
   questionText: { type: String, required: false },
+  rawQuestion: { type: String, required: false, trim: true, default: null },
   questionVoice: { type: String, required: false },
   imageQuestion: { type: String, required: false },
   // choices: array of objects { text } - if a choice is an image, store the image URL string in `text`

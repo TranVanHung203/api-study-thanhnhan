@@ -71,12 +71,48 @@ router.post('/', createQuestionController);
 //  *     summary: Lấy câu hỏi (ẩn đáp án đúng) cho học sinh
 //  *     tags: [Questions]
 //  *     parameters:
-//  *       - in: path
-//  *         name: questionId
-//  *         required: true
-//  *         schema:
-//  *           type: string
-//  *     responses:
+//   *             properties:
+//   *               quizId:
+//   *                 type: string
+//   *               questionText:
+//   *                 type: string
+//   *               rawQuestion:
+//   *                 type: string
+//   *                 description: Original/raw question content before parsing
+//   *               options:
+//   *                 type: array
+//   *                 items:
+//   *                   type: string
+//   *               correctAnswer:
+//   *                 type: string
+//   *               hintText:
+//   *                 type: string
+//   *               order:
+//   *                 type: number
+// //  *       - in: path
+// //  *         name: questionId
+// //  *         required: true
+// //  *         schema:
+// //  *           type: string
+// //  *     responses:
+//   *     parameters:
+//   *       - in: path
+//   *         name: questionId
+//   *         required: true
+//   *         schema:
+//   *           type: string
+//   *     requestBody:
+//   *       required: true
+//   *       content:
+//   *         application/json:
+//   *           schema:
+//   *             type: object
+//   *             properties:
+//   *               questionText:
+//   *                 type: string
+//   *               rawQuestion:
+//   *                 type: string
+//   *                 description: Original/raw question content before parsing
 //  *       200:
 //  *         description: Câu hỏi (không có đáp án đúng)
 //  */

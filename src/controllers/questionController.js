@@ -44,6 +44,7 @@ export const createQuestionController = async (req, res, next) => {
     const {
       quizId,
       questionText,
+      rawQuestion,
       questionVoice,
       imageQuestion,
       choices,
@@ -73,6 +74,7 @@ export const createQuestionController = async (req, res, next) => {
     const question = new Question({
       quizId,
       questionText,
+      rawQuestion,
       questionVoice,
       imageQuestion,
       choices,
@@ -116,11 +118,11 @@ export const getQuestionForStudentController = async (req, res, next) => {
 export const updateQuestionController = async (req, res, next) => {
   try {
     const { questionId } = req.params;
-    const { questionText, questionVoice, imageQuestion, choices, answer, hintVoice, order } = req.body;
+    const { questionText, rawQuestion, questionVoice, imageQuestion, choices, answer, hintVoice, order } = req.body;
 
     const question = await Question.findByIdAndUpdate(
       questionId,
-      { questionText, questionVoice, imageQuestion, choices, answer, hintVoice, order },
+      { questionText, rawQuestion, questionVoice, imageQuestion, choices, answer, hintVoice, order },
       { new: true }
     );
 

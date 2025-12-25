@@ -86,9 +86,6 @@ export const startQuizSession = async (req, res, next) => {
     // create session with expiry (e.g., 2 hours) - expiresAt used by TTL
     const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000);
 
-    // remove any existing session for this user+progress
-    await QuizSession.deleteMany({ userId, progressId });
-
     const session = await QuizSession.create({ userId, progressId, quizId: quiz._id, questionIds, expiresAt });
 
     // Minimal response as requested
@@ -136,6 +133,7 @@ export const getSessionQuestions = async (req, res, next) => {
       const obj = q.toObject();
       if ('answer' in obj) delete obj.answer;
       if ('correctAnswer' in obj) delete obj.correctAnswer;
+      if('order' in obj) delete obj.order;
       return obj;
     }).filter(Boolean);
 
