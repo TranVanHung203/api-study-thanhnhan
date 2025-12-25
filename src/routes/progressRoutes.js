@@ -89,58 +89,27 @@ router.get('/:id/content', getContentByProgressId);
 
 
 
+
+
 /**
  * @swagger
  * /progress/{id}/quiz/start:
  *   post:
- *     summary: Create a quiz session for a progress (select questions by type and count)
+ *     summary: Tạo session quiz mới cho progress (hoặc dùng cấu hình đã lưu)
  *     tags: [Progress]
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
- *         description: Progress ID linked to quiz
+ *         description: Progress ID
  *         schema:
  *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               total:
- *                 type: integer
- *                 description: Total number of questions in the quiz
- *               parts:
- *                 type: array
- *                 description: List of parts (each specifies `type`, `count`, and `order`)
- *                 items:
- *                   type: object
- *                   properties:
- *                     type:
- *                       type: string
- *                       description: Question type to select (e.g. 'single', 'multiple', 'text', 'image')
- *                     count:
- *                       type: integer
- *                       description: Number of questions for this part
- *                     order:
- *                       type: integer
- *                       description: Order of this part in the quiz
- *           example:
- *             total: 15
- *             parts:
- *               - type: single
- *                 count: 10
- *                 order: 1
- *               - type: multiple
- *                 count: 5
- *                 order: 2
+ *     description: Creates a new quiz session for the progress using the stored QuizConfig for this progress. No request body required.
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       201:
- *         description: Quiz session created
+ *         description: Session created
  *         content:
  *           application/json:
  *             schema:
@@ -150,42 +119,34 @@ router.get('/:id/content', getContentByProgressId);
  *                   type: string
  *                 total:
  *                   type: integer
- *             example:
- *               sessionId: "64f8a2f6c9a1b2d3e4f56789"
- *               total: 15
  *       400:
- *         description: Invalid request (e.g. sum of parts does not match total or not enough questions)
- *       401:
- *         description: Unauthorized
- *       500:
- *         description: Server error
+ *         description: Bad request (missing total/parts and no config)
  */
-
 router.post('/:id/quiz/start', startQuizSession);
 
 
-/**
- * @swagger
- * /progress/{id}/quiz/config:
- *   get:
- *     summary: Lấy cấu hình chọn câu cho quiz của một progress
- *     tags: [Progress]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         description: Progress ID cần lấy cấu hình
- *         schema:
- *           type: string
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Quiz config
- *       404:
- *         description: Không tìm thấy cấu hình
- */
-router.get('/:id/quiz/config', getQuizConfigByProgress);
+// /**
+//  * @swagger
+//  * /progress/{id}/quiz/config:
+//  *   get:
+//  *     summary: Lấy cấu hình chọn câu cho quiz của một progress
+//  *     tags: [Progress]
+//  *     parameters:
+//  *       - in: path
+//  *         name: id
+//  *         required: true
+//  *         description: Progress ID cần lấy cấu hình
+//  *         schema:
+//  *           type: string
+//  *     security:
+//  *       - bearerAuth: []
+//  *     responses:
+//  *       200:
+//  *         description: Quiz config
+//  *       404:
+//  *         description: Không tìm thấy cấu hình
+//  */
+// router.get('/:id/quiz/config', getQuizConfigByProgress);
 
 
 // /**

@@ -2,6 +2,7 @@ import QuizAttempt from '../models/quizAttempt.schema.js';
 import QuizSession from '../models/quizSession.schema.js';
 import Quiz from '../models/quiz.schema.js';
 import Question from '../models/question.schema.js';
+import QuizConfig from '../models/quizConfig.schema.js';
 import mongoose from 'mongoose';
 
 import UserActivity from '../models/userActivity.schema.js';
@@ -24,8 +25,11 @@ const idEquals = (a, b) => {
 export const startQuizSession = async (req, res, next) => {
   try {
     const { id: progressId } = req.params; // progressId
-    // Expect body: { total: number, parts: [{ type, count, order }] }
-    const { total, parts } = req.body || {};
+    // We no longer accept total/parts in the request body; always use stored QuizConfig for this progress
+    const config = await QuizConfig.findOne({ progressId });
+    if (!config) throw new BadRequestError('Không tìm thấy cấu hình quiz cho progress này');
+    const total = config.total;
+    const parts = config.parts;
     const userId = req.user && (req.user.id || req.user._id);
     if (!userId) throw new UnauthorizedError('Unauthorized');
 
@@ -33,9 +37,16 @@ export const startQuizSession = async (req, res, next) => {
     const quiz = await Quiz.findOne({ progressId });
     if (!quiz) throw new NotFoundError('Không tìm thấy quiz cho progress này');
 
-    // New flow: require `total` and `parts` in request body (no fallback to old ?count)
+    // New flow: require `total` and `parts` in request body or fallback to QuizConfig for this progress
     if (!total || !Array.isArray(parts) || parts.length === 0) {
-      throw new BadRequestError('Yêu cầu body chứa `total` và `parts` (mảng các phần)');
+      // try to load quiz config for this progress
+      const config = await QuizConfig.findOne({ progressId });
+      if (config) {
+        total = config.total;
+        parts = config.parts;
+      } else {
+        throw new BadRequestError('Yêu cầu body chứa `total` và `parts` (mảng các phần) hoặc cấu hình quiz cho progress này');
+      }
     }
 
     // Validate parts: each must have type (string), count (positive int), order (int)
