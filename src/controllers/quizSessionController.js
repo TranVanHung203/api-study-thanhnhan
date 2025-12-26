@@ -393,15 +393,18 @@ export const submitQuizSession = async (req, res, next) => {
 
     // existingActivity found
     if (existingActivity.isCompleted) {
-      // Already completed before — do nothing (keep original completed state)
+      // Already completed before — do not re-award bonus, but return the
+      // freshly computed result for transparency (so client always sees
+      // what just happened), and preserve previous bonusEarned value.
+      const prevBonus = existingActivity.bonusEarned || 0;
       await QuizSession.deleteOne({ _id: sessionId });
       return res.status(200).json({
-        isCorrect: true,
-        message: 'Quiz đã hoàn thành trước đó',
-        bonusEarned: existingActivity.bonusEarned || 0,
-        correctCount: existingActivity.score || correctCount,
+        isCorrect: percentCorrect >= 50,
+        message: 'Quiz đã hoàn thành trước đó (đã có điểm hoàn thành). Kết quả lần làm mới được ghi nhận nhưng điểm thưởng không được cộng thêm).',
+        bonusEarned: prevBonus,
+        correctCount,
         totalQuestions,
-        percentCorrect: existingActivity.score || percentCorrect,
+        percentCorrect,
         isCheck: true
       });
     }
