@@ -104,21 +104,21 @@ export const getContentByProgressId = async (req, res, next) => {
             ========================== */
             if (!unlockedByLater) {
 
-              // 2.1️⃣ Check progress trước trong cùng skill
-              const prevSteps = await Progress.find({
+              // 2.1️⃣ Check only the immediate previous progress in the same skill
+              const immediatePrev = await Progress.findOne({
                 skillId: currentSkill._id,
-                stepNumber: { $lt: progress.stepNumber }
+                stepNumber: progress.stepNumber - 1
               }).select('_id');
 
-              if (prevSteps.length > 0) {
-                const completedPrev = await UserActivity.countDocuments({
+              if (immediatePrev) {
+                const immediateCompleted = await UserActivity.exists({
                   userId,
-                  progressId: { $in: prevSteps.map(p => p._id) },
+                  progressId: immediatePrev._id,
                   isCompleted: true
                 });
 
-                if (completedPrev < prevSteps.length) {
-                  isLocked = true; // 🔒 thiếu progress trước
+                if (!immediateCompleted) {
+                  isLocked = true; // 🔒 immediate previous progress not completed
                 }
               }
 
