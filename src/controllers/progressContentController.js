@@ -70,37 +70,94 @@ export const getContentByProgressId = async (req, res, next) => {
 
       // Compute whether THIS progress is locked for the current user
       let isLocked = false;
+
       if (userId) {
         try {
           const currentSkill = await Skill.findById(progress.skillId);
           if (currentSkill) {
-            // 1) Check previous steps in the same skill
-            const prevSteps = await Progress.find({ skillId: currentSkill._id, stepNumber: { $lt: progress.stepNumber } });
-            if (prevSteps.length > 0) {
-              const completedPrev = await UserActivity.countDocuments({ userId, progressId: { $in: prevSteps.map(p => p._id) }, isCompleted: true });
-              if (completedPrev < prevSteps.length) isLocked = true;
+
+            /* =========================
+              1️⃣ KIỂM TRA HỌC VƯỢT
+            ========================== */
+            let unlockedByLater = false;
+
+            const laterProgresses = await Progress.find({
+              skillId: currentSkill._id,
+              stepNumber: { $gt: progress.stepNumber }
+            }).select('_id');
+
+            if (laterProgresses.length > 0) {
+              const laterActivity = await UserActivity.findOne({
+                userId,
+                progressId: { $in: laterProgresses.map(p => p._id) }
+              });
+
+              if (laterActivity) {
+                unlockedByLater = true;
+                isLocked = false; // 🔓 học vượt → mở luôn
+              }
             }
 
-            // 2) If still not locked, check immediate previous skill completion
-            if (!isLocked && currentSkill.order > 1) {
-              const previousSkill = await Skill.findOne({ chapterId: currentSkill.chapterId, order: currentSkill.order - 1 });
-              if (previousSkill) {
-                const prevSkillProgresses = await Progress.find({ skillId: previousSkill._id });
-                if (prevSkillProgresses.length > 0) {
-                  const completedPrevSkill = await UserActivity.countDocuments({ userId, progressId: { $in: prevSkillProgresses.map(p => p._id) }, isCompleted: true });
-                  if (completedPrevSkill < prevSkillProgresses.length) isLocked = true;
+            /* =========================
+              2️⃣ CHỈ CHECK KHÓA
+              KHI KHÔNG HỌC VƯỢT
+            ========================== */
+            if (!unlockedByLater) {
+
+              // 2.1️⃣ Check progress trước trong cùng skill
+              const prevSteps = await Progress.find({
+                skillId: currentSkill._id,
+                stepNumber: { $lt: progress.stepNumber }
+              }).select('_id');
+
+              if (prevSteps.length > 0) {
+                const completedPrev = await UserActivity.countDocuments({
+                  userId,
+                  progressId: { $in: prevSteps.map(p => p._id) },
+                  isCompleted: true
+                });
+
+                if (completedPrev < prevSteps.length) {
+                  isLocked = true; // 🔒 thiếu progress trước
+                }
+              }
+
+              // 2.2️⃣ Check skill trước (nếu chưa bị khóa)
+              if (!isLocked && currentSkill.order > 1) {
+                const previousSkill = await Skill.findOne({
+                  chapterId: currentSkill.chapterId,
+                  order: currentSkill.order - 1
+                });
+
+                if (previousSkill) {
+                  const prevSkillProgresses = await Progress.find({
+                    skillId: previousSkill._id
+                  }).select('_id');
+
+                  if (prevSkillProgresses.length > 0) {
+                    const completedPrevSkill = await UserActivity.countDocuments({
+                      userId,
+                      progressId: { $in: prevSkillProgresses.map(p => p._id) },
+                      isCompleted: true
+                    });
+
+                    if (completedPrevSkill < prevSkillProgresses.length) {
+                      isLocked = true; // 🔒 chưa hoàn thành skill trước
+                    }
+                  }
                 }
               }
             }
           }
         } catch (e) {
-          // If any error occurs, default to not locked (avoid blocking content due to computation errors)
+          // Fail-safe: có lỗi thì KHÔNG khóa
           isLocked = false;
         }
       } else {
-        // no user -> treat as not locked for listing purposes (frontend can decide access)
+        // Không có user → không khóa
         isLocked = false;
       }
+
 
       if (userId) {
         const videoIds = result.filter(r => r.type === 'video').map(r => r._id);
