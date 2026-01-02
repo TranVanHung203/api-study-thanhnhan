@@ -130,19 +130,20 @@ export const getContentByProgressId = async (req, res, next) => {
                 });
 
                 if (previousSkill) {
-                  const prevSkillProgresses = await Progress.find({
+                  // Find the final progress in the previous skill (highest stepNumber)
+                  const lastPrevProgress = await Progress.findOne({
                     skillId: previousSkill._id
-                  }).select('_id');
+                  }).sort({ stepNumber: -1 }).select('_id');
 
-                  if (prevSkillProgresses.length > 0) {
-                    const completedPrevSkill = await UserActivity.countDocuments({
+                  if (lastPrevProgress) {
+                    const lastCompleted = await UserActivity.exists({
                       userId,
-                      progressId: { $in: prevSkillProgresses.map(p => p._id) },
+                      progressId: lastPrevProgress._id,
                       isCompleted: true
                     });
 
-                    if (completedPrevSkill < prevSkillProgresses.length) {
-                      isLocked = true; // 🔒 chưa hoàn thành skill trước
+                    if (!lastCompleted) {
+                      isLocked = true; // 🔒 chưa hoàn thành progress cuối của skill trước
                     }
                   }
                 }
