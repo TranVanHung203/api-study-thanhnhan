@@ -22,31 +22,26 @@ const idEquals = (a, b) => {
 };
 
 // Start a quiz session: select `count` random questions from a quiz under the given progress
+// Optimized: parallel fetch, single aggregate query, in-memory sampling
 export const startQuizSession = async (req, res, next) => {
   try {
-    const { id: progressId } = req.params; // progressId
-    // We no longer accept total/parts in the request body; always use stored QuizConfig for this progress
-    const config = await QuizConfig.findOne({ progressId });
-    if (!config) throw new BadRequestError('Không tìm thấy cấu hình quiz cho progress này');
-    const total = config.total;
-    const parts = config.parts;
+    const { id: progressId } = req.params;
     const userId = req.user && (req.user.id || req.user._id);
     if (!userId) throw new UnauthorizedError('Unauthorized');
 
-    // Find the quiz associated with this progressId
-    const quiz = await Quiz.findOne({ progressId });
+    // Parallel fetch: QuizConfig and Quiz at the same time
+    const [config, quiz] = await Promise.all([
+      QuizConfig.findOne({ progressId }),
+      Quiz.findOne({ progressId })
+    ]);
+
+    if (!config) throw new BadRequestError('Không tìm thấy cấu hình quiz cho progress này');
     if (!quiz) throw new NotFoundError('Không tìm thấy quiz cho progress này');
 
-    // New flow: require `total` and `parts` in request body or fallback to QuizConfig for this progress
+    const { total, parts } = config;
+
     if (!total || !Array.isArray(parts) || parts.length === 0) {
-      // try to load quiz config for this progress
-      const config = await QuizConfig.findOne({ progressId });
-      if (config) {
-        total = config.total;
-        parts = config.parts;
-      } else {
-        throw new BadRequestError('Yêu cầu body chứa `total` và `parts` (mảng các phần) hoặc cấu hình quiz cho progress này');
-      }
+      throw new BadRequestError('Cấu hình quiz không hợp lệ: thiếu `total` hoặc `parts`');
     }
 
     // Validate parts: each must have type (string), count (positive int), order (int)
@@ -61,46 +56,64 @@ export const startQuizSession = async (req, res, next) => {
       throw new BadRequestError('Tổng số câu các phần phải bằng `total`');
     }
 
-    // Process parts in order (by `order`) and sample randomly within each type
+    // Sort parts by order
     const partsSorted = [...parts].sort((a, b) => a.order - b.order);
+    
+    // Get unique detailTypes needed
+    const detailTypes = [...new Set(partsSorted.map(p => p.type))];
+    
+    // Single aggregate query: fetch all question IDs grouped by detailType
+    // This replaces multiple countDocuments + aggregate calls per part
+    const questionsByType = await Question.aggregate([
+      { $match: { quizId: quiz._id, detailType: { $in: detailTypes } } },
+      { $group: { _id: '$detailType', ids: { $push: '$_id' } } }
+    ]);
+
+    // Build a map of detailType -> array of question IDs
+    const typeIdsMap = new Map();
+    for (const item of questionsByType) {
+      typeIdsMap.set(item._id, item.ids);
+    }
+
+    // Validate availability and perform in-memory random sampling
     const selectedIds = [];
+    const usedIdSet = new Set();
 
     for (const part of partsSorted) {
-      // Ensure all ids in selectedIds are ObjectId
-      const selectedObjectIds = selectedIds.map(id =>
-        (typeof id === 'string' || typeof id === 'number') ? new mongoose.Types.ObjectId(id) : id
-      );
-      // New behavior: use detailType (not questionType) to select questions.
-      // First check if there are any questions of this detailType at all for this quiz
-      const totalOfDetail = await Question.countDocuments({ quizId: quiz._id, detailType: part.type });
-      if (totalOfDetail === 0) {
+      const allIds = typeIdsMap.get(part.type);
+      
+      if (!allIds || allIds.length === 0) {
         throw new NotFoundError(`Không tìm thấy detailType='${part.type}' trong quiz này`);
       }
 
-      // count available questions of this detailType for this quiz, excluding already selected
-      const avail = await Question.countDocuments({ quizId: quiz._id, detailType: part.type, _id: { $nin: selectedObjectIds } });
-      if (avail < part.count) {
-        throw new BadRequestError(`Không đủ câu cho phần detailType='${part.type}' (cần ${part.count}, có ${avail})`);
+      // Filter out already used ids (for cases where same detailType appears in multiple parts)
+      const availableIds = allIds.filter(id => !usedIdSet.has(String(id)));
+      
+      if (availableIds.length < part.count) {
+        throw new BadRequestError(`Không đủ câu cho phần detailType='${part.type}' (cần ${part.count}, có ${availableIds.length})`);
       }
 
-      // sample `part.count` randomly from remaining pool of this detailType
-      const sample = await Question.aggregate([
-        { $match: { quizId: quiz._id, detailType: part.type, _id: { $nin: selectedObjectIds } } },
-        { $sample: { size: part.count } },
-        { $project: { _id: 1 } }
-      ]);
-      for (const s of sample) selectedIds.push(s._id);
+      // Fisher-Yates shuffle and take first `part.count` elements (in-memory random sampling)
+      const shuffled = [...availableIds];
+      const n = shuffled.length;
+      const sampleSize = Math.min(part.count, n);
+      for (let i = 0; i < sampleSize; i++) {
+        const j = i + Math.floor(Math.random() * (n - i));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      const sampled = shuffled.slice(0, sampleSize);
+
+      for (const id of sampled) {
+        selectedIds.push(id);
+        usedIdSet.add(String(id));
+      }
     }
 
-    const questionIds = selectedIds;
-
-    // create session with expiry (e.g., 2 hours) - expiresAt used by TTL
+    // Create session with expiry (2 hours) - expiresAt used by TTL
     const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000);
+    const session = await QuizSession.create({ userId, progressId, quizId: quiz._id, questionIds: selectedIds, expiresAt });
 
-    const session = await QuizSession.create({ userId, progressId, quizId: quiz._id, questionIds, expiresAt });
-
-    // Minimal response as requested
-    return res.status(201).json({ sessionId: session._id, total: questionIds.length });
+    return res.status(201).json({ sessionId: session._id, total: selectedIds.length });
   } catch (err) {
     next(err);
   }
