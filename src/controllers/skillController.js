@@ -1,7 +1,7 @@
 import Skill from '../models/skill.schema.js';
 
 // Lấy danh sách skills của một chapter
-export const getSkillsByChapterController = async (req, res) => {
+export const getSkillsByChapterController = async (req, res, next) => {
   try {
     const { chapterId } = req.params;
 
@@ -10,14 +10,14 @@ export const getSkillsByChapterController = async (req, res) => {
 
     return res.status(200).json({ skills });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Tạo skill mới
-export const createSkillController = async (req, res) => {
+export const createSkillController = async (req, res, next) => {
   try {
-    const { chapterId, skillName, description, order } = req.body;
+    const { chapterId, skillName, description, order, skillVoice } = req.body;
 
     if (!chapterId || !skillName) {
       return res.status(400).json({ message: 'chapterId và skillName là bắt buộc' });
@@ -34,7 +34,8 @@ export const createSkillController = async (req, res) => {
       chapterId,
       skillName,
       description,
-      order: skillOrder
+      order: skillOrder,
+      skillVoice: skillVoice || null
     });
 
     await skill.save();
@@ -44,19 +45,19 @@ export const createSkillController = async (req, res) => {
       skill
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Cập nhật skill
-export const updateSkillController = async (req, res) => {
+export const updateSkillController = async (req, res, next) => {
   try {
     const { skillId } = req.params;
-    const { skillName, description, order } = req.body;
+    const { skillName, description, order, skillVoice } = req.body;
 
     const skill = await Skill.findByIdAndUpdate(
       skillId,
-      { skillName, description, order },
+      { skillName, description, order, skillVoice },
       { new: true }
     );
 
@@ -65,12 +66,12 @@ export const updateSkillController = async (req, res) => {
       skill
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Xóa skill
-export const deleteSkillController = async (req, res) => {
+export const deleteSkillController = async (req, res, next) => {
   try {
     const { skillId } = req.params;
 
@@ -80,6 +81,6 @@ export const deleteSkillController = async (req, res) => {
       message: 'Xóa skill thành công'
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };

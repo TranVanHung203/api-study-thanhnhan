@@ -2,6 +2,7 @@ import express from 'express';
 import {
   recordUserActivityController,
   getUserActivityHistoryController,
+  getProgressActivityHistoryController,
   getSkillProgressController,
   getClassProgressController
 } from '../controllers/userActivityController.js';
@@ -11,12 +12,17 @@ const router = express.Router();
 
 router.all('*', authToken);
 
+
+
+
+
+
+
 /**
  * @swagger
  * /activities:
  *   post:
- *     summary: Ghi nhận hoạt động của user (video, exercise, quiz)
- *     description: contentType được tự động lấy từ progress, không cần truyền
+ *     summary: Ghi nhận hoạt động của user (video completion)
  *     tags: [Activities]
  *     security:
  *       - bearerAuth: []
@@ -26,98 +32,128 @@ router.all('*', authToken);
  *         application/json:
  *           schema:
  *             type: object
- *             required:
- *               - progressId
  *             properties:
  *               progressId:
  *                 type: string
- *                 description: ID của progress step
- *                 example: "657a1b2c3d4e5f6a7b8c9d0e"
+ *                 description: ID của progress
+ *               videoId:
+ *                 type: string
+ *                 description: ID của video để đánh dấu đã xem (bắt buộc khi contentType === video)
  *               isCompleted:
  *                 type: boolean
- *                 description: Đã hoàn thành hay chưa (bắt buộc cho VIDEO/QUIZ, không cần cho EXERCISE)
- *                 example: true
- *               userAnswer:
- *                 type: array
- *                 description: Đáp án của user (bắt buộc cho EXERCISE)
- *                 items:
- *                   type: string
- *                 example: ["apple1", "apple2", "apple3"]
- *               score:
- *                 type: number
- *                 description: Điểm số (bắt buộc cho QUIZ, tuỳ chọn cho EXERCISE)
- *                 example: 85
- *           examples:
- *             video:
- *               summary: Ghi nhận VIDEO
- *               value:
- *                 progressId: "657a1b2c3d4e5f6a7b8c9d0e"
- *                 isCompleted: true
- *             exercise:
- *               summary: Ghi nhận EXERCISE dạng đếm kéo thả
- *               value:
- *                 progressId: "657a1b2c3d4e5f6a7b8c9d0e"
- *                 userAnswer: ["apple1", "apple2", "apple3"]
- *             quiz:
- *               summary: Ghi nhận QUIZ
- *               value:
- *                 progressId: "657a1b2c3d4e5f6a7b8c9d0e"
- *                 score: 80
- *                 isCompleted: true
+ *                 description: Gửi true để ghi nhận đã xem
+ *             required:
+ *               - progressId
+ *               - isCompleted
+ *             description: |
+ *               If the progress contains multiple videos, `videoId` is required. If the progress has exactly one video, `videoId` may be omitted and the server will infer it.
  *     responses:
+ *       200:
+ *         description: Video marked watched (not all videos completed yet)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 watchedCount:
+ *                   type: integer
+ *                 totalVideos:
+ *                   type: integer
+ *                 completed:
+ *                   type: boolean
  *       201:
- *         description: Ghi nhận thành công
- *       400:
- *         description: Cần hoàn thành step trước hoặc đã hoàn thành rồi
+ *         description: Progress completed (all videos watched), returns created UserActivity and bonus
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 userActivity:
+ *                   type: object
+ *                 bonusEarned:
+ *                   type: integer
  */
 router.post('/', recordUserActivityController);
+// /**
+//  * @swagger
+//  * /activities/history:
+//  *   get:
+//  *     summary: Lấy lịch sử hoạt động của user
+//  *     tags: [Activities]
+//  *     responses:
+//  *       200:
+//  *         description: Lịch sử hoạt động
+//  */
+// router.get('/history', getUserActivityHistoryController);
 
 /**
  * @swagger
- * /activities/history:
+ * /activities/progress/{progressId}/history:
  *   get:
- *     summary: Lấy lịch sử hoạt động của user
- *     tags: [Activities]
- *     responses:
- *       200:
- *         description: Lịch sử hoạt động
- */
-router.get('/history', getUserActivityHistoryController);
-
-/**
- * @swagger
- * /activities/skill/{skillId}/progress:
- *   get:
- *     summary: Lấy tiến độ hoàn thành của một kỹ năng
- *     tags: [Activities]
- *     parameters:
- *       - in: path
- *         name: skillId
- *         required: true
- *         schema:
- *           type: string
- *     responses:
- *       200:
- *         description: Tiến độ hoàn thành
- */
-router.get('/skill/:skillId/progress', getSkillProgressController);
-
-/**
- * @swagger
- * /activities/class/{classId}/progress:
- *   get:
- *     summary: Lấy tiến độ hoàn thành của cả lớp
+ *     summary: Lấy lịch sử hoạt động cho một progress cụ thể của quiz 
  *     tags: [Activities]
  *     parameters:
  *       - in: path
- *         name: classId
+ *         name: progressId
  *         required: true
  *         schema:
  *           type: string
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *         description: Số trang (mặc định 1)
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *         description: Số item mỗi trang (mặc định 20, tối đa 100)
  *     responses:
  *       200:
- *         description: Tiến độ lớp
+ *         description: Lịch sử hoạt động của progress
  */
-router.get('/class/:classId/progress', getClassProgressController);
+router.get('/progress/:progressId/history', getProgressActivityHistoryController);
+
+
+
+// /**
+//  * @swagger
+//  * /activities/skill/{skillId}/progress:
+//  *   get:
+//  *     summary: Lấy tiến độ hoàn thành của một kỹ năng
+//  *     tags: [Activities]
+//  *     parameters:
+//  *       - in: path
+//  *         name: skillId
+//  *         required: true
+//  *         schema:
+//  *           type: string
+//  *     responses:
+//  *       200:
+//  *         description: Tiến độ hoàn thành
+//  */
+// router.get('/skill/:skillId/progress', getSkillProgressController);
+
+// /**
+//  * @swagger
+//  * /activities/class/{classId}/progress:
+//  *   get:
+//  *     summary: Lấy tiến độ hoàn thành của cả lớp
+//  *     tags: [Activities]
+//  *     parameters:
+//  *       - in: path
+//  *         name: classId
+//  *         required: true
+//  *         schema:
+//  *           type: string
+//  *     responses:
+//  *       200:
+//  *         description: Tiến độ lớp
+//  */
+// router.get('/class/:classId/progress', getClassProgressController);
 
 export default router;

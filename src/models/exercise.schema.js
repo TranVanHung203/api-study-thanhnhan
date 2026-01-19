@@ -44,6 +44,10 @@ const ExerciseSchema = new mongoose.Schema({
     type: Number, 
     default: 10 
   },
+  progressId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Progress'
+  },
   createdAt: { 
     type: Date, 
     default: Date.now 

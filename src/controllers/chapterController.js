@@ -2,9 +2,10 @@ import Chapter from '../models/chapter.schema.js';
 import Skill from '../models/skill.schema.js';
 import Progress from '../models/progress.schema.js';
 import UserActivity from '../models/userActivity.schema.js';
+import Video from '../models/video.schema.js';
 
 // Tạo chapter mới
-export const createChapterController = async (req, res) => {
+export const createChapterController = async (req, res, next) => {
   try {
     const { classId, chapterName, description, order } = req.body;
 
@@ -33,12 +34,12 @@ export const createChapterController = async (req, res) => {
       chapter
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Lấy tất cả chapters của một class
-export const getChaptersByClassController = async (req, res) => {
+export const getChaptersByClassController = async (req, res, next) => {
   try {
     const { classId } = req.params;
 
@@ -46,12 +47,12 @@ export const getChaptersByClassController = async (req, res) => {
 
     return res.status(200).json({ chapters });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Lấy chi tiết chapter
-export const getChapterByIdController = async (req, res) => {
+export const getChapterByIdController = async (req, res, next) => {
   try {
     const { id } = req.params;
 
@@ -63,12 +64,12 @@ export const getChapterByIdController = async (req, res) => {
 
     return res.status(200).json({ chapter });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Cập nhật chapter
-export const updateChapterController = async (req, res) => {
+export const updateChapterController = async (req, res, next) => {
   try {
     const { id } = req.params;
     const { chapterName, description, order } = req.body;
@@ -88,12 +89,12 @@ export const updateChapterController = async (req, res) => {
       chapter
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Xóa chapter
-export const deleteChapterController = async (req, res) => {
+export const deleteChapterController = async (req, res, next) => {
   try {
     const { id } = req.params;
 
@@ -108,14 +109,14 @@ export const deleteChapterController = async (req, res) => {
 
     return res.status(200).json({ message: 'Xóa chapter thành công' });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // =====================================================
 // API CHÍNH: Lấy map chapter với trạng thái học của user
 // =====================================================
-export const getChapterMapController = async (req, res) => {
+export const getChapterMapController = async (req, res, next) => {
   try {
     const { chapterId } = req.params;
     const userId = req.user.id;
@@ -176,6 +177,20 @@ export const getChapterMapController = async (req, res) => {
       skillCompletedMap.set(skill._id.toString(), completedAll);
     }
 
+    // Precompute number of videos per progress (for progresses that reference videos)
+    const videoCountMap = new Map();
+    try {
+      if (progressIds && progressIds.length > 0) {
+        const agg = await Video.aggregate([
+          { $match: { progressId: { $in: progressIds } } },
+          { $group: { _id: '$progressId', count: { $sum: 1 } } }
+        ]);
+        for (const a of agg) videoCountMap.set(String(a._id), a.count);
+      }
+    } catch (e) {
+      // if aggregation fails for any reason, we silently ignore and leave map empty
+    }
+
     // Now determine current index: the first index > lastCompletedIndex where its skill is not locked
     let currentIndex = -1;
     // first find first skill that is not completed (in order)
@@ -195,55 +210,32 @@ export const getChapterMapController = async (req, res) => {
       }
     }
 
-    // Build skillsWithStatus using computed states
-    let previousSkillCompleted = true;
+    // Build skillsWithStatus using computed states (removed isLocked fields)
     const skillsWithStatus = skills.map(skill => {
       const skillProgresses = orderedProgresses.filter(p => p.skillId.toString() === skill._id.toString());
       const isSkillCompleted = skillCompletedMap.get(skill._id.toString()) || false;
-      const isSkillLocked = !previousSkillCompleted;
       const progressesWithStatus = skillProgresses.map(p => {
         const st = progressStateById.get(p._id.toString()) || { isCompleted: false, index: -1 };
         const idx = st.index;
         const isCompleted = st.isCompleted;
-        let isCurrent = false;
-        let isLocked = false;
-        if (idx === currentIndex) {
-          isCurrent = true;
-          isLocked = false;
-        } else if (idx <= lastCompletedIndex) {
-          isCurrent = false;
-          isLocked = false;
-        } else {
-          // idx > lastCompletedIndex
-          // locked if skill is locked or this progress is beyond the currentIndex
-          isCurrent = false;
-          if (isSkillLocked) {
-            isLocked = true;
-          } else if (currentIndex === -1) {
-            // no current (all completed) → unlocked
-            isLocked = false;
-          } else {
-            isLocked = idx > currentIndex;
-          }
-        }
+        const isCurrent = idx === currentIndex;
         return {
           _id: p._id,
+             progressName: p.progressName || null,
           stepNumber: p.stepNumber,
           contentType: p.contentType,
-          contentId: p.contentId,
           isCompleted,
-          isLocked,
+          totalVideo: p.contentType === 'video' ? (videoCountMap.get(p._id.toString()) || 0) : null,
           isCurrent
         };
       });
-      previousSkillCompleted = isSkillCompleted;
       return {
         _id: skill._id,
         skillName: skill.skillName,
+        skillVoice: skill.skillVoice || null,
         description: skill.description,
         order: skill.order,
         isCompleted: isSkillCompleted,
-        isLocked: isSkillLocked,
         progresses: progressesWithStatus
       };
     });
@@ -258,14 +250,14 @@ export const getChapterMapController = async (req, res) => {
       skills: skillsWithStatus
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Chèn skill mới vào giữa (reorder)
-export const insertSkillController = async (req, res) => {
+export const insertSkillController = async (req, res, next) => {
   try {
-    const { chapterId, skillName, description, afterOrder } = req.body;
+    const { chapterId, skillName, description, afterOrder, skillVoice } = req.body;
 
     if (!chapterId || !skillName) {
       return res.status(400).json({ message: 'chapterId và skillName là bắt buộc' });
@@ -286,7 +278,8 @@ export const insertSkillController = async (req, res) => {
       chapterId,
       skillName,
       description,
-      order: newOrder
+      order: newOrder,
+      skillVoice: skillVoice || null
     });
 
     await skill.save();
@@ -296,12 +289,12 @@ export const insertSkillController = async (req, res) => {
       skill
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Chèn progress mới vào giữa (reorder)
-export const insertProgressController = async (req, res) => {
+export const insertProgressController = async (req, res, next) => {
   try {
     const { skillId, contentType, contentId, afterStepNumber } = req.body;
 
@@ -332,22 +325,29 @@ export const insertProgressController = async (req, res) => {
       { $inc: { stepNumber: 1 } }
     );
 
-    // 2. Tạo progress mới
+    // 2. Tạo progress mới (không lưu contentId trên Progress)
     const newStepNumber = (afterStepNumber || 0) + 1;
     const progress = new Progress({
       skillId,
       stepNumber: newStepNumber,
-      contentType,
-      contentId
+      contentType
     });
 
     await progress.save();
 
+    // Link content -> progress (set progressId trên content document)
+    contentDoc.progressId = progress._id;
+    await contentDoc.save();
+
+    // Return compatibility payload including contentId
+    const cp = progress.toObject();
+    cp.contentId = contentDoc._id;
+
     return res.status(201).json({
       message: 'Chèn progress thành công',
-      progress
+      progress: cp
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };

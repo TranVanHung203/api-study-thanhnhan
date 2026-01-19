@@ -2,17 +2,22 @@ import Video from '../models/video.schema.js';
 import cloudinary from '../config/cloudinaryConfig.js';
 
 // Lấy danh sách videos
-export const getVideosController = async (req, res) => {
+export const getVideosController = async (req, res, next) => {
   try {
     const videos = await Video.find();
-    return res.status(200).json({ videos });
+    const out = videos.map(v => {
+      const o = v.toObject ? v.toObject() : JSON.parse(JSON.stringify(v));
+      delete o.duration;
+      return o;
+    });
+    return res.status(200).json({ videos: out });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Lấy video theo ID
-export const getVideoByIdController = async (req, res) => {
+export const getVideoByIdController = async (req, res, next) => {
   try {
     const { videoId } = req.params;
     const video = await Video.findById(videoId);
@@ -20,17 +25,18 @@ export const getVideoByIdController = async (req, res) => {
     if (!video) {
       return res.status(404).json({ message: 'Video không tồn tại' });
     }
-    
-    return res.status(200).json({ video });
+    const out = video.toObject ? video.toObject() : JSON.parse(JSON.stringify(video));
+    delete out.duration;
+    return res.status(200).json({ video: out });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Upload video lên Cloudinary và tạo record
-export const createVideoController = async (req, res) => {
+export const createVideoController = async (req, res, next) => {
   try {
-    const { title, description } = req.body;
+    const { title, description, voiceDescription } = req.body;
 
     if (!req.file) {
       return res.status(400).json({ message: 'Vui lòng upload file video' });
@@ -55,34 +61,36 @@ export const createVideoController = async (req, res) => {
     const video = new Video({
       title,
       url: uploadResult.secure_url,
-      duration: Math.round(uploadResult.duration || 0),
       description,
+      voiceDescription: voiceDescription || null,
       cloudinaryPublicId: uploadResult.public_id
     });
 
     await video.save();
 
+    const out = video.toObject ? video.toObject() : JSON.parse(JSON.stringify(video));
+    delete out.duration;
     return res.status(201).json({
       message: 'Upload video thành công',
-      video
+      video: out
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Cập nhật video (có thể upload video mới)
-export const updateVideoController = async (req, res) => {
+export const updateVideoController = async (req, res, next) => {
   try {
     const { videoId } = req.params;
-    const { title, description } = req.body;
+    const { title, description, voiceDescription } = req.body;
 
     const existingVideo = await Video.findById(videoId);
     if (!existingVideo) {
       return res.status(404).json({ message: 'Video không tồn tại' });
     }
 
-    let updateData = { title, description };
+    let updateData = { title, description, voiceDescription };
 
     // Nếu có file mới, upload lên Cloudinary
     if (req.file) {
@@ -108,23 +116,23 @@ export const updateVideoController = async (req, res) => {
       });
 
       updateData.url = uploadResult.secure_url;
-      updateData.duration = Math.round(uploadResult.duration || 0);
       updateData.cloudinaryPublicId = uploadResult.public_id;
     }
 
     const video = await Video.findByIdAndUpdate(videoId, updateData, { new: true });
-
+    const out = video.toObject ? video.toObject() : JSON.parse(JSON.stringify(video));
+    delete out.duration;
     return res.status(200).json({
       message: 'Cập nhật video thành công',
-      video
+      video: out
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Xóa video (cả trên Cloudinary)
-export const deleteVideoController = async (req, res) => {
+export const deleteVideoController = async (req, res, next) => {
   try {
     const { videoId } = req.params;
     
@@ -144,6 +152,6 @@ export const deleteVideoController = async (req, res) => {
       message: 'Xóa video thành công'
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };

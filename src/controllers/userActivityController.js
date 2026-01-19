@@ -3,6 +3,14 @@ import Reward from '../models/reward.schema.js';
 import Progress from '../models/progress.schema.js';
 import Skill from '../models/skill.schema.js';
 import Exercise from '../models/exercise.schema.js';
+import Video from '../models/video.schema.js';
+import Quiz from '../models/quiz.schema.js';
+import Question from '../models/question.schema.js';
+import QuizAttempt from '../models/quizAttempt.schema.js';
+import VideoWatch from '../models/videoWatch.schema.js';
+import BadRequestError from '../errors/badRequestError.js';
+import NotFoundError from '../errors/notFoundError.js';
+import UnauthorizedError from '../errors/unauthorizedError.js';
 
 /**
  * Validate đáp án exercise dựa theo exerciseType
@@ -109,98 +117,43 @@ export const validateExerciseAnswer = (exerciseType, correctAnswer, userAnswer) 
 // Body cho VIDEO: { progressId, isCompleted: true }
 // Body cho EXERCISE: { progressId, exerciseType, userAnswer: ["item1", "item2", ...] }
 // Body cho QUIZ: { progressId, score, isCompleted }
-export const recordUserActivityController = async (req, res) => {
+export const recordUserActivityController = async (req, res, next) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user && (req.user.id || req.user._id);
+    if (!userId) throw new UnauthorizedError('Unauthorized');
+
     const { progressId, score, isCompleted, exerciseType, userAnswer } = req.body;
 
     // Tìm progress hiện tại
-    const currentProgress = await Progress.findById(progressId)
-      .populate('contentId');
-
-    if (!currentProgress) {
-      return res.status(404).json({ message: 'Progress không tìm thấy' });
-    }
+    const currentProgress = await Progress.findById(progressId);
+    if (!currentProgress) throw new NotFoundError('Progress không tìm thấy');
 
     // Tự động lấy contentType từ progress
     const contentType = currentProgress.contentType;
 
-    // Kiểm tra đã hoàn thành step này chưa
-    const existingActivity = await UserActivity.findOne({
-      userId,
-      progressId,
-      isCompleted: true
-    });
-
-    if (existingActivity) {
-      // Return same shape as success but mark isCheck = true
-      const bonusEarnedExisting = existingActivity.bonusEarned || 0;
-      const nextStepExisting = currentProgress.stepNumber + 1;
-      if (existingActivity.contentType === 'exercise') {
-        return res.status(201).json({
-          isCorrect: true,
-          message: 'Bạn đã hoàn thành step này rồi',
-          bonusEarned: bonusEarnedExisting,
-          nextStep: nextStepExisting,
-          isCheck: true
-        });
-      }
-
-      return res.status(201).json({
-        message: 'Ghi nhận hoạt động thành công',
-        userActivity: existingActivity,
-        bonusEarned: bonusEarnedExisting,
-        nextStep: nextStepExisting,
-        isCheck: true
-      });
-    }
+    // Don't return early on existing UserActivity here; we'll determine `isCheck` from VideoWatch later
+    // existingActivity will be queried later when needed for completion idempotency
 
     // Lấy skill hiện tại
     const currentSkill = await Skill.findById(currentProgress.skillId);
-    if (!currentSkill) {
-      return res.status(404).json({ message: 'Skill không tìm thấy' });
-    }
+    if (!currentSkill) throw new NotFoundError('Skill không tìm thấy');
 
     // ========== KIỂM TRA SKILL TRƯỚC ĐÃ HOÀN THÀNH CHƯA ==========
     if (currentSkill.order > 1) {
-      // Nếu user đã bắt đầu (hoàn thành ít nhất 1 step) trong skill hiện tại,
-      // thì cho phép tiếp tục trong skill này mà không cần kiểm tra skill trước.
       const currentSkillProgresses = await Progress.find({ skillId: currentSkill._id });
       const currentSkillProgressIds = currentSkillProgresses.map(p => p._id);
-      const hasStartedCurrentSkill = await UserActivity.exists({
-        userId,
-        progressId: { $in: currentSkillProgressIds },
-        isCompleted: true
-      });
-
+      const hasStartedCurrentSkill = await UserActivity.exists({ userId, progressId: { $in: currentSkillProgressIds }, isCompleted: true });
       if (!hasStartedCurrentSkill) {
-        // Tìm skill trước đó (order nhỏ hơn 1)
-        const previousSkill = await Skill.findOne({
-          chapterId: currentSkill.chapterId,
-          order: currentSkill.order - 1
-        });
-
+        const previousSkill = await Skill.findOne({ chapterId: currentSkill.chapterId, order: currentSkill.order - 1 });
         if (previousSkill) {
-          // Lấy tất cả progress của skill trước
           const previousSkillProgresses = await Progress.find({ skillId: previousSkill._id });
           const previousProgressIds = previousSkillProgresses.map(p => p._id);
-
-          // Kiểm tra user đã hoàn thành tất cả progress của skill trước chưa
-          const completedPreviousActivities = await UserActivity.find({
-            userId,
-            progressId: { $in: previousProgressIds },
-            isCompleted: true
-          });
-
-          // So sánh số lượng
+          const completedPreviousActivities = await UserActivity.find({ userId, progressId: { $in: previousProgressIds }, isCompleted: true });
           if (completedPreviousActivities.length < previousSkillProgresses.length) {
-            return res.status(400).json({
-              message: `Bạn cần hoàn thành skill "${previousSkill.skillName}" trước khi học skill này`,
-              requiredSkillId: previousSkill._id,
-              requiredSkillName: previousSkill.skillName,
-              completedSteps: completedPreviousActivities.length,
-              totalSteps: previousSkillProgresses.length
-            });
+            const e = new BadRequestError(`Bạn cần hoàn thành skill "${previousSkill.skillName}" trước khi học skill này`);
+            e.requiredSkillId = previousSkill._id;
+            e.requiredSkillName = previousSkill.skillName;
+            throw e;
           }
         }
       }
@@ -208,33 +161,13 @@ export const recordUserActivityController = async (req, res) => {
 
     // ========== KIỂM TRA CÁC STEP TRƯỚC TRONG CÙNG SKILL ==========
     const currentStepNumber = currentProgress.stepNumber;
-    
     if (currentStepNumber > 1) {
-      // Lấy tất cả các step trước của cùng skill
-      const previousSteps = await Progress.find({
-        skillId: currentProgress.skillId,
-        stepNumber: { $lt: currentStepNumber }
-      });
-
+      const previousSteps = await Progress.find({ skillId: currentProgress.skillId, stepNumber: { $lt: currentStepNumber } });
       const previousStepIds = previousSteps.map(p => p._id);
-
-      // Kiểm tra user đã hoàn thành tất cả step trước chưa
-      const completedPreviousSteps = await UserActivity.find({
-        userId,
-        progressId: { $in: previousStepIds },
-        isCompleted: true
-      });
-
-      // Lấy tất cả progress của skill để tính max step đã hoàn thành trong skill này
+      const completedPreviousSteps = await UserActivity.find({ userId, progressId: { $in: previousStepIds }, isCompleted: true });
       const allSkillProgresses = await Progress.find({ skillId: currentProgress.skillId });
       const allSkillProgressIds = allSkillProgresses.map(p => p._id);
-      const userCompletedInSkill = await UserActivity.find({
-        userId,
-        progressId: { $in: allSkillProgressIds },
-        isCompleted: true
-      });
-
-      // Tạo set các stepNumber đã hoàn thành (bao gồm những bước trước nếu user đã hoàn thành bước sau)
+      const userCompletedInSkill = await UserActivity.find({ userId, progressId: { $in: allSkillProgressIds }, isCompleted: true });
       const completedStepNumbers = new Set();
       let maxCompletedInSkill = 0;
       for (const activity of userCompletedInSkill) {
@@ -244,115 +177,91 @@ export const recordUserActivityController = async (req, res) => {
           if (step.stepNumber > maxCompletedInSkill) maxCompletedInSkill = step.stepNumber;
         }
       }
-
-      // Nếu user đã hoàn thành một step lớn hơn i, thì các step < = maxCompletedInSkill coi như hoàn thành
       for (let s = 1; s <= maxCompletedInSkill; s++) completedStepNumbers.add(s);
-
-      // Tìm step chưa hoàn thành trong 1..currentStepNumber-1
       for (let i = 1; i < currentStepNumber; i++) {
         if (!completedStepNumbers.has(i)) {
-          return res.status(400).json({
-            message: `Bạn cần hoàn thành step ${i} trước khi làm step ${currentStepNumber}`,
-            requiredStep: i,
-            currentStep: currentStepNumber
-          });
+          const e = new BadRequestError(`Bạn cần hoàn thành step ${i} trước khi làm step ${currentStepNumber}`);
+          e.requiredStep = i;
+          e.currentStep = currentStepNumber;
+          throw e;
         }
       }
     }
 
     // ========== XỬ LÝ THEO LOẠI CONTENT ==========
-    let finalIsCompleted = false;
-    let validationResult = null;
+    if (contentType !== 'video') throw new BadRequestError('Endpoint này chỉ dùng để ghi nhận video. Exercise và Quiz xử lý ở endpoints riêng.');
 
-    if (contentType === 'exercise') {
-      // Kiểm tra có gửi userAnswer không
-      if (!userAnswer) {
-        return res.status(400).json({ 
-          message: 'Vui lòng gửi đáp án (userAnswer)' 
-        });
+    // VIDEO handling expects a `videoId` in body to mark a specific video as watched
+    if (isCompleted !== true) throw new BadRequestError('Vui lòng gửi isCompleted: true để ghi nhận hoàn thành video');
+
+    let { videoId } = req.body;
+    // If videoId not provided, allow it when the progress has exactly one video (convenience)
+    if (!videoId) {
+      const videosForProgress = await Video.find({ progressId: currentProgress._id }).limit(2);
+      if (videosForProgress.length === 0) {
+        throw new NotFoundError('Progress chưa có video nào');
       }
-
-      // Lấy exercise với answer (dùng +answer để lấy field ẩn)
-      const exercise = await Exercise.findById(currentProgress.contentId._id).select('+answer');
-      
-      if (!exercise) {
-        return res.status(404).json({ message: 'Exercise không tìm thấy' });
+      if (videosForProgress.length === 1) {
+        videoId = videosForProgress[0]._id;
+      } else {
+        throw new BadRequestError('videoId là bắt buộc khi progress có nhiều hơn 1 video');
       }
+    }
 
-      // Validate đáp án
-      validationResult = validateExerciseAnswer(
-        exercise.exerciseType,
-        exercise.answer,
-        userAnswer
+    // Verify video belongs to this progress
+    const video = await Video.findById(videoId);
+    if (!video) throw new NotFoundError('Video không tìm thấy');
+    if (video.progressId?.toString() !== currentProgress._id.toString()) {
+      throw new BadRequestError('Video không thuộc progress được gửi');
+    }
+
+    // Upsert VideoWatch (only one per user+video)
+      const existingWatch = await VideoWatch.findOne({ userId, videoId, progressId });
+      const isCheck = !!existingWatch;
+
+      // Upsert VideoWatch (only one per user+video)
+      await VideoWatch.updateOne(
+        { userId, videoId },
+        { $setOnInsert: { userId, videoId, progressId, watchedAt: new Date() } },
+        { upsert: true }
       );
 
-      finalIsCompleted = validationResult.isCorrect;
+    // Count total videos for this progress and watched videos by user
+    const [totalVideos, watchedCount] = await Promise.all([
+      Video.countDocuments({ progressId: currentProgress._id }),
+      VideoWatch.countDocuments({ userId, progressId: currentProgress._id })
+    ]);
 
-      // Nếu SAI → Trả về kết quả ngay (KHÔNG lưu activity)
-      if (!validationResult.isCorrect) {
-        return res.status(200).json({
-          isCorrect: false,
-          message: validationResult.message,
-          isCheck: false
-        });
+    // If user has watched all videos for this progress, create UserActivity (progress completion)
+    if (totalVideos > 0 && watchedCount >= totalVideos) {
+      // Check existing UserActivity again (idempotency)
+      let createdActivity = await UserActivity.findOne({ userId, progressId, isCompleted: true });
+      let bonusEarned = 0;
+      if (!createdActivity) {
+        // Sum bonus points across videos if any
+        const videosForProgress = await Video.find({ progressId: currentProgress._id });
+        for (const v of videosForProgress) {
+          if (v.bonusPoints) bonusEarned += v.bonusPoints;
+        }
+
+        createdActivity = new UserActivity({ userId, progressId, contentType: 'video', score: score || 100, isCompleted: true, bonusEarned });
+        await createdActivity.save();
+
+        if (bonusEarned > 0) await Reward.findOneAndUpdate({ userId }, { $inc: { totalPoints: bonusEarned } }, { new: true, upsert: true });
       }
-    } else {
-      // VIDEO/QUIZ: lấy từ body
-      finalIsCompleted = isCompleted === true;
+
+      return res.status(201).json({ message: 'Hoàn thành progress (tất cả video đã xem)', userActivity: createdActivity, bonusEarned, nextStep: currentStepNumber + 1, isCheck,isDone: true });
     }
 
-    // Tính điểm thưởng (chỉ khi hoàn thành)
-    let bonusEarned = 0;
-    if (finalIsCompleted && currentProgress.contentId && currentProgress.contentId.bonusPoints) {
-      bonusEarned = currentProgress.contentId.bonusPoints;
-    }
-
-    const userActivity = new UserActivity({
-      userId,
-      progressId,
-      contentType,
-      score: score || (finalIsCompleted ? 100 : 0),
-      isCompleted: finalIsCompleted,
-      bonusEarned
-    });
-
-    await userActivity.save();
-
-    // Cập nhật reward nếu có điểm thưởng
-    if (bonusEarned > 0) {
-      await Reward.findOneAndUpdate(
-        { userId },
-        { $inc: { totalPoints: bonusEarned } },
-        { new: true }
-      );
-    }
-
-    // Response cho EXERCISE (khi đúng)
-    if (contentType === 'exercise' && validationResult) {
-      return res.status(201).json({
-        isCorrect: true,
-        message: validationResult.message,
-        bonusEarned,
-        nextStep: currentStepNumber + 1,
-        isCheck: false
-      });
-    }
-
-    // Response cho VIDEO / QUIZ
-    return res.status(201).json({
-      message: 'Ghi nhận hoạt động thành công',
-      userActivity,
-      bonusEarned,
-      nextStep: currentStepNumber + 1,
-      isCheck: false
-    });
+    // Not yet completed all videos — return watched progress
+      return res.status(200).json({ message: 'Đã đánh dấu video là đã xem', watchedCount, totalVideos, completed: false, isCheck, isDone: false });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Lấy lịch sử hoạt động của user
-export const getUserActivityHistoryController = async (req, res) => {
+export const getUserActivityHistoryController = async (req, res, next) => {
   try {
     const userId = req.user.id;
 
@@ -365,12 +274,66 @@ export const getUserActivityHistoryController = async (req, res) => {
 
     return res.status(200).json({ activities });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
+// Lấy lịch sử hoạt động cho một progress cụ thể (có phân trang)
+export const getProgressActivityHistoryController = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const { progressId } = req.params;
+
+    // Pagination params
+    const page = Math.max(1, parseInt(req.query.page || '1', 10));
+    const limit = Math.max(1, Math.min(100, parseInt(req.query.limit || '20', 10)));
+    const skip = (page - 1) * limit;
+
+    // Verify progress exists and belongs to appropriate context (optional)
+    const progress = await Progress.findById(progressId);
+    if (!progress) {
+      return res.status(404).json({ message: 'Progress không tìm thấy' });
+    }
+
+    // Query QuizAttempt collection directly for per-attempt details
+    const query = { userId, progressId };
+
+    const [total, attemptsRaw] = await Promise.all([
+      QuizAttempt.countDocuments(query),
+      QuizAttempt.find(query)
+        .populate({ path: 'details.questionId' })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+    ]);
+
+    // Compute correctCount / totalQuestions for each attempt
+    const attempts = attemptsRaw.map(at => {
+      const totalQuestions = Array.isArray(at.details) ? at.details.length : 0;
+      const correctCount = Array.isArray(at.details) ? at.details.filter(d => d.isCorrect).length : 0;
+      const obj = at.toObject ? at.toObject() : JSON.parse(JSON.stringify(at));
+      obj.totalQuestions = totalQuestions;
+      obj.correctCount = correctCount;
+      return obj;
+    });
+
+    return res.status(200).json({
+      progressId,
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+      attempts
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// rating endpoints moved to src/controllers/ratingController.js
+
 // Lấy tiến độ hoàn thành của một kỹ năng
-export const getSkillProgressController = async (req, res) => {
+export const getSkillProgressController = async (req, res, next) => {
   try {
     const userId = req.user.id;
     const { skillId } = req.params;
@@ -404,12 +367,12 @@ export const getSkillProgressController = async (req, res) => {
       }))
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Lấy tiến độ hoàn thành của cả lớp
-export const getClassProgressController = async (req, res) => {
+export const getClassProgressController = async (req, res, next) => {
   try {
     const { classId } = req.params;
 
@@ -443,6 +406,6 @@ export const getClassProgressController = async (req, res) => {
       skillProgress
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };

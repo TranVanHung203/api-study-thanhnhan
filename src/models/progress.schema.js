@@ -15,10 +15,13 @@ const ProgressSchema = new mongoose.Schema({
     required: true, 
     enum: ['video', 'exercise', 'quiz'] 
   },
-  contentId: { 
-    type: mongoose.Schema.Types.ObjectId, 
-    required: true 
+  progressName: {
+    type: String,
+    required: false,
+    trim: true,
+    default: null
   },
+  // contentId removed: content documents will reference progress via `progressId`
   createdAt: { 
     type: Date, 
     default: Date.now 

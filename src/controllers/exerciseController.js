@@ -1,17 +1,17 @@
 import Exercise from '../models/exercise.schema.js';
 
 // Lấy danh sách exercises (KHÔNG bao gồm answer)
-export const getExercisesController = async (req, res) => {
+export const getExercisesController = async (req, res, next) => {
   try {
     const exercises = await Exercise.find();
     return res.status(200).json({ exercises });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Lấy exercise theo ID - CHỈ trả về id, frontendRef, exerciseType (cho client chơi game)
-export const getExerciseByIdController = async (req, res) => {
+export const getExerciseByIdController = async (req, res, next) => {
   try {
     const { exerciseId } = req.params;
     const exercise = await Exercise.findById(exerciseId).select('_id frontendRef exerciseType');
@@ -22,12 +22,12 @@ export const getExerciseByIdController = async (req, res) => {
     
     return res.status(200).json({ exercise });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Tạo exercise
-export const createExerciseController = async (req, res) => {
+export const createExerciseController = async (req, res, next) => {
   try {
     const { title, frontendRef, exerciseType, answer, description, bonusPoints } = req.body;
 
@@ -51,12 +51,12 @@ export const createExerciseController = async (req, res) => {
       exercise
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Cập nhật exercise
-export const updateExerciseController = async (req, res) => {
+export const updateExerciseController = async (req, res, next) => {
   try {
     const { exerciseId } = req.params;
     const { title, frontendRef, exerciseType, answer, description, bonusPoints } = req.body;
@@ -76,12 +76,12 @@ export const updateExerciseController = async (req, res) => {
       exercise
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };
 
 // Xóa exercise
-export const deleteExerciseController = async (req, res) => {
+export const deleteExerciseController = async (req, res, next) => {
   try {
     const { exerciseId } = req.params;
     await Exercise.findByIdAndDelete(exerciseId);
@@ -90,6 +90,6 @@ export const deleteExerciseController = async (req, res) => {
       message: 'Xóa exercise thành công'
     });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    next(error);
   }
 };

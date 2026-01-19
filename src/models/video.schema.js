@@ -9,11 +9,16 @@ const VideoSchema = new mongoose.Schema({
     type: String, 
     required: true 
   },
-  duration: { 
-    type: Number // Giây
-  },
   description: {
     type: String
+  },
+  voiceDescription: {
+    type: String,
+    default: null
+  },
+  progressId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Progress'
   },
   cloudinaryPublicId: {
     type: String // Để xóa video trên Cloudinary

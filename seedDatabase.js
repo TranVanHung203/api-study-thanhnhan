@@ -118,13 +118,15 @@ const seedDatabase = async () => {
         chapterId: chapters[0]._id,
         skillName: 'Số từ 1 đến 5',
         description: 'Học các số 1, 2, 3, 4, 5',
-        order: 1
+        order: 1,
+        skillVoice: null
       },
       {
         chapterId: chapters[0]._id,
         skillName: 'Số từ 6 đến 10',
         description: 'Học các số 6, 7, 8, 9, 10',
-        order: 2
+        order: 2,
+        skillVoice: null
       }
     ]);
     console.log('✅ Skills Chương 1 đã tạo:', skillsChapter1.length);
@@ -135,13 +137,15 @@ const seedDatabase = async () => {
         chapterId: chapters[1]._id,
         skillName: 'Cộng trong phạm vi 10',
         description: 'Các phép cộng có kết quả không quá 10',
-        order: 1
+        order: 1,
+        skillVoice: null
       },
       {
         chapterId: chapters[1]._id,
         skillName: 'Cộng trong phạm vi 20',
         description: 'Các phép cộng có kết quả không quá 20',
-        order: 2
+        order: 2,
+        skillVoice: null
       }
     ]);
     console.log('✅ Skills Chương 2 đã tạo:', skillsChapter2.length);
@@ -152,13 +156,15 @@ const seedDatabase = async () => {
         chapterId: chapters[2]._id,
         skillName: 'Cộng trong phạm vi 50',
         description: 'Các phép cộng có kết quả không quá 50',
-        order: 1
+        order: 1,
+        skillVoice: null
       },
       {
         chapterId: chapters[2]._id,
         skillName: 'Cộng trong phạm vi 100',
         description: 'Các phép cộng có kết quả không quá 100',
-        order: 2
+        order: 2,
+        skillVoice: null
       }
     ]);
     console.log('✅ Skills Chương 3 đã tạo:', skillsChapter3.length);
@@ -168,25 +174,21 @@ const seedDatabase = async () => {
       {
         title: 'Giới thiệu số 1-5',
         url: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
-        duration: 180,
         description: 'Video giới thiệu các số từ 1 đến 5'
       },
       {
         title: 'Giới thiệu số 6-10',
         url: 'https://www.youtube.com/embed/jNQXAC9IVRw',
-        duration: 200,
         description: 'Video giới thiệu các số từ 6 đến 10'
       },
       {
         title: 'Học cộng trong phạm vi 10',
         url: 'https://www.youtube.com/embed/abc123xyz',
-        duration: 300,
         description: 'Video hướng dẫn phép cộng cơ bản'
       },
       {
         title: 'Học cộng trong phạm vi 20',
         url: 'https://www.youtube.com/embed/xyz456abc',
-        duration: 350,
         description: 'Video hướng dẫn phép cộng nâng cao'
       }
     ]);
@@ -264,34 +266,46 @@ const seedDatabase = async () => {
     console.log('✅ Questions Quiz 2 đã tạo:', questionsQuiz2.length);
 
     // ========== 13. TẠO PROGRESS CHO SKILL 1 (Chapter 1 - Số 1-5) ==========
+    // Create progresses without contentId, then link content.progressId -> progress._id
     const progressSkill1 = await Progress.insertMany([
-      { skillId: skillsChapter1[0]._id, stepNumber: 1, contentType: 'video', contentId: videos[0]._id },
-      { skillId: skillsChapter1[0]._id, stepNumber: 2, contentType: 'exercise', contentId: exercises[0]._id }
+      { skillId: skillsChapter1[0]._id, stepNumber: 1, contentType: 'video' },
+      { skillId: skillsChapter1[0]._id, stepNumber: 2, contentType: 'exercise' }
     ]);
-    console.log('✅ Progress Skill 1 đã tạo:', progressSkill1.length);
+    // Link content documents
+    await Video.findByIdAndUpdate(videos[0]._id, { progressId: progressSkill1[0]._id });
+    await Exercise.findByIdAndUpdate(exercises[0]._id, { progressId: progressSkill1[1]._id });
+    console.log('✅ Progress Skill 1 đã tạo and linked:', progressSkill1.length);
 
     // ========== 14. TẠO PROGRESS CHO SKILL 2 (Chapter 1 - Số 6-10) ==========
     const progressSkill2 = await Progress.insertMany([
-      { skillId: skillsChapter1[1]._id, stepNumber: 1, contentType: 'video', contentId: videos[1]._id },
-      { skillId: skillsChapter1[1]._id, stepNumber: 2, contentType: 'exercise', contentId: exercises[1]._id },
-      { skillId: skillsChapter1[1]._id, stepNumber: 3, contentType: 'quiz', contentId: quizzes[0]._id }
+      { skillId: skillsChapter1[1]._id, stepNumber: 1, contentType: 'video' },
+      { skillId: skillsChapter1[1]._id, stepNumber: 2, contentType: 'exercise' },
+      { skillId: skillsChapter1[1]._id, stepNumber: 3, contentType: 'quiz' }
     ]);
-    console.log('✅ Progress Skill 2 đã tạo:', progressSkill2.length);
+    await Video.findByIdAndUpdate(videos[1]._id, { progressId: progressSkill2[0]._id });
+    await Exercise.findByIdAndUpdate(exercises[1]._id, { progressId: progressSkill2[1]._id });
+    await Quiz.findByIdAndUpdate(quizzes[0]._id, { progressId: progressSkill2[2]._id });
+    console.log('✅ Progress Skill 2 đã tạo and linked:', progressSkill2.length);
 
     // ========== 15. TẠO PROGRESS CHO SKILL 3 (Chapter 2 - Cộng 1-10) ==========
     const progressSkill3 = await Progress.insertMany([
-      { skillId: skillsChapter2[0]._id, stepNumber: 1, contentType: 'video', contentId: videos[2]._id },
-      { skillId: skillsChapter2[0]._id, stepNumber: 2, contentType: 'exercise', contentId: exercises[2]._id }
+      { skillId: skillsChapter2[0]._id, stepNumber: 1, contentType: 'video' },
+      { skillId: skillsChapter2[0]._id, stepNumber: 2, contentType: 'exercise' }
     ]);
-    console.log('✅ Progress Skill 3 đã tạo:', progressSkill3.length);
+    await Video.findByIdAndUpdate(videos[2]._id, { progressId: progressSkill3[0]._id });
+    await Exercise.findByIdAndUpdate(exercises[2]._id, { progressId: progressSkill3[1]._id });
+    console.log('✅ Progress Skill 3 đã tạo and linked:', progressSkill3.length);
 
     // ========== 16. TẠO PROGRESS CHO SKILL 4 (Chapter 2 - Cộng 1-20) ==========
     const progressSkill4 = await Progress.insertMany([
-      { skillId: skillsChapter2[1]._id, stepNumber: 1, contentType: 'video', contentId: videos[3]._id },
-      { skillId: skillsChapter2[1]._id, stepNumber: 2, contentType: 'exercise', contentId: exercises[3]._id },
-      { skillId: skillsChapter2[1]._id, stepNumber: 3, contentType: 'quiz', contentId: quizzes[1]._id }
+      { skillId: skillsChapter2[1]._id, stepNumber: 1, contentType: 'video' },
+      { skillId: skillsChapter2[1]._id, stepNumber: 2, contentType: 'exercise' },
+      { skillId: skillsChapter2[1]._id, stepNumber: 3, contentType: 'quiz' }
     ]);
-    console.log('✅ Progress Skill 4 đã tạo:', progressSkill4.length);
+    await Video.findByIdAndUpdate(videos[3]._id, { progressId: progressSkill4[0]._id });
+    await Exercise.findByIdAndUpdate(exercises[3]._id, { progressId: progressSkill4[1]._id });
+    await Quiz.findByIdAndUpdate(quizzes[1]._id, { progressId: progressSkill4[2]._id });
+    console.log('✅ Progress Skill 4 đã tạo and linked:', progressSkill4.length);
 
     // ========== 17. TẠO USER ACTIVITIES (MẪU - User 1 đã học xong Skill 1 và đang học Skill 2) ==========
     const userActivities = [

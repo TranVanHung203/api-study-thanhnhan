@@ -16,6 +16,14 @@ const QuizSchema = new mongoose.Schema({
     type: Number, 
     default: 100 
   },
+  voiceDescription: {
+    type: String,
+    default: null
+  },
+  progressId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Progress'
+  },
   createdAt: { 
     type: Date, 
     default: Date.now 

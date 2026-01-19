@@ -45,6 +45,8 @@ router.get('/', getQuizzesController);
  *                 type: number
  *               bonusPoints:
  *                 type: number
+ *               voiceDescription:
+ *                 type: string
  *     responses:
  *       201:
  *         description: Bài quiz được tạo thành công
@@ -81,6 +83,23 @@ router.get('/:quizId', getQuizDetailController);
  *         required: true
  *         schema:
  *           type: string
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               title:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *               totalQuestions:
+ *                 type: number
+ *               bonusPoints:
+ *                 type: number
+ *               voiceDescription:
+ *                 type: string
  *     responses:
  *       200:
  *         description: Cập nhật thành công
