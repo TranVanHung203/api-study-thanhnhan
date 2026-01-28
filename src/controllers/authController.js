@@ -205,7 +205,7 @@ export const getUserController = async (req, res, next) => {
     const userId = req.user.id;
     const user = await User.findById(userId)
       .populate('classId')
-      .select('_id fullName email classId characterUrl');
+      .select('_id fullName email classId characterId');
 
     if (!user) throw new NotFoundError('User không tìm thấy');
 
@@ -214,7 +214,7 @@ export const getUserController = async (req, res, next) => {
       fullName: user.fullName,
       email: user.email,
       classId: user.classId || null,
-      characterUrl: user.characterUrl || null
+      characterId: user.characterId || null
 
     });
   } catch (error) {
@@ -309,11 +309,7 @@ export const logoutController = async (req, res, next) => {
 // Đăng nhập khách (Guest Login)
 export const guestLoginController = async (req, res, next) => {
   try {
-    const { fullName } = req.body;
-
-    if (!fullName) {
-      throw new BadRequestError('Vui lòng nhập tên của bạn');
-    }
+    const { fullName = "Người dùng" } = req.body;
 
     // Tạo thời gian hết hạn (7 ngày từ bây giờ)
     const guestExpiresAt = new Date();
@@ -640,12 +636,12 @@ export const changeFullNameAndAttachCharacterController = async (req, res, next)
     const character = await Character.findById(characterId);
     if (!character) throw new NotFoundError('Character không tìm thấy');
 
-    // Apply updates
+    // Apply updates: store reference to character id
     user.fullName = fullName.trim();
-    user.characterUrl = character.url;
+    user.characterId = character._id;
     await user.save();
 
-    return res.status(200).json({ message: 'Cập nhật tên và gán character thành công', fullName: user.fullName, characterUrl: user.characterUrl });
+    return res.status(200).json({ message: 'Cập nhật tên và gán character thành công', fullName: user.fullName, characterId: user.characterId });
   } catch (error) {
     next(error);
   }

@@ -165,9 +165,9 @@ app.use('/ratings', ratingRoutes);
 
 app.use(errorHandler);
 
-// Start cleanup jobs
-startCleanupJob();        // Xóa dữ liệu orphan mỗi giờ
-startExpiredGuestCleanup(); // Xóa guest hết hạn mỗi ngày lúc 3:00 AM
+// // Start cleanup jobs
+// startCleanupJob();        // Xóa dữ liệu orphan mỗi giờ
+// startExpiredGuestCleanup(); // Xóa guest hết hạn mỗi ngày lúc 3:00 AM
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {

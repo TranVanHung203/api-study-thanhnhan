@@ -61,10 +61,11 @@ export const deleteCharacterController = async (req, res, next) => {
       throw new ForbiddenError('Không có quyền xóa character này');
     }
 
+
     await Character.deleteOne({ _id: id });
 
-    // Also remove from any user's characterUrl field if equals this url
-    await User.updateMany({ characterUrl: character.url }, { $set: { characterUrl: null } });
+    // Also remove from any user's characterId field if equals this id
+    await User.updateMany({ characterId: character._id }, { $set: { characterId: null } });
 
     return res.status(200).json({ message: 'Xóa character thành công' });
   } catch (error) {
@@ -83,6 +84,21 @@ export const listCharactersController = async (req, res, next) => {
   }
 };
 
+// Get single character by id
+export const getCharacterByIdController = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    if (!id) throw new BadRequestError('id là bắt buộc');
+
+    const character = await Character.findById(id);
+    if (!character) throw new NotFoundError('Character không tìm thấy');
+
+    return res.status(200).json({ character });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // Attach a character URL to current user (adds url to user's charactersUrl array)
 export const attachCharacterToUserController = async (req, res, next) => {
   try {
@@ -94,10 +110,10 @@ export const attachCharacterToUserController = async (req, res, next) => {
     const character = await Character.findById(characterId);
     if (!character) throw new NotFoundError('Character không tìm thấy');
 
-    // Set user's selected characterUrl
-    await User.updateOne({ _id: userId }, { $set: { characterUrl: character.url } });
+    // Set user's selected characterId
+    await User.updateOne({ _id: userId }, { $set: { characterId: character._id } });
 
-    return res.status(200).json({ message: 'Đã thêm character vào user', url: character.url });
+    return res.status(200).json({ message: 'Đã thêm character vào user', characterId: character._id });
   } catch (error) {
     next(error);
   }
@@ -107,14 +123,14 @@ export const attachCharacterToUserController = async (req, res, next) => {
 export const detachCharacterFromUserController = async (req, res, next) => {
   try {
     const userId = req.user.id;
-    const { url } = req.body;
+    const { characterId } = req.body;
 
-    if (!url) throw new BadRequestError('url là bắt buộc');
+    if (!characterId) throw new BadRequestError('characterId là bắt buộc');
 
-    // Only unset if the user's current characterUrl equals provided url
-    await User.updateOne({ _id: userId, characterUrl: url }, { $set: { characterUrl: null } });
+    // Only unset if the user's current characterId equals provided id
+    await User.updateOne({ _id: userId, characterId: characterId }, { $set: { characterId: null } });
 
-    return res.status(200).json({ message: 'Đã xóa character khỏi user', url });
+    return res.status(200).json({ message: 'Đã xóa character khỏi user', characterId });
   } catch (error) {
     next(error);
   }

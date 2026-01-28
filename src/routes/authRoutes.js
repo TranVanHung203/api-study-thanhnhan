@@ -217,31 +217,31 @@ router.get('/logout', authToken, logoutController);
  */
 router.post('/change-password', authToken, changePasswordController);
 
-/**
- * @swagger
- * /auth/change-fullname:
- *   post:
- *     summary: Đổi tên đầy đủ (fullName)
- *     tags: [Auth]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - fullName
- *             properties:
- *               fullName:
- *                 type: string
- *                 example: "Nguyễn Văn B"
- *     responses:
- *       200:
- *         description: Cập nhật tên thành công
- */
-router.post('/change-fullname', authToken, changeFullNameController);
+// /**
+//  * @swagger
+//  * /auth/change-fullname:
+//  *   post:
+//  *     summary: Đổi tên đầy đủ (fullName)
+//  *     tags: [Auth]
+//  *     security:
+//  *       - bearerAuth: []
+//  *     requestBody:
+//  *       required: true
+//  *       content:
+//  *         application/json:
+//  *           schema:
+//  *             type: object
+//  *             required:
+//  *               - fullName
+//  *             properties:
+//  *               fullName:
+//  *                 type: string
+//  *                 example: "Nguyễn Văn B"
+//  *     responses:
+//  *       200:
+//  *         description: Cập nhật tên thành công
+//  */
+// router.post('/change-fullname', authToken, changeFullNameController);
 /**
  * @swagger
  * /auth/change-fullname-and-attach:
@@ -407,40 +407,40 @@ router.post('/guest', guestLoginController);
 //  */
 // router.delete('/guest', authToken, deleteGuestController);
 
-// /**
-//  * @swagger
-//  * /auth/guest/convert:
-//  *   post:
-//  *     summary: Chuyển tài khoản khách thành user thường (giữ nguyên dữ liệu học tập)
-//  *     tags: [Auth]
-//  *     security:
-//  *       - bearerAuth: []
-//  *     requestBody:
-//  *       required: true
-//  *       content:
-//  *         application/json:
-//  *           schema:
-//  *             type: object
-//  *             required:
-//  *               - username
-//  *               - email
-//  *               - password
-//  *             properties:
-//  *               username:
-//  *                 type: string
-//  *                 example: "newuser123"
-//  *               email:
-//  *                 type: string
-//  *                 example: "newuser@example.com"
-//  *               password:
-//  *                 type: string
-//  *                 example: "password123"
-//  *     responses:
-//  *       200:
-//  *         description: Chuyển đổi thành công, dữ liệu học tập được giữ nguyên
-//  *       400:
-//  *         description: Tài khoản đã là user thường hoặc username/email đã tồn tại
-//  */
-// router.post('/guest/convert', authToken, convertGuestToUserController);
+/**
+ * @swagger
+ * /auth/guest/convert:
+ *   post:
+ *     summary: Chuyển tài khoản khách thành user thường (giữ nguyên dữ liệu học tập)
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - username
+ *               - email
+ *               - password
+ *             properties:
+ *               username:
+ *                 type: string
+ *                 example: "newuser123"
+ *               email:
+ *                 type: string
+ *                 example: "newuser@example.com"
+ *               password:
+ *                 type: string
+ *                 example: "password123"
+ *     responses:
+ *       200:
+ *         description: Chuyển đổi thành công, dữ liệu học tập được giữ nguyên
+ *       400:
+ *         description: Tài khoản đã là user thường hoặc username/email đã tồn tại
+ */
+router.post('/guest/convert', authToken, convertGuestToUserController);
 
 export default router;

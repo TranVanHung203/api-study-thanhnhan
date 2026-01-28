@@ -43,9 +43,10 @@ const UserSchema = new mongoose.Schema({
     type: String,
     required: false
   },
-  // Selected character URL for the user (single string)
-  characterUrl: {
-    type: String,
+  // Selected character id for the user (reference to Character)
+  characterId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Character',
     default: null
   },
   emailVerified: {
