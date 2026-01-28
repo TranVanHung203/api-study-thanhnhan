@@ -270,53 +270,53 @@ router.post('/change-fullname', authToken, changeFullNameController);
  */
 router.post('/change-fullname-and-attach', authToken, changeFullNameAndAttachCharacterController);
 
-// /**
-//  * @swagger
-//  * /auth/guest:
-//  *   post:
-//  *     summary: Đăng nhập khách (không cần username/password)
-//  *     tags: [Auth]
-//  *     security: []
-//  *     requestBody:
-//  *       required: true
-//  *       content:
-//  *         application/json:
-//  *           schema:
-//  *             type: object
-//  *             required:
-//  *               - fullName
-//  *             properties:
-//  *               fullName:
-//  *                 type: string
-//  *                 example: "Khách Vãng Lai"
-//  *                 description: Tên hiển thị của khách
-//  *     responses:
-//  *       201:
-//  *         description: Đăng nhập khách thành công
-//  *         content:
-//  *           application/json:
-//  *             schema:
-//  *               type: object
-//  *               properties:
-//  *                 message:
-//  *                   type: string
-//  *                 accessToken:
-//  *                   type: string
-//  *                 user:
-//  *                   type: object
-//  *                   properties:
-//  *                     id:
-//  *                       type: string
-//  *                     fullName:
-//  *                       type: string
-//  *                     isGuest:
-//  *                       type: boolean
-//  *                     expiresAt:
-//  *                       type: string
-//  *                       format: date-time
-//  *                       description: Thời gian tài khoản khách hết hạn (7 ngày)
-//  */
-// router.post('/guest', guestLoginController);
+/**
+ * @swagger
+ * /auth/guest:
+ *   post:
+ *     summary: Đăng nhập khách (không cần username/password)
+ *     tags: [Auth]
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - fullName
+ *             properties:
+ *               fullName:
+ *                 type: string
+ *                 example: "Khách Vãng Lai"
+ *                 description: Tên hiển thị của khách
+ *     responses:
+ *       201:
+ *         description: Đăng nhập khách thành công
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 accessToken:
+ *                   type: string
+ *                 user:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                     fullName:
+ *                       type: string
+ *                     isGuest:
+ *                       type: boolean
+ *                     expiresAt:
+ *                       type: string
+ *                       format: date-time
+ *                       description: Thời gian tài khoản khách hết hạn (7 ngày)
+ */
+router.post('/guest', guestLoginController);
 
 
 // /**
