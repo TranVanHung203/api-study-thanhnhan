@@ -217,31 +217,31 @@ router.get('/logout', authToken, logoutController);
  */
 router.post('/change-password', authToken, changePasswordController);
 
-// /**
-//  * @swagger
-//  * /auth/change-fullname:
-//  *   post:
-//  *     summary: Đổi tên đầy đủ (fullName)
-//  *     tags: [Auth]
-//  *     security:
-//  *       - bearerAuth: []
-//  *     requestBody:
-//  *       required: true
-//  *       content:
-//  *         application/json:
-//  *           schema:
-//  *             type: object
-//  *             required:
-//  *               - fullName
-//  *             properties:
-//  *               fullName:
-//  *                 type: string
-//  *                 example: "Nguyễn Văn B"
-//  *     responses:
-//  *       200:
-//  *         description: Cập nhật tên thành công
-//  */
-// router.post('/change-fullname', authToken, changeFullNameController);
+/**
+ * @swagger
+ * /auth/change-fullname:
+ *   post:
+ *     summary: Đổi tên đầy đủ (fullName)
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - fullName
+ *             properties:
+ *               fullName:
+ *                 type: string
+ *                 example: "Nguyễn Văn B"
+ *     responses:
+ *       200:
+ *         description: Cập nhật tên thành công
+ */
+router.post('/change-fullname', authToken, changeFullNameController);
 /**
  * @swagger
  * /auth/change-fullname-and-attach:
