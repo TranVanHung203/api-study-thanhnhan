@@ -1,18 +1,14 @@
 import mongoose from 'mongoose';
 
-const SkillSchema = new mongoose.Schema({
+const LessonSchema = new mongoose.Schema({
   chapterId: { 
     type: mongoose.Schema.Types.ObjectId, 
     ref: 'Chapter', 
     required: true 
   },
-  skillName: { 
+  lessonName: { 
     type: String, 
     required: true 
-  },
-  skillVoice: {
-    type: String,
-    default: null
   },
   description: {
     type: String
@@ -27,4 +23,4 @@ const SkillSchema = new mongoose.Schema({
   }
 });
 
-export default mongoose.model('Skill', SkillSchema);
+export default mongoose.model('Lesson', LessonSchema);

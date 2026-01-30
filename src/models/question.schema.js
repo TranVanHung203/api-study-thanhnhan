@@ -9,7 +9,6 @@ const QuestionSchema = new mongoose.Schema({
   quizId: { type: mongoose.Schema.Types.ObjectId, ref: 'Quiz', required: true },
   questionText: { type: String, required: false },
   rawQuestion: { type: mongoose.Schema.Types.Mixed, required: false, default: null },
-  questionVoice: { type: String, required: false },
   imageQuestion: { type: String, required: false },
   // choices: array of objects { text } - if a choice is an image, store the image URL string in `text`
   choices: {
@@ -32,7 +31,6 @@ const QuestionSchema = new mongoose.Schema({
   detailType: { type: String, required: false },
   // answer: either a numeric index (0-based) into `choices`, or an object { text }
   answer: { type: mongoose.Schema.Types.Mixed, required: true },
-  hintVoice: { type: String, required: false },
   order: { type: Number, required: false },
   createdAt: { type: Date, default: Date.now }
 });

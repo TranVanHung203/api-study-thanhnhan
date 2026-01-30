@@ -7,7 +7,7 @@ import mongoose from 'mongoose';
 
 import UserActivity from '../models/userActivity.schema.js';
 import Progress from '../models/progress.schema.js';
-import Skill from '../models/skill.schema.js';
+import Lesson from '../models/lesson.schema.js';
 import Reward from '../models/reward.schema.js';
 import BadRequestError from '../errors/badRequestError.js';
 import NotFoundError from '../errors/notFoundError.js';
@@ -184,49 +184,49 @@ export const submitQuizSession = async (req, res, next) => {
     // Change: allow multiple attempts and always record each attempt in history.
     // Bonus awarding is still guarded later so points are added only once.
 
-    // Lấy skill hiện tại
-    const currentSkill = await Skill.findById(currentProgress.skillId);
-    if (!currentSkill) throw new NotFoundError('Skill không tìm thấy');
+    // Lấy Lesson hiện tại
+    const currentLesson = await Lesson.findById(currentProgress.LessonId);
+    if (!currentLesson) throw new NotFoundError('Lesson không tìm thấy');
 
-    // ========== KIỂM TRA SKILL TRƯỚC ĐÃ HOÀN THÀNH CHƯA ==========
-    if (currentSkill.order > 1) {
-      const currentSkillProgresses = await Progress.find({ skillId: currentSkill._id });
-      const currentSkillProgressIds = currentSkillProgresses.map(p => p._id);
-      const hasStartedCurrentSkill = await UserActivity.exists({
+    // ========== KIỂM TRA Lesson TRƯỚC ĐÃ HOÀN THÀNH CHƯA ==========
+    if (currentLesson.order > 1) {
+      const currentLessonProgresses = await Progress.find({ LessonId: currentLesson._id });
+      const currentLessonProgressIds = currentLessonProgresses.map(p => p._id);
+      const hasStartedCurrentLesson = await UserActivity.exists({
         userId,
-        progressId: { $in: currentSkillProgressIds },
+        progressId: { $in: currentLessonProgressIds },
         isCompleted: true
       });
-      if (!hasStartedCurrentSkill) {
-        const previousSkill = await Skill.findOne({
-          chapterId: currentSkill.chapterId,
-          order: currentSkill.order - 1
+      if (!hasStartedCurrentLesson) {
+        const previousLesson = await Lesson.findOne({
+          chapterId: currentLesson.chapterId,
+          order: currentLesson.order - 1
         });
-        if (previousSkill) {
-          const previousSkillProgresses = await Progress.find({ skillId: previousSkill._id });
-          const previousProgressIds = previousSkillProgresses.map(p => p._id);
+        if (previousLesson) {
+          const previousLessonProgresses = await Progress.find({ LessonId: previousLesson._id });
+          const previousProgressIds = previousLessonProgresses.map(p => p._id);
           const completedPreviousActivities = await UserActivity.find({
             userId,
             progressId: { $in: previousProgressIds },
             isCompleted: true
           });
-          if (completedPreviousActivities.length < previousSkillProgresses.length) {
-            const e = new BadRequestError(`Bạn cần hoàn thành skill trước: ${previousSkill.skillName}`);
-            e.requiredSkillId = previousSkill._id;
-            e.requiredSkillName = previousSkill.skillName;
+          if (completedPreviousActivities.length < previousLessonProgresses.length) {
+            const e = new BadRequestError(`Bạn cần hoàn thành Lesson trước: ${previousLesson.LessonName}`);
+            e.requiredLessonId = previousLesson._id;
+            e.requiredLessonName = previousLesson.LessonName;
             e.completedSteps = completedPreviousActivities.length;
-            e.totalSteps = previousSkillProgresses.length;
+            e.totalSteps = previousLessonProgresses.length;
             throw e;
           }
         }
       }
     }
 
-    // ========== KIỂM TRA CÁC STEP TRƯỚC TRONG CÙNG SKILL ==========
+    // ========== KIỂM TRA CÁC STEP TRƯỚC TRONG CÙNG Lesson ==========
     const currentStepNumber = currentProgress.stepNumber;
     if (currentStepNumber > 1) {
       const previousSteps = await Progress.find({
-        skillId: currentProgress.skillId,
+        LessonId: currentProgress.LessonId,
         stepNumber: { $lt: currentStepNumber }
       });
       const previousStepIds = previousSteps.map(p => p._id);
@@ -235,23 +235,23 @@ export const submitQuizSession = async (req, res, next) => {
         progressId: { $in: previousStepIds },
         isCompleted: true
       });
-      const allSkillProgresses = await Progress.find({ skillId: currentProgress.skillId });
-      const allSkillProgressIds = allSkillProgresses.map(p => p._id);
-      const userCompletedInSkill = await UserActivity.find({
+      const allLessonProgresses = await Progress.find({ LessonId: currentProgress.LessonId });
+      const allLessonProgressIds = allLessonProgresses.map(p => p._id);
+      const userCompletedInLesson = await UserActivity.find({
         userId,
-        progressId: { $in: allSkillProgressIds },
+        progressId: { $in: allLessonProgressIds },
         isCompleted: true
       });
       const completedStepNumbers = new Set();
-      let maxCompletedInSkill = 0;
-      for (const activity of userCompletedInSkill) {
-        const step = allSkillProgresses.find(p => p._id.toString() === activity.progressId.toString());
+      let maxCompletedInLesson = 0;
+      for (const activity of userCompletedInLesson) {
+        const step = allLessonProgresses.find(p => p._id.toString() === activity.progressId.toString());
         if (step) {
           completedStepNumbers.add(step.stepNumber);
-          if (step.stepNumber > maxCompletedInSkill) maxCompletedInSkill = step.stepNumber;
+          if (step.stepNumber > maxCompletedInLesson) maxCompletedInLesson = step.stepNumber;
         }
       }
-      for (let s = 1; s <= maxCompletedInSkill; s++) completedStepNumbers.add(s);
+      for (let s = 1; s <= maxCompletedInLesson; s++) completedStepNumbers.add(s);
       for (let i = 1; i < currentStepNumber; i++) {
         if (!completedStepNumbers.has(i)) {
           const e = new BadRequestError(`Bạn cần hoàn thành step ${i} trước khi làm step ${currentStepNumber}`);

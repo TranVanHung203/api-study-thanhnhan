@@ -9,7 +9,7 @@ import { errorHandler } from './src/errors/errorHandler.js';
 import User from './src/models/user.schema.js';
 import Class from './src/models/class.schema.js';
 import Chapter from './src/models/chapter.schema.js';
-import Skill from './src/models/skill.schema.js';
+import Lesson from './src/models/lesson.schema.js';
 import Progress from './src/models/progress.schema.js';
 import Video from './src/models/video.schema.js';
 import Exercise from './src/models/exercise.schema.js';
@@ -24,7 +24,7 @@ import Character from './src/models/character.schema.js';
 import authRoutes from './src/routes/authRoutes.js';
 import classRoutes from './src/routes/classRoutes.js';
 import chapterRoutes from './src/routes/chapterRoutes.js';
-import skillRoutes from './src/routes/skillRoutes.js';
+import lessonRoutes from './src/routes/lessonRoutes.js';
 import progressRoutes from './src/routes/progressRoutes.js';
 import videoRoutes from './src/routes/videoRoutes.js';
 import exerciseRoutes from './src/routes/exerciseRoutes.js';
@@ -111,10 +111,10 @@ const swaggerOptions = {
     // './src/routes/videoRoutes.js',
     // './src/routes/exerciseRoutes.js',
     // './src/routes/quizNewRoutes.js',
-     './src/routes/questionRoutes.js',
+    // './src/routes/questionRoutes.js',
     './src/routes/characterRoutes.js',
-      './src/routes/activityRoutes.js',
-      './src/routes/ratingRoutes.js',
+      //'./src/routes/activityRoutes.js',
+      //'./src/routes/ratingRoutes.js',
     // './src/routes/rewardRoutes.js',
   ],
 };
@@ -152,7 +152,7 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, swaggerUiOpti
 app.use('/auth', authRoutes);
 app.use('/classes', classRoutes);
 app.use('/chapters', chapterRoutes);
-app.use('/skills', skillRoutes);
+app.use('/lessons', lessonRoutes);
 app.use('/progress', progressRoutes);
 app.use('/videos', videoRoutes);
 app.use('/exercises', exerciseRoutes);

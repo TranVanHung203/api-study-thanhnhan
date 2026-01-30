@@ -1,9 +1,9 @@
 import mongoose from 'mongoose';
 
 const ProgressSchema = new mongoose.Schema({
-  skillId: { 
+  lessonId: { 
     type: mongoose.Schema.Types.ObjectId, 
-    ref: 'Skill', 
+    ref: 'Lesson', 
     required: true 
   },
   stepNumber: { 

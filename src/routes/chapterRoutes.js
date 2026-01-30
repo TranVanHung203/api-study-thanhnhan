@@ -7,7 +7,7 @@ import {
   updateChapterController,
   deleteChapterController,
   getChapterMapController,
-  insertSkillController,
+  insertLessonController,
   insertProgressController
 } from '../controllers/chapterController.js';
 
@@ -129,7 +129,7 @@ const router = express.Router();
 //  * @swagger
 //  * /chapters/{id}:
 //  *   delete:
-//  *     summary: Xóa chapter (và tất cả skills trong chapter)
+//  *     summary: Xóa chapter (và tất cả Lessons trong chapter)
 //  *     tags: [Chapters]
 //  *     security:
 //  *       - bearerAuth: []
@@ -151,7 +151,7 @@ const router = express.Router();
  *   get:
  *     summary: Lấy map chapter với trạng thái học của user
  *     description: |
- *       Trả về tất cả skills và progresses của chapter, kèm theo trạng thái:
+ *       Trả về tất cả Lessons và progresses của chapter, kèm theo trạng thái:
  *       - isCompleted: Đã hoàn thành chưa
  *       - isLocked: Có bị khóa không (chưa hoàn thành bước trước)
  *     tags: [Chapters]
@@ -173,14 +173,14 @@ const router = express.Router();
  *               properties:
  *                 chapter:
  *                   type: object
- *                 skills:
+ *                 Lessons:
  *                   type: array
  *                   items:
  *                     type: object
  *                     properties:
  *                       _id:
  *                         type: string
- *                       skillName:
+ *                       LessonName:
  *                         type: string
  *                       order:
  *                         type: number
@@ -208,12 +208,12 @@ router.get('/:chapterId/map', authToken, getChapterMapController);
 
 // /**
 //  * @swagger
-//  * /chapters/insert-skill:
+//  * /chapters/insert-Lesson:
 //  *   post:
-//  *     summary: Chèn skill mới vào giữa (auto reorder)
+//  *     summary: Chèn Lesson mới vào giữa (auto reorder)
 //  *     description: |
-//  *       Chèn skill mới vào vị trí sau skill có order = afterOrder.
-//  *       Các skill phía sau sẽ tự động tăng order lên 1.
+//  *       Chèn Lesson mới vào vị trí sau Lesson có order = afterOrder.
+//  *       Các Lesson phía sau sẽ tự động tăng order lên 1.
 //  *     tags: [Chapters]
 //  *     security:
 //  *       - bearerAuth: []
@@ -225,22 +225,22 @@ router.get('/:chapterId/map', authToken, getChapterMapController);
 //  *             type: object
 //  *             required:
 //  *               - chapterId
-//  *               - skillName
+//  *               - LessonName
 //  *             properties:
 //  *               chapterId:
 //  *                 type: string
-//  *               skillName:
+//  *               LessonName:
 //  *                 type: string
 //  *               description:
 //  *                 type: string
 //  *               afterOrder:
 //  *                 type: number
-//  *                 description: Order của skill mà skill mới sẽ đứng sau. Mặc định 0 (đầu tiên)
+//  *                 description: Order của Lesson mà Lesson mới sẽ đứng sau. Mặc định 0 (đầu tiên)
 //  *     responses:
 //  *       201:
 //  *         description: Chèn thành công
 //  */
-// router.post('/insert-skill', authToken, insertSkillController);
+// router.post('/insert-Lesson', authToken, insertLessonController);
 
 // /**
 //  * @swagger
@@ -260,11 +260,11 @@ router.get('/:chapterId/map', authToken, getChapterMapController);
 //  *           schema:
 //  *             type: object
 //  *             required:
-//  *               - skillId
+//  *               - LessonId
 //  *               - contentType
 //  *               - contentId
 //  *             properties:
-//  *               skillId:
+//  *               LessonId:
 //  *                 type: string
 //  *               contentType:
 //  *                 type: string

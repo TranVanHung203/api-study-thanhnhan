@@ -1,7 +1,7 @@
 import UserActivity from '../models/userActivity.schema.js';
 import Reward from '../models/reward.schema.js';
 import Progress from '../models/progress.schema.js';
-import Skill from '../models/skill.schema.js';
+import Lesson from '../models/lesson.schema.js';
 import Exercise from '../models/exercise.schema.js';
 import Video from '../models/video.schema.js';
 import Quiz from '../models/quiz.schema.js';
@@ -134,50 +134,50 @@ export const recordUserActivityController = async (req, res, next) => {
     // Don't return early on existing UserActivity here; we'll determine `isCheck` from VideoWatch later
     // existingActivity will be queried later when needed for completion idempotency
 
-    // Lấy skill hiện tại
-    const currentSkill = await Skill.findById(currentProgress.skillId);
-    if (!currentSkill) throw new NotFoundError('Skill không tìm thấy');
+    // Lấy Lesson hiện tại
+    const currentLesson = await Lesson.findById(currentProgress.LessonId);
+    if (!currentLesson) throw new NotFoundError('Lesson không tìm thấy');
 
-    // ========== KIỂM TRA SKILL TRƯỚC ĐÃ HOÀN THÀNH CHƯA ==========
-    if (currentSkill.order > 1) {
-      const currentSkillProgresses = await Progress.find({ skillId: currentSkill._id });
-      const currentSkillProgressIds = currentSkillProgresses.map(p => p._id);
-      const hasStartedCurrentSkill = await UserActivity.exists({ userId, progressId: { $in: currentSkillProgressIds }, isCompleted: true });
-      if (!hasStartedCurrentSkill) {
-        const previousSkill = await Skill.findOne({ chapterId: currentSkill.chapterId, order: currentSkill.order - 1 });
-        if (previousSkill) {
-          const previousSkillProgresses = await Progress.find({ skillId: previousSkill._id });
-          const previousProgressIds = previousSkillProgresses.map(p => p._id);
+    // ========== KIỂM TRA Lesson TRƯỚC ĐÃ HOÀN THÀNH CHƯA ==========
+    if (currentLesson.order > 1) {
+      const currentLessonProgresses = await Progress.find({ LessonId: currentLesson._id });
+      const currentLessonProgressIds = currentLessonProgresses.map(p => p._id);
+      const hasStartedCurrentLesson = await UserActivity.exists({ userId, progressId: { $in: currentLessonProgressIds }, isCompleted: true });
+      if (!hasStartedCurrentLesson) {
+        const previousLesson = await Lesson.findOne({ chapterId: currentLesson.chapterId, order: currentLesson.order - 1 });
+        if (previousLesson) {
+          const previousLessonProgresses = await Progress.find({ LessonId: previousLesson._id });
+          const previousProgressIds = previousLessonProgresses.map(p => p._id);
           const completedPreviousActivities = await UserActivity.find({ userId, progressId: { $in: previousProgressIds }, isCompleted: true });
-          if (completedPreviousActivities.length < previousSkillProgresses.length) {
-            const e = new BadRequestError(`Bạn cần hoàn thành skill "${previousSkill.skillName}" trước khi học skill này`);
-            e.requiredSkillId = previousSkill._id;
-            e.requiredSkillName = previousSkill.skillName;
+          if (completedPreviousActivities.length < previousLessonProgresses.length) {
+            const e = new BadRequestError(`Bạn cần hoàn thành Lesson "${previousLesson.LessonName}" trước khi học Lesson này`);
+            e.requiredLessonId = previousLesson._id;
+            e.requiredLessonName = previousLesson.LessonName;
             throw e;
           }
         }
       }
     }
 
-    // ========== KIỂM TRA CÁC STEP TRƯỚC TRONG CÙNG SKILL ==========
+    // ========== KIỂM TRA CÁC STEP TRƯỚC TRONG CÙNG Lesson ==========
     const currentStepNumber = currentProgress.stepNumber;
     if (currentStepNumber > 1) {
-      const previousSteps = await Progress.find({ skillId: currentProgress.skillId, stepNumber: { $lt: currentStepNumber } });
+      const previousSteps = await Progress.find({ LessonId: currentProgress.LessonId, stepNumber: { $lt: currentStepNumber } });
       const previousStepIds = previousSteps.map(p => p._id);
       const completedPreviousSteps = await UserActivity.find({ userId, progressId: { $in: previousStepIds }, isCompleted: true });
-      const allSkillProgresses = await Progress.find({ skillId: currentProgress.skillId });
-      const allSkillProgressIds = allSkillProgresses.map(p => p._id);
-      const userCompletedInSkill = await UserActivity.find({ userId, progressId: { $in: allSkillProgressIds }, isCompleted: true });
+      const allLessonProgresses = await Progress.find({ LessonId: currentProgress.LessonId });
+      const allLessonProgressIds = allLessonProgresses.map(p => p._id);
+      const userCompletedInLesson = await UserActivity.find({ userId, progressId: { $in: allLessonProgressIds }, isCompleted: true });
       const completedStepNumbers = new Set();
-      let maxCompletedInSkill = 0;
-      for (const activity of userCompletedInSkill) {
-        const step = allSkillProgresses.find(p => p._id.toString() === activity.progressId.toString());
+      let maxCompletedInLesson = 0;
+      for (const activity of userCompletedInLesson) {
+        const step = allLessonProgresses.find(p => p._id.toString() === activity.progressId.toString());
         if (step) {
           completedStepNumbers.add(step.stepNumber);
-          if (step.stepNumber > maxCompletedInSkill) maxCompletedInSkill = step.stepNumber;
+          if (step.stepNumber > maxCompletedInLesson) maxCompletedInLesson = step.stepNumber;
         }
       }
-      for (let s = 1; s <= maxCompletedInSkill; s++) completedStepNumbers.add(s);
+      for (let s = 1; s <= maxCompletedInLesson; s++) completedStepNumbers.add(s);
       for (let i = 1; i < currentStepNumber; i++) {
         if (!completedStepNumbers.has(i)) {
           const e = new BadRequestError(`Bạn cần hoàn thành step ${i} trước khi làm step ${currentStepNumber}`);
@@ -268,7 +268,7 @@ export const getUserActivityHistoryController = async (req, res, next) => {
     const activities = await UserActivity.find({ userId })
       .populate({
         path: 'progressId',
-        populate: { path: 'skillId' }
+        populate: { path: 'LessonId' }
       })
       .sort({ completedAt: -1 });
 
@@ -333,16 +333,16 @@ export const getProgressActivityHistoryController = async (req, res, next) => {
 // rating endpoints moved to src/controllers/ratingController.js
 
 // Lấy tiến độ hoàn thành của một kỹ năng
-export const getSkillProgressController = async (req, res, next) => {
+export const getLessonProgressController = async (req, res, next) => {
   try {
     const userId = req.user.id;
-    const { skillId } = req.params;
+    const { LessonId } = req.params;
 
-    // Lấy tất cả progress steps của skill
-    const progresses = await Progress.find({ skillId })
+    // Lấy tất cả progress steps của Lesson
+    const progresses = await Progress.find({ LessonId })
       .sort({ stepNumber: 1 });
 
-    // Lấy activities của user cho skill này
+    // Lấy activities của user cho Lesson này
     const progressIds = progresses.map(p => p._id);
     const userActivities = await UserActivity.find({
       userId,
@@ -355,7 +355,7 @@ export const getSkillProgressController = async (req, res, next) => {
     const progressPercentage = totalSteps > 0 ? (completedSteps / totalSteps) * 100 : 0;
 
     return res.status(200).json({
-      skillId,
+      LessonId,
       totalSteps,
       completedSteps,
       progressPercentage,
@@ -376,13 +376,13 @@ export const getClassProgressController = async (req, res, next) => {
   try {
     const { classId } = req.params;
 
-    // Lấy tất cả skills của class
-    const skills = await Skill.find({ classId });
+    // Lấy tất cả Lessons của class
+    const Lessons = await Lesson.find({ classId });
 
-    const skillProgress = [];
+    const LessonProgress = [];
 
-    for (const skill of skills) {
-      const progresses = await Progress.find({ skillId: skill._id });
+    for (const Lesson of Lessons) {
+      const progresses = await Progress.find({ LessonId: Lesson._id });
       const progressIds = progresses.map(p => p._id);
       const userActivities = await UserActivity.find({
         progressId: { $in: progressIds }
@@ -392,9 +392,9 @@ export const getClassProgressController = async (req, res, next) => {
       const completedSteps = userActivities.filter(a => a.isCompleted).length;
       const progressPercentage = totalSteps > 0 ? (completedSteps / totalSteps) * 100 : 0;
 
-      skillProgress.push({
-        skillId: skill._id,
-        skillName: skill.skillName,
+      LessonProgress.push({
+        LessonId: Lesson._id,
+        LessonName: Lesson.LessonName,
         totalSteps,
         completedSteps,
         progressPercentage
@@ -403,7 +403,7 @@ export const getClassProgressController = async (req, res, next) => {
 
     return res.status(200).json({
       classId,
-      skillProgress
+      LessonProgress
     });
   } catch (error) {
     next(error);

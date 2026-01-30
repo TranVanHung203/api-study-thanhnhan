@@ -3,7 +3,7 @@ import Video from '../models/video.schema.js';
 import Quiz from '../models/quiz.schema.js';
 import VideoWatch from '../models/videoWatch.schema.js';
 import QuizAttempt from '../models/quizAttempt.schema.js';
-import Skill from '../models/skill.schema.js';
+import Lesson from '../models/lesson.schema.js';
 import UserActivity from '../models/userActivity.schema.js';
 // only need Video for this endpoint
 
@@ -73,8 +73,8 @@ export const getContentByProgressId = async (req, res, next) => {
 
       if (userId) {
         try {
-          const currentSkill = await Skill.findById(progress.skillId);
-          if (currentSkill) {
+          const currentLesson = await Lesson.findById(progress.LessonId);
+          if (currentLesson) {
 
             /* =========================
               1️⃣ KIỂM TRA HỌC VƯỢT
@@ -82,7 +82,7 @@ export const getContentByProgressId = async (req, res, next) => {
             let unlockedByLater = false;
 
             const laterProgresses = await Progress.find({
-              skillId: currentSkill._id,
+              LessonId: currentLesson._id,
               stepNumber: { $gt: progress.stepNumber }
             }).select('_id');
 
@@ -104,9 +104,9 @@ export const getContentByProgressId = async (req, res, next) => {
             ========================== */
             if (!unlockedByLater) {
 
-              // 2.1️⃣ Check only the immediate previous progress in the same skill
+              // 2.1️⃣ Check only the immediate previous progress in the same Lesson
               const immediatePrev = await Progress.findOne({
-                skillId: currentSkill._id,
+                LessonId: currentLesson._id,
                 stepNumber: progress.stepNumber - 1
               }).select('_id');
 
@@ -122,17 +122,17 @@ export const getContentByProgressId = async (req, res, next) => {
                 }
               }
 
-              // 2.2️⃣ Check skill trước (nếu chưa bị khóa)
-              if (!isLocked && currentSkill.order > 1) {
-                const previousSkill = await Skill.findOne({
-                  chapterId: currentSkill.chapterId,
-                  order: currentSkill.order - 1
+              // 2.2️⃣ Check Lesson trước (nếu chưa bị khóa)
+              if (!isLocked && currentLesson.order > 1) {
+                const previousLesson = await Lesson.findOne({
+                  chapterId: currentLesson.chapterId,
+                  order: currentLesson.order - 1
                 });
 
-                if (previousSkill) {
-                  // Find the final progress in the previous skill (highest stepNumber)
+                if (previousLesson) {
+                  // Find the final progress in the previous Lesson (highest stepNumber)
                   const lastPrevProgress = await Progress.findOne({
-                    skillId: previousSkill._id
+                    LessonId: previousLesson._id
                   }).sort({ stepNumber: -1 }).select('_id');
 
                   if (lastPrevProgress) {
@@ -143,7 +143,7 @@ export const getContentByProgressId = async (req, res, next) => {
                     });
 
                     if (!lastCompleted) {
-                      isLocked = true; // 🔒 chưa hoàn thành progress cuối của skill trước
+                      isLocked = true; // 🔒 chưa hoàn thành progress cuối của Lesson trước
                     }
                   }
                 }
