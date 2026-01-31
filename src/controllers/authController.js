@@ -359,20 +359,23 @@ export const guestLoginController = async (req, res, next) => {
 // Verify Google ID token (Android / Flutter client) hoặc accessToken (Web)
 export const googleTokenController = async (req, res, next) => {
   try {
-    const { idToken, accessToken } = req.body;
+    const { token } = req.body;
     const deviceInfo = req.headers['user-agent'] || null;
 
-    if (!idToken && !accessToken) {
-      throw new BadRequestError('Missing idToken or accessToken');
+    if (!token) {
+      throw new BadRequestError('Missing token');
     }
 
     let payload;
 
-    if (idToken) {
+    // Detect token type: idToken (JWT format) vs accessToken (ya29. prefix)
+    const isAccessToken = token.startsWith('ya29.') || !token.includes('.');
+
+    if (!isAccessToken) {
       // Verify idToken using google-auth-library (Android/iOS)
       let ticket;
       try {
-        ticket = await googleClient.verifyIdToken({ idToken, audience: GOOGLE_CLIENT_ID });
+        ticket = await googleClient.verifyIdToken({ idToken: token, audience: GOOGLE_CLIENT_ID });
       } catch (err) {
         throw new UnauthorizedError('Invalid Google idToken');
       }
@@ -382,7 +385,7 @@ export const googleTokenController = async (req, res, next) => {
       try {
         const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
           headers: {
-            Authorization: `Bearer ${accessToken}`
+            Authorization: `Bearer ${token}`
           }
         });
 
