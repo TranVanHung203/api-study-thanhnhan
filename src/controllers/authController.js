@@ -356,25 +356,55 @@ export const guestLoginController = async (req, res, next) => {
   }
 };
 
-// Verify Google ID token (Android / Flutter client)
+// Verify Google ID token (Android / Flutter client) hoặc accessToken (Web)
 export const googleTokenController = async (req, res, next) => {
   try {
-    const { idToken } = req.body;
+    const { idToken, accessToken } = req.body;
     const deviceInfo = req.headers['user-agent'] || null;
 
-    if (!idToken) {
-      throw new BadRequestError('Missing idToken');
+    if (!idToken && !accessToken) {
+      throw new BadRequestError('Missing idToken or accessToken');
     }
 
-    // Verify idToken using google-auth-library
-    let ticket;
-    try {
-      ticket = await googleClient.verifyIdToken({ idToken, audience: GOOGLE_CLIENT_ID });
-    } catch (err) {
-      throw new UnauthorizedError('Invalid Google idToken');
-    }
+    let payload;
 
-    const payload = ticket.getPayload();
+    if (idToken) {
+      // Verify idToken using google-auth-library (Android/iOS)
+      let ticket;
+      try {
+        ticket = await googleClient.verifyIdToken({ idToken, audience: GOOGLE_CLIENT_ID });
+      } catch (err) {
+        throw new UnauthorizedError('Invalid Google idToken');
+      }
+      payload = ticket.getPayload();
+    } else {
+      // Sử dụng accessToken để lấy thông tin user từ Google API (Web)
+      try {
+        const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+          headers: {
+            Authorization: `Bearer ${accessToken}`
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch user info');
+        }
+
+        const userInfo = await response.json();
+        // Map userinfo response to payload format tương tự idToken
+        payload = {
+          sub: userInfo.sub,
+          email: userInfo.email,
+          email_verified: userInfo.email_verified,
+          name: userInfo.name,
+          given_name: userInfo.given_name,
+          picture: userInfo.picture
+        };
+      } catch (err) {
+        console.error('Error fetching Google user info:', err);
+        throw new UnauthorizedError('Invalid Google accessToken');
+      }
+    }
     const googleId = payload.sub;
     const email = payload.email || null;
     const email_verified = payload.email_verified || false;
@@ -460,12 +490,12 @@ export const googleTokenController = async (req, res, next) => {
     }
 
     // Issue tokens
-    const accessToken = createAccessToken(user);
+    const newAccessToken = createAccessToken(user);
     const refreshToken = await createRefreshToken(user, deviceInfo);
 
     return res.status(200).json({
       message: 'Google sign-in successful',
-      accessToken,
+      accessToken: newAccessToken,
       refreshToken,
       user: {
         id: user._id,

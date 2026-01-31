@@ -323,13 +323,19 @@ router.post('/guest', guestLoginController);
  * @swagger
  * /auth/google/token:
  *   post:
- *     summary: Sign in with Google ID token (Android / Flutter / Web clients)
+ *     summary: Sign in with Google (idToken for Android/iOS or accessToken for Web)
  *     tags: [Auth]
  *     description: >-
- *       Exchange a Google ID token (JWT) obtained on the client for the application's
- *       `accessToken` and `refreshToken`. On Android/Flutter, ensure the client requests
- *       an ID token targeted to the Web Client ID (set `serverClientId` = Web client ID)
- *       so the token `aud` matches the backend `GOOGLE_CLIENT_ID`.
+ *       Exchange a Google token for the application's `accessToken` and `refreshToken`.
+ *       
+ *       **Android/iOS**: Send `idToken` - Google ID token (JWT) obtained from GoogleSignIn.
+ *       Ensure the client requests an ID token targeted to the Web Client ID 
+ *       (set `serverClientId` = Web client ID) so the token `aud` matches the backend `GOOGLE_CLIENT_ID`.
+ *       
+ *       **Web**: Send `accessToken` - Google OAuth2 access token obtained from the sign-in popup.
+ *       The backend will use this to fetch user info from Google's userinfo API.
+ *       
+ *       One of `idToken` or `accessToken` must be provided.
  *     security: []
  *     requestBody:
  *       required: true
@@ -337,20 +343,27 @@ router.post('/guest', guestLoginController);
  *         application/json:
  *           schema:
  *             type: object
- *             required:
- *               - idToken
  *             properties:
  *               idToken:
  *                 type: string
  *                 description: >-
- *                   Google ID token returned from the client sign-in flow. On Flutter use
- *                   `GoogleSignIn` with `serverClientId` set to the Web client ID, then
- *                   send `authentication.idToken` here.
+ *                   Google ID token returned from the client sign-in flow (Android/iOS).
+ *                   On Flutter use `GoogleSignIn` with `serverClientId` set to the Web client ID,
+ *                   then send `authentication.idToken` here.
+ *               accessToken:
+ *                 type: string
+ *                 description: >-
+ *                   Google OAuth2 access token returned from Web sign-in flow.
+ *                   Use this when `idToken` is null (common on Flutter Web).
  *           examples:
  *             androidExample:
- *               summary: Android / Flutter request
+ *               summary: Android / iOS request (idToken)
  *               value:
  *                 idToken: "eyJhbGciOiJSUzI1NiIsImtpZCI6Ij..."
+ *             webExample:
+ *               summary: Web request (accessToken)
+ *               value:
+ *                 accessToken: "ya29.a0AfH6SMBx..."
  *     responses:
  *       200:
  *         description: Sign-in successful, returns application tokens and user info
@@ -363,8 +376,10 @@ router.post('/guest', guestLoginController);
  *                   type: string
  *                 accessToken:
  *                   type: string
+ *                   description: Application JWT access token (NOT Google token)
  *                 refreshToken:
  *                   type: string
+ *                   description: Application refresh token
  *                 user:
  *                   type: object
  *                   properties:
@@ -383,9 +398,9 @@ router.post('/guest', guestLoginController);
  *                       items:
  *                         type: string
  *       400:
- *         description: Missing or malformed request (e.g., missing idToken)
+ *         description: Missing or malformed request (must provide idToken or accessToken)
  *       401:
- *         description: Invalid or expired Google idToken
+ *         description: Invalid or expired Google token
  */
 router.post('/google/token', googleTokenController);
 
