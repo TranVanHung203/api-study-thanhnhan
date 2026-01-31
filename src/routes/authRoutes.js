@@ -159,17 +159,17 @@ router.post('/refresh', refreshTokenController);
  */
 router.get('/me', authToken, getUserController);
 
-// /**
-//  * @swagger
-//  * /auth/logout:
-//  *   get:
-//  *     summary: Đăng xuất
-//  *     tags: [Auth]
-//  *     responses:
-//  *       200:
-//  *         description: Đăng xuất thành công
-//  */
-// router.get('/logout', authToken, logoutController);
+/**
+ * @swagger
+ * /auth/logout:
+ *   get:
+ *     summary: Đăng xuất
+ *     tags: [Auth]
+ *     responses:
+ *       200:
+ *         description: Đăng xuất thành công
+ */
+router.get('/logout', authToken, logoutController);
 
 // /**
 //  * @swagger
