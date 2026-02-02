@@ -683,8 +683,10 @@ export const sendOTPForRegisterController = async (req, res, next) => {
 
     await otpVerification.save();
 
-    // Gửi OTP qua email
-    await sendOTPEmail(email, otp, fullName);
+    // Gửi OTP qua email (asynchronous - không chờ gửi xong)
+    sendOTPEmail(email, otp, fullName).catch(error => {
+      console.error(`Failed to send OTP email to ${email}:`, error);
+    });
 
     return res.status(200).json({
       message: 'OTP đã được gửi đến email của bạn. Vui lòng kiểm tra và nhập mã OTP.',

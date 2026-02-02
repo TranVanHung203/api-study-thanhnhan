@@ -11,7 +11,7 @@ const createTransporter = () => {
   });
 };
 
-// Hàm gửi OTP qua email
+// Hàm gửi OTP qua email (asynchronous - không chờ gửi xong)
 export const sendOTPEmail = async (email, otp, fullName) => {
   try {
     const transporter = createTransporter();
@@ -41,7 +41,9 @@ export const sendOTPEmail = async (email, otp, fullName) => {
     return { success: true, messageId: info.messageId };
   } catch (error) {
     console.error('Error sending email:', error);
-    throw new Error('Không thể gửi email. Vui lòng thử lại sau.');
+    // Không throw error, log ra console để debug sau
+    // Vẫn trả về success cho client biết OTP đã lưu
+    return { success: false, error: error.message };
   }
 };
 
