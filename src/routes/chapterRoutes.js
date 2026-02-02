@@ -147,64 +147,66 @@ const router = express.Router();
 
 /**
  * @swagger
- * /chapters/{chapterId}/map:
+ * /chapters/class/{classId}/map:
  *   get:
- *     summary: Lấy map chapter với trạng thái học của user
+ *     summary: Lấy tất cả chapters của lớp với lessons và trạng thái học
  *     description: |
- *       Trả về tất cả Lessons và progresses của chapter, kèm theo trạng thái:
- *       - isCompleted: Đã hoàn thành chưa
- *       - isLocked: Có bị khóa không (chưa hoàn thành bước trước)
+ *       Trả về tất cả chapters của lớp, mỗi chapter bọc danh sách lessons bên trong.
+ *       Kèm theo trạng thái học của user cho mỗi lesson:
+ *       - isCompleted: Lesson đã hoàn thành chưa
+ *       - isCurrent: Lesson hiện tại (lesson đầu tiên chưa hoàn thành trong chapter)
  *     tags: [Chapters]
  *     security:
  *       - bearerAuth: []
  *     parameters:
  *       - in: path
- *         name: chapterId
+ *         name: classId
  *         required: true
  *         schema:
  *           type: string
+ *         description: ID của lớp học
  *     responses:
  *       200:
- *         description: Map chapter với trạng thái
+ *         description: Danh sách chapters với lessons và trạng thái
  *         content:
  *           application/json:
  *             schema:
  *               type: object
  *               properties:
- *                 chapter:
- *                   type: object
- *                 Lessons:
+ *                 chapters:
  *                   type: array
  *                   items:
  *                     type: object
  *                     properties:
  *                       _id:
  *                         type: string
- *                       LessonName:
+ *                       chapterName:
+ *                         type: string
+ *                       description:
  *                         type: string
  *                       order:
  *                         type: number
- *                       isCompleted:
- *                         type: boolean
- *                       isLocked:
- *                         type: boolean
- *                       progresses:
+ *                       lessons:
  *                         type: array
  *                         items:
  *                           type: object
  *                           properties:
  *                             _id:
  *                               type: string
- *                             stepNumber:
- *                               type: number
- *                             contentType:
+ *                             lessonName:
  *                               type: string
+ *                             description:
+ *                               type: string
+ *                             order:
+ *                               type: number
  *                             isCompleted:
  *                               type: boolean
- *                             isLocked:
+ *                             isCurrent:
  *                               type: boolean
+ *       404:
+ *         description: Không tìm thấy chapter nào cho lớp này
  */
-router.get('/:chapterId/map', authToken, getChapterMapController);
+router.get('/class/:classId/map', authToken, getChapterMapController);
 
 // /**
 //  * @swagger

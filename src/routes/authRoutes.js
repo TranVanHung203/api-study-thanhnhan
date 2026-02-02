@@ -12,51 +12,146 @@ import {
   , googleTokenController
   , changeFullNameController
   , changeFullNameAndAttachCharacterController
+  , sendOTPForRegisterController
+  , verifyOTPAndRegisterController
 } from '../controllers/authController.js';
 import { authToken } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
 
-// /**
-//  * @swagger
-//  * /auth/register:
-//  *   post:
-//  *     summary: Đăng ký tài khoản
-//  *     tags: [Auth]
-//  *     requestBody:
-//  *       required: true
-//  *       content:
-//  *         application/json:
-//  *           schema:
-//  *             type: object
-//  *             required:
-//  *               - username
-//  *               - email
-//  *               - password
-//  *               - fullName
-//  *             properties:
-//  *               username:
-//  *                 type: string
-//  *                 example: "student1"
-//  *               email:
-//  *                 type: string
-//  *                 example: "student1@example.com"
-//  *               password:
-//  *                 type: string
-//  *                 example: "password123"
-//  *               fullName:
-//  *                 type: string
-//  *                 example: "Nguyễn Văn A"
-//  *               classId:
-//  *                 type: string
-//  *                 description: "(Tùy chọn) Có thể được thiết lập sau bởi giáo viên hoặc tự động nâng cấp giống Duolingo"
-//  *     responses:
-//  *       201:
-//  *         description: Đăng ký thành công
-//  *       400:
-//  *         description: Thiếu thông tin hoặc username/email đã tồn tại
-//  */
-// router.post('/register', registerController);
+/**
+ * @swagger
+ * /auth/register:
+ *   post:
+ *     summary: Đăng ký tài khoản
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - username
+ *               - email
+ *               - password
+ *               - fullName
+ *             properties:
+ *               username:
+ *                 type: string
+ *                 example: "student1"
+ *               email:
+ *                 type: string
+ *                 example: "student1@example.com"
+ *               password:
+ *                 type: string
+ *                 example: "password123"
+ *               fullName:
+ *                 type: string
+ *                 example: "Nguyễn Văn A"
+ *               classId:
+ *                 type: string
+ *                 description: "(Tùy chọn) Có thể được thiết lập sau bởi giáo viên hoặc tự động nâng cấp giống Duolingo"
+ *     responses:
+ *       201:
+ *         description: Đăng ký thành công
+ *       400:
+ *         description: Thiếu thông tin hoặc username/email đã tồn tại
+ */
+router.post('/register', registerController);
+
+/**
+ * @swagger
+ * /auth/send-otp:
+ *   post:
+ *     summary: Gửi OTP để đăng ký tài khoản
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - username
+ *               - email
+ *               - password
+ *               - fullName
+ *             properties:
+ *               username:
+ *                 type: string
+ *                 example: "student1"
+ *               email:
+ *                 type: string
+ *                 example: "student1@example.com"
+ *               password:
+ *                 type: string
+ *                 example: "password123"
+ *               fullName:
+ *                 type: string
+ *                 example: "Nguyễn Văn A"
+ *               classId:
+ *                 type: string
+ *                 example: "507f1f77bcf86cd799439011"
+ *     responses:
+ *       200:
+ *         description: OTP đã được gửi thành công
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 email:
+ *                   type: string
+ *       400:
+ *         description: Lỗi validation hoặc username/email đã tồn tại
+ */
+router.post('/send-otp', sendOTPForRegisterController);
+
+/**
+ * @swagger
+ * /auth/verify-otp:
+ *   post:
+ *     summary: Xác thực OTP và hoàn tất đăng ký
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *               - otp
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 example: "student1@example.com"
+ *               otp:
+ *                 type: string
+ *                 example: "123456"
+ *     responses:
+ *       201:
+ *         description: Đăng ký thành công
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 accessToken:
+ *                   type: string
+ *                 refreshToken:
+ *                   type: string
+ *                 user:
+ *                   type: object
+ *       400:
+ *         description: Mã OTP không hợp lệ hoặc đã hết hạn
+ */
+router.post('/verify-otp', verifyOTPAndRegisterController);
 
 /**
  * @swagger

@@ -104,8 +104,8 @@ const swaggerOptions = {
   // Thêm/bớt file tùy ý
   apis: [
     './src/routes/authRoutes.js',
-    './src/routes/chapterRoutes.js',
-    // './src/routes/classRoutes.js',
+    //'./src/routes/chapterRoutes.js',
+    './src/routes/classRoutes.js',
     // './src/routes/skillRoutes.js',
     './src/routes/progressRoutes.js',
     // './src/routes/videoRoutes.js',

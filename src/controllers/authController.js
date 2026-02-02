@@ -2,6 +2,7 @@ import User from '../models/user.schema.js';
 import Reward from '../models/reward.schema.js';
 import UserActivity from '../models/userActivity.schema.js';
 import RefreshToken from '../models/refreshToken.schema.js';
+import OTPVerification from '../models/otpVerification.schema.js';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
@@ -11,6 +12,7 @@ import UnauthorizedError from '../errors/unauthorizedError.js';
 import ForbiddenError from '../errors/forbiddenError.js';
 import { OAuth2Client } from 'google-auth-library';
 import Character from '../models/character.schema.js';
+import { generateOTP, sendOTPEmail } from '../config/emailConfig.js';
 
 const SECRET_KEY = process.env.SECRET_KEY || 'your-secret-key';
 const ACCESS_TOKEN_EXPIRY = process.env.ACCESS_TOKEN_EXPIRY || '15m';
@@ -675,6 +677,133 @@ export const changeFullNameAndAttachCharacterController = async (req, res, next)
     await user.save();
 
     return res.status(200).json({ message: 'Cập nhật tên và gán character thành công', fullName: user.fullName, characterId: user.characterId });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Gửi OTP để đăng ký
+export const sendOTPForRegisterController = async (req, res, next) => {
+  try {
+    const { username, email, password, fullName, classId } = req.body;
+
+    // Validation
+    if (!username || !email || !password || !fullName) {
+      throw new BadRequestError('Vui lòng điền đầy đủ thông tin: username, email, password, fullName');
+    }
+
+    // Validate password length
+    if (password.length < 8) {
+      throw new BadRequestError('Mật khẩu phải có ít nhất 8 ký tự');
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      throw new BadRequestError('Email không hợp lệ');
+    }
+
+    // Kiểm tra user đã tồn tại
+    const existingUser = await User.findOne({ $or: [{ username }, { email }] });
+    if (existingUser) {
+      throw new BadRequestError('Username hoặc email đã tồn tại');
+    }
+
+    // Hash password
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    // Tạo OTP
+    const otp = generateOTP();
+
+    // Xóa OTP cũ của email này (nếu có)
+    await OTPVerification.deleteMany({ email });
+
+    // Lưu thông tin tạm thời cùng OTP
+    const otpVerification = new OTPVerification({
+      email,
+      otp,
+      username,
+      passwordHash,
+      fullName,
+      classId: classId || null
+    });
+
+    await otpVerification.save();
+
+    // Gửi OTP qua email
+    await sendOTPEmail(email, otp, fullName);
+
+    return res.status(200).json({
+      message: 'OTP đã được gửi đến email của bạn. Vui lòng kiểm tra và nhập mã OTP.',
+      email: email
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Xác thực OTP và hoàn tất đăng ký
+export const verifyOTPAndRegisterController = async (req, res, next) => {
+  try {
+    const { email, otp } = req.body;
+
+    // Validation
+    if (!email || !otp) {
+      throw new BadRequestError('Vui lòng cung cấp email và mã OTP');
+    }
+
+    // Tìm OTP verification record
+    const otpRecord = await OTPVerification.findOne({ email, otp });
+
+    if (!otpRecord) {
+      throw new BadRequestError('Mã OTP không hợp lệ hoặc đã hết hạn');
+    }
+
+    // Kiểm tra lại user có tồn tại không (double check)
+    const existingUser = await User.findOne({ 
+      $or: [{ username: otpRecord.username }, { email: otpRecord.email }] 
+    });
+    
+    if (existingUser) {
+      // Xóa OTP record
+      await OTPVerification.deleteOne({ _id: otpRecord._id });
+      throw new BadRequestError('Username hoặc email đã tồn tại');
+    }
+
+    // Tạo user mới từ thông tin đã lưu
+    const newUser = new User({
+      username: otpRecord.username,
+      email: otpRecord.email,
+      passwordHash: otpRecord.passwordHash,
+      fullName: otpRecord.fullName,
+      classId: otpRecord.classId
+    });
+
+    await newUser.save();
+
+    // Tạo reward record
+    const reward = new Reward({ userId: newUser._id });
+    await reward.save();
+
+    // Xóa OTP record sau khi đăng ký thành công
+    await OTPVerification.deleteOne({ _id: otpRecord._id });
+
+    // Tạo tokens
+    const accessToken = createAccessToken(newUser);
+    const refreshToken = await createRefreshToken(newUser);
+
+    return res.status(201).json({
+      message: 'Đăng ký thành công',
+      accessToken,
+      refreshToken,
+      user: {
+        id: newUser._id,
+        username: newUser.username,
+        email: newUser.email,
+        fullName: newUser.fullName,
+        classId: newUser.classId
+      }
+    });
   } catch (error) {
     next(error);
   }
