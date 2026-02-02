@@ -49,10 +49,6 @@ const UserSchema = new mongoose.Schema({
     ref: 'Character',
     default: null
   },
-  emailVerified: {
-    type: Boolean,
-    default: false
-  },
   // Roles: only two roles in system: 'student' and 'teacher'
   roles: {
     type: [String],
@@ -64,18 +60,11 @@ const UserSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
-  guestExpiresAt: {
-    type: Date,
-    default: null // Thời gian hết hạn cho guest (ví dụ: 7 ngày)
-  },
   createdAt: { 
     type: Date, 
     default: Date.now 
   }
 });
-
-// Index để auto-delete expired guests (TTL index)
-UserSchema.index({ guestExpiresAt: 1 }, { expireAfterSeconds: 0 });
 
 const User = mongoose.model('User', UserSchema);
 

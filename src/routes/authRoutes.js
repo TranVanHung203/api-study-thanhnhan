@@ -51,9 +51,6 @@ const router = express.Router();
  *               fullName:
  *                 type: string
  *                 example: "Nguyễn Văn A"
- *               classId:
- *                 type: string
- *                 example: "507f1f77bcf86cd799439011"
  *     responses:
  *       200:
  *         description: OTP đã được gửi thành công

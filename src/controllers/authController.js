@@ -639,7 +639,7 @@ export const changeFullNameAndAttachCharacterController = async (req, res, next)
 // Gửi OTP để đăng ký
 export const sendOTPForRegisterController = async (req, res, next) => {
   try {
-    const { username, email, password, fullName, classId } = req.body;
+    const { username, email, password, fullName} = req.body;
 
     // Validation
     if (!username || !email || !password || !fullName) {
@@ -678,8 +678,7 @@ export const sendOTPForRegisterController = async (req, res, next) => {
       otp,
       username,
       passwordHash,
-      fullName,
-      classId: classId || null
+      fullName
     });
 
     await otpVerification.save();
@@ -730,7 +729,13 @@ export const verifyOTPAndRegisterController = async (req, res, next) => {
       email: otpRecord.email,
       passwordHash: otpRecord.passwordHash,
       fullName: otpRecord.fullName,
-      classId: otpRecord.classId
+      classId: null,
+      googleId: null,
+      provider: 'local',
+      avatar: null,
+      characterId: null,
+      roles: ['student'],
+      isGuest: false
     });
 
     await newUser.save();
