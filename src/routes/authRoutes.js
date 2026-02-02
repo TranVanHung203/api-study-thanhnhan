@@ -1,6 +1,6 @@
 import express from 'express';
 import {
-  registerController,
+
   loginController,
   refreshTokenController,
   changePasswordController,
@@ -19,50 +19,11 @@ import { authToken } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
 
-/**
- * @swagger
- * /auth/register:
- *   post:
- *     summary: Đăng ký tài khoản
- *     tags: [Auth]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - username
- *               - email
- *               - password
- *               - fullName
- *             properties:
- *               username:
- *                 type: string
- *                 example: "student1"
- *               email:
- *                 type: string
- *                 example: "student1@example.com"
- *               password:
- *                 type: string
- *                 example: "password123"
- *               fullName:
- *                 type: string
- *                 example: "Nguyễn Văn A"
- *               classId:
- *                 type: string
- *                 description: "(Tùy chọn) Có thể được thiết lập sau bởi giáo viên hoặc tự động nâng cấp giống Duolingo"
- *     responses:
- *       201:
- *         description: Đăng ký thành công
- *       400:
- *         description: Thiếu thông tin hoặc username/email đã tồn tại
- */
-router.post('/register', registerController);
+
 
 /**
  * @swagger
- * /auth/send-otp:
+ * /auth/register:
  *   post:
  *     summary: Gửi OTP để đăng ký tài khoản
  *     tags: [Auth]
@@ -108,7 +69,7 @@ router.post('/register', registerController);
  *       400:
  *         description: Lỗi validation hoặc username/email đã tồn tại
  */
-router.post('/send-otp', sendOTPForRegisterController);
+router.post('/register', sendOTPForRegisterController);
 
 /**
  * @swagger

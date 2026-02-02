@@ -55,54 +55,8 @@ const createRefreshToken = async (user, deviceInfo = null) => {
   return token;
 };
 
-// Đăng ký user
-export const registerController = async (req, res, next) => {
-  try {
-    const { username, email, password, fullName, classId } = req.body;
 
-    // Validation - chỉ cần username, email, password, fullName
-    if (!username || !email || !password || !fullName) {
-      throw new BadRequestError('Vui lòng điền đầy đủ thông tin: username, email, password, fullName');
-    }
 
-    // Kiểm tra user đã tồn tại
-    const existingUser = await User.findOne({ $or: [{ username }, { email }] });
-    if (existingUser) {
-      throw new BadRequestError('Username hoặc email đã tồn tại');
-    }
-
-    // Hash password
-    const passwordHash = await bcrypt.hash(password, 10);
-
-    // Tạo user mới - classId mặc định null, giáo viên chỉnh sửa sau hoặc tự động nâng cấp
-    const newUser = new User({
-      username,
-      email,
-      passwordHash,
-      fullName,
-      classId: null
-    });
-
-    await newUser.save();
-
-    // Tạo reward record
-    const reward = new Reward({ userId: newUser._id });
-    await reward.save();
-
-    return res.status(201).json({
-      message: 'Đăng ký thành công',
-      user: {
-        id: newUser._id,
-        username: newUser.username,
-        email: newUser.email,
-        fullName: newUser.fullName,
-        classId: null
-      }
-    });
-  } catch (error) {
-    next(error);
-  }
-};
 
 // Đăng nhập
 export const loginController = async (req, res, next) => {
@@ -289,18 +243,18 @@ export const logoutController = async (req, res, next) => {
       );
     }
 
-    // Nếu có userId, xóa tất cả refresh tokens của user (optional - logout khỏi tất cả thiết bị)
-    // await RefreshToken.updateMany({ userId }, { isRevoked: true });
+    //Nếu có userId, xóa tất cả refresh tokens của user (optional - logout khỏi tất cả thiết bị)
+    await RefreshToken.updateMany({ userId }, { isRevoked: true });
 
-    // Nếu là guest, xóa tất cả dữ liệu liên quan
-    if (userId) {
-      const user = await User.findById(userId);
-      if (user && user.isGuest) {
-        // Xóa tất cả refresh tokens của guest
-        await RefreshToken.deleteMany({ userId });
-        await deleteGuestData(userId);
-      }
-    }
+    // // Nếu là guest, xóa tất cả dữ liệu liên quan
+    // if (userId) {
+    //   const user = await User.findById(userId);
+    //   if (user && user.isGuest) {
+    //     // Xóa tất cả refresh tokens của guest
+    //     await RefreshToken.deleteMany({ userId });
+    //     await deleteGuestData(userId);
+    //   }
+    // }
 
     return res.status(200).json({ message: 'Đăng xuất thành công' });
   } catch (error) {

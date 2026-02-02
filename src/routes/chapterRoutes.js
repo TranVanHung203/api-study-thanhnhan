@@ -145,68 +145,68 @@ const router = express.Router();
 //  */
 // router.delete('/:id', authToken, deleteChapterController);
 
-/**
- * @swagger
- * /chapters/class/{classId}/map:
- *   get:
- *     summary: Lấy tất cả chapters của lớp với lessons và trạng thái học
- *     description: |
- *       Trả về tất cả chapters của lớp, mỗi chapter bọc danh sách lessons bên trong.
- *       Kèm theo trạng thái học của user cho mỗi lesson:
- *       - isCompleted: Lesson đã hoàn thành chưa
- *       - isCurrent: Lesson hiện tại (lesson đầu tiên chưa hoàn thành trong chapter)
- *     tags: [Chapters]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: classId
- *         required: true
- *         schema:
- *           type: string
- *         description: ID của lớp học
- *     responses:
- *       200:
- *         description: Danh sách chapters với lessons và trạng thái
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 chapters:
- *                   type: array
- *                   items:
- *                     type: object
- *                     properties:
- *                       _id:
- *                         type: string
- *                       chapterName:
- *                         type: string
- *                       description:
- *                         type: string
- *                       order:
- *                         type: number
- *                       lessons:
- *                         type: array
- *                         items:
- *                           type: object
- *                           properties:
- *                             _id:
- *                               type: string
- *                             lessonName:
- *                               type: string
- *                             description:
- *                               type: string
- *                             order:
- *                               type: number
- *                             isCompleted:
- *                               type: boolean
- *                             isCurrent:
- *                               type: boolean
- *       404:
- *         description: Không tìm thấy chapter nào cho lớp này
- */
-router.get('/class/:classId/map', authToken, getChapterMapController);
+// /**
+//  * @swagger
+//  * /chapters/class/{classId}/map:
+//  *   get:
+//  *     summary: Lấy tất cả chapters của lớp với lessons và trạng thái học
+//  *     description: |
+//  *       Trả về tất cả chapters của lớp, mỗi chapter bọc danh sách lessons bên trong.
+//  *       Kèm theo trạng thái học của user cho mỗi lesson:
+//  *       - isCompleted: Lesson đã hoàn thành chưa
+//  *       - isCurrent: Lesson hiện tại (lesson đầu tiên chưa hoàn thành trong chapter)
+//  *     tags: [Chapters]
+//  *     security:
+//  *       - bearerAuth: []
+//  *     parameters:
+//  *       - in: path
+//  *         name: classId
+//  *         required: true
+//  *         schema:
+//  *           type: string
+//  *         description: ID của lớp học
+//  *     responses:
+//  *       200:
+//  *         description: Danh sách chapters với lessons và trạng thái
+//  *         content:
+//  *           application/json:
+//  *             schema:
+//  *               type: object
+//  *               properties:
+//  *                 chapters:
+//  *                   type: array
+//  *                   items:
+//  *                     type: object
+//  *                     properties:
+//  *                       _id:
+//  *                         type: string
+//  *                       chapterName:
+//  *                         type: string
+//  *                       description:
+//  *                         type: string
+//  *                       order:
+//  *                         type: number
+//  *                       lessons:
+//  *                         type: array
+//  *                         items:
+//  *                           type: object
+//  *                           properties:
+//  *                             _id:
+//  *                               type: string
+//  *                             lessonName:
+//  *                               type: string
+//  *                             description:
+//  *                               type: string
+//  *                             order:
+//  *                               type: number
+//  *                             isCompleted:
+//  *                               type: boolean
+//  *                             isCurrent:
+//  *                               type: boolean
+//  *       404:
+//  *         description: Không tìm thấy chapter nào cho lớp này
+//  */
+// router.get('/class/:classId/map', authToken, getChapterMapController);
 
 // /**
 //  * @swagger
