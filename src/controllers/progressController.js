@@ -6,6 +6,21 @@ import Quiz from '../models/quiz.schema.js';
 import UserActivity from '../models/userActivity.schema.js';
 import LessonCompletion from '../models/lessonCompletion.schema.js';
 
+// Helper function: Create slug from text
+const createSlug = (text) => {
+  if (!text) return null;
+  return text
+    .trim()
+    .replace(/[Đ]/g, 'D') // Replace Đ -> D
+    .replace(/[đ]/g, 'd') // Replace đ -> d
+    .normalize('NFD') // Normalize Vietnamese diacritics
+    .replace(/[\u0300-\u036f]/g, '') // Remove combining diacritical marks
+    .toLowerCase()
+    .replace(/[^\w\s]/g, '') // Remove special characters (keep only letters, numbers, underscore, spaces)
+    .replace(/\s+/g, '_') // Replace one or more spaces with single underscore
+    .replace(/^_+|_+$/g, ''); // Trim leading/trailing underscores
+};
+
 // Lấy danh sách progress của một lesson
 export const getProgressByLessonController = async (req, res, next) => {
   try {
@@ -14,6 +29,10 @@ export const getProgressByLessonController = async (req, res, next) => {
 
     const progresses = await Progress.find({ lessonId })
       .sort({ stepNumber: 1 });
+
+    // Populate lesson để lấy lessonName
+    const lesson = await Lesson.findById(lessonId);
+    const lessonSlug = lesson ? createSlug(lesson.lessonName) : null;
 
     // Lấy UserActivity để biết progress nào completed
     let userActivities = [];
@@ -35,7 +54,7 @@ export const getProgressByLessonController = async (req, res, next) => {
       }
     });
 
-    // Map progress to output with isLock
+    // Map progress to output with isLock, progressSlug, và lessonSlug
     // Nếu step 4 hoàn thành, thì step 1,2,3 coi như hoàn thành, step 5 được mở khóa
     const out = progresses.map(p => {
       let isLock;
@@ -55,6 +74,8 @@ export const getProgressByLessonController = async (req, res, next) => {
         lessonId: p.lessonId,
         stepNumber: p.stepNumber,
         progressName: p.progressName || null,
+        progressSlug: createSlug(p.progressName),
+        lessonSlug,
         isLock
       };
     });

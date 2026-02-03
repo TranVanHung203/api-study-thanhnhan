@@ -210,6 +210,7 @@ router.all('*', authToken);
  *         schema:
  *           type: string
  *         description: ID của lớp học
+ *         example: "693f88c93320266f98d13f2d"
  *     responses:
  *       200:
  *         description: Danh sách chapters với lessons và trạng thái

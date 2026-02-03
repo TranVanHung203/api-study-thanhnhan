@@ -36,6 +36,7 @@ router.all('*', authToken);
  *         description: Lesson ID
  *         schema:
  *           type: string
+ *         example: "693f88ca3320266f98d13f41"
  *     security:
  *       - bearerAuth: []
  *     responses:
