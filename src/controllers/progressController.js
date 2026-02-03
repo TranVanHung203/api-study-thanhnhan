@@ -30,9 +30,37 @@ export const getProgressByLessonController = async (req, res, next) => {
     const progresses = await Progress.find({ lessonId })
       .sort({ stepNumber: 1 });
 
-    // Populate lesson để lấy lessonName
+    // Populate lesson để lấy lessonName, order, chapterId
     const lesson = await Lesson.findById(lessonId);
-    const lessonSlug = lesson ? createSlug(lesson.lessonName) : null;
+    if (!lesson) {
+      return res.status(404).json({ message: 'Lesson không tìm thấy' });
+    }
+    const lessonSlug = createSlug(lesson.lessonName);
+
+    // Kiểm tra lesson trước đã completed chưa
+    let isPreviousLessonCompleted = true;
+    
+    if (lesson.order > 1) {
+      // Tìm lesson trước trong cùng chapter
+      const previousLesson = await Lesson.findOne({
+        chapterId: lesson.chapterId,
+        order: lesson.order - 1
+      });
+
+      if (previousLesson && userId) {
+        // Kiểm tra lesson trước đã completed chưa
+        const previousLessonCompletion = await LessonCompletion.findOne({
+          userId,
+          lessonId: previousLesson._id,
+          isCompleted: true
+        });
+        
+        isPreviousLessonCompleted = !!previousLessonCompletion;
+      } else if (!userId) {
+        // Nếu không có userId (guest), coi như chưa hoàn thành
+        isPreviousLessonCompleted = false;
+      }
+    }
 
     // Lấy UserActivity để biết progress nào completed
     let userActivities = [];
@@ -55,18 +83,24 @@ export const getProgressByLessonController = async (req, res, next) => {
     });
 
     // Map progress to output with isLock, progressSlug, và lessonSlug
-    // Nếu step 4 hoàn thành, thì step 1,2,3 coi như hoàn thành, step 5 được mở khóa
     const out = progresses.map(p => {
       let isLock;
-      if (p.stepNumber <= maxCompletedStep) {
-        // Step trước step hoàn thành cao nhất -> không khóa
-        isLock = false;
-      } else if (p.stepNumber === maxCompletedStep + 1) {
-        // Step tiếp theo -> không khóa (mở khóa)
-        isLock = false;
-      } else {
-        // Step sau step tiếp theo -> khóa
+
+      // Nếu lesson trước chưa completed → lock TẤT CẢ progress
+      if (!isPreviousLessonCompleted) {
         isLock = true;
+      } else {
+        // Lesson trước đã completed → áp dụng logic unlock theo stepNumber
+        if (p.stepNumber <= maxCompletedStep) {
+          // Step trước step hoàn thành cao nhất -> không khóa
+          isLock = false;
+        } else if (p.stepNumber === maxCompletedStep + 1) {
+          // Step tiếp theo -> không khóa (mở khóa)
+          isLock = false;
+        } else {
+          // Step sau step tiếp theo -> khóa
+          isLock = true;
+        }
       }
 
       return {
