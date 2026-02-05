@@ -123,17 +123,14 @@ export const getProgressByLessonController = async (req, res, next) => {
 // Tạo progress item (video, exercise, quiz)
 export const createProgressController = async (req, res, next) => {
   try {
-    const { lessonId, stepNumber, contentType, contentId } = req.body;
+    const { lessonId, stepNumber, contentId } = req.body;
 
     // Kiểm tra contentId tồn tại
     let content;
-    if (contentType === 'video') {
-      content = await Video.findById(contentId);
-    } else if (contentType === 'exercise') {
-      content = await Exercise.findById(contentId);
-    } else if (contentType === 'quiz') {
-      content = await Quiz.findById(contentId);
-    }
+    const video = await Video.findById(contentId);
+    const exercise = await Exercise.findById(contentId);
+    const quiz = await Quiz.findById(contentId);
+    content = video || exercise || quiz;
 
     if (!content) {
       return res.status(404).json({ message: 'Nội dung không tìm thấy' });
@@ -141,8 +138,7 @@ export const createProgressController = async (req, res, next) => {
 
     const progress = new Progress({
       lessonId,
-      stepNumber,
-      contentType
+      stepNumber
     });
 
     await progress.save();
@@ -167,7 +163,7 @@ export const createProgressController = async (req, res, next) => {
 export const updateProgressController = async (req, res, next) => {
   try {
     const { progressId } = req.params;
-    const { stepNumber, contentType, contentId } = req.body;
+    const { stepNumber, contentId } = req.body;
 
     const progress = await Progress.findById(progressId);
     if (!progress) return res.status(404).json({ message: 'Progress không tìm thấy' });
@@ -184,9 +180,7 @@ export const updateProgressController = async (req, res, next) => {
 
       // link new content
       let newContent = null;
-      if (contentType === 'video') newContent = await Video.findById(contentId);
-      else if (contentType === 'exercise') newContent = await Exercise.findById(contentId);
-      else if (contentType === 'quiz') newContent = await Quiz.findById(contentId);
+      newContent = await Video.findById(contentId) || await Exercise.findById(contentId) || await Quiz.findById(contentId);
       if (!newContent) return res.status(404).json({ message: 'Nội dung mới không tìm thấy' });
       newContent.progressId = progress._id;
       await newContent.save();
@@ -194,7 +188,6 @@ export const updateProgressController = async (req, res, next) => {
 
     // Update fields
     progress.stepNumber = stepNumber !== undefined ? stepNumber : progress.stepNumber;
-    progress.contentType = contentType !== undefined ? contentType : progress.contentType;
     await progress.save();
 
     // attach contentId for compatibility

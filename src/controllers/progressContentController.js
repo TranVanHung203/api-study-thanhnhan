@@ -17,8 +17,7 @@ export const getContentByProgressId = async (req, res, next) => {
     const progress = await Progress.findById(id);
     if (!progress) return res.status(404).json({ message: 'Progress không tìm thấy' });
 
-    // Support content types 'video' and 'quiz' and return a combined paginated list
-    if (progress.contentType === 'video' || progress.contentType === 'quiz') {
+    // Return combined list of videos and quizzes for this progress
       // Fetch all related videos and quizzes for this progress
       const [videos, quizzes] = await Promise.all([
         Video.find({ progressId: progress._id }).sort({ createdAt: 1 }),
@@ -188,10 +187,6 @@ export const getContentByProgressId = async (req, res, next) => {
       }
 
       return res.status(200).json({ page, perPage, total, totalPages, progressName: progress.progressName || null, content: result });
-    }
-
-    // For any other contentType, return 400
-    return res.status(400).json({ message: 'contentType không hợp lệ' });
   } catch (error) {
     next(error);
   }

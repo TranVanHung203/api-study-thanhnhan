@@ -10,11 +10,6 @@ const ProgressSchema = new mongoose.Schema({
     type: Number, 
     required: true 
   },
-  contentType: { 
-    type: String, 
-    required: true, 
-    enum: ['video', 'exercise', 'quiz'] 
-  },
   progressName: {
     type: String,
     required: false,

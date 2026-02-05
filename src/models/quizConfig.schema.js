@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 const PartSchema = new mongoose.Schema({
   type: { type: String, required: true },
   count: { type: Number, required: true },
-  order: { type: Number, required: true }
+  // order field removed
 }, { _id: false });
 
 const QuizConfigSchema = new mongoose.Schema({
