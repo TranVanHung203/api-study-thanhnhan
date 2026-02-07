@@ -25,7 +25,7 @@ const idEquals = (a, b) => {
 // Optimized: parallel fetch, single aggregate query, in-memory sampling
 export const startQuizSession = async (req, res, next) => {
   try {
-    const { id: progressId } = req.params;
+    const { progressId } = req.params;
     const userId = req.user && (req.user.id || req.user._id);
     if (!userId) throw new UnauthorizedError('Unauthorized');
 
@@ -125,13 +125,11 @@ export const startQuizSession = async (req, res, next) => {
 // Get paginated questions from an existing session
 export const getSessionQuestions = async (req, res, next) => {
   try {
-    const { id: progressId } = req.params;
-    const { page = 1, sessionId } = req.query;
+    const { progressId, sessionId } = req.params;
+    const { page = 1 } = req.query;
     const perPage = 10;
     const userId = req.user && (req.user.id || req.user._id);
     if (!userId) throw new UnauthorizedError('Unauthorized');
-
-    if (!sessionId) throw new BadRequestError('sessionId is required');
 
     const session = await QuizSession.findById(sessionId);
     if (!session) throw new NotFoundError('Session không tồn tại');
@@ -173,12 +171,11 @@ export const getSessionQuestions = async (req, res, next) => {
 // Submit session (clear session data)
 export const submitQuizSession = async (req, res, next) => {
   try {
-    const { id: progressId } = req.params;
-    const { sessionId, answers } = req.body; // answers: [{ questionId, userAnswer }]
+    const { progressId, sessionId } = req.params;
+    const { answers } = req.body; // answers: [{ questionId, userAnswer }]
     const userId = req.user && (req.user.id || req.user._id);
 
     if (!userId) throw new UnauthorizedError('Unauthorized');
-    if (!sessionId) throw new BadRequestError('sessionId is required');
 
     // ===================== 1) Load Progress + Lesson =====================
     const currentProgress = await Progress.findById(progressId);

@@ -236,13 +236,13 @@ router.post('/:id/quiz/config', createQuizConfigForProgress);
 
 /**
  * @swagger
- * /progress/{id}/quiz/start:
+ * /progress/{progressId}/quiz-sessions:
  *   post:
  *     summary: Tạo session quiz mới cho progress (hoặc dùng cấu hình đã lưu)
  *     tags: [Progress]
  *     parameters:
  *       - in: path
- *         name: id
+ *         name: progressId
  *         required: true
  *         description: Progress ID
  *         schema:
@@ -265,22 +265,24 @@ router.post('/:id/quiz/config', createQuizConfigForProgress);
  *       400:
  *         description: Bad request (missing total/parts and no config)
  */
-router.post('/:id/quiz/start', startQuizSession);
+router.post('/:progressId/quiz-sessions', startQuizSession);
 /**
  * @swagger
- * /progress/{id}/quiz:
+ * /progress/{progressId}/quiz-sessions/{sessionId}/questions:
  *   get:
- *     summary: Lấy câu hỏi phân trang từ session đã tạo (phải truyền `sessionId` sau khi start)
+ *     summary: Lấy câu hỏi phân trang từ session đã tạo
  *     tags: [Progress]
  *     parameters:
  *       - in: path
- *         name: id
+ *         name: progressId
  *         required: true
+ *         description: Progress ID
  *         schema:
  *           type: string
- *       - in: query
+ *       - in: path
  *         name: sessionId
  *         required: true
+ *         description: Session ID
  *         schema:
  *           type: string
  *       - in: query
@@ -311,7 +313,7 @@ router.post('/:id/quiz/start', startQuizSession);
  *                   items:
  *                     type: object
  */
-router.get('/:id/quiz', getSessionQuestions);
+router.get('/:progressId/quiz-sessions/:sessionId/questions', getSessionQuestions);
 
 
 
@@ -319,14 +321,21 @@ router.get('/:id/quiz', getSessionQuestions);
 
 /**
  * @swagger
- * /progress/{id}/quiz/submit:
+ * /progress/{progressId}/quiz-sessions/{sessionId}/submit:
  *   post:
  *     summary: Nộp bài quiz, đánh giá đáp án và xóa session tạm
  *     tags: [Progress]
  *     parameters:
  *       - in: path
- *         name: id
+ *         name: progressId
  *         required: true
+ *         description: Progress ID
+ *         schema:
+ *           type: string
+ *       - in: path
+ *         name: sessionId
+ *         required: true
+ *         description: Session ID
  *         schema:
  *           type: string
  *     requestBody:
@@ -336,9 +345,6 @@ router.get('/:id/quiz', getSessionQuestions);
  *           schema:
  *             type: object
  *             properties:
- *               sessionId:
- *                 type: string
- *                 description: ID phiên quiz trả về từ /quiz/start
  *               answers:
  *                 type: array
  *                 description: Danh sách đáp án do học sinh gửi. Mỗi phần tử chứa `questionId` và `userAnswer`.
@@ -381,7 +387,7 @@ router.get('/:id/quiz', getSessionQuestions);
  *                         description: Stored correct answer (index or object)
  *                         type: object
  */
-router.post('/:id/quiz/submit', submitQuizSession);
+router.post('/:progressId/quiz-sessions/:sessionId/submit', submitQuizSession);
 
 
 // /**
