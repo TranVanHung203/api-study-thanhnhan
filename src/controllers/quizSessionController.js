@@ -115,7 +115,7 @@ export const startQuizSession = async (req, res, next) => {
       expiresAt,
     });
 
-    return res.status(201).json({ sessionId: session._id, total: mixedQuestionIds.length });
+    return res.status(201).json({ sessionId: session._id});
   } catch (err) {
     next(err);
   }
