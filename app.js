@@ -111,7 +111,7 @@ const swaggerOptions = {
     // './src/routes/videoRoutes.js',
     // './src/routes/exerciseRoutes.js',
     // './src/routes/quizNewRoutes.js',
-    // './src/routes/questionRoutes.js',
+    './src/routes/questionRoutes.js',
     './src/routes/characterRoutes.js',
       //'./src/routes/activityRoutes.js',
       //'./src/routes/ratingRoutes.js',

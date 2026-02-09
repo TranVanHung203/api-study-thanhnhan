@@ -122,15 +122,13 @@ export const startQuizSession = async (req, res, next) => {
 };
 
 
-// Get paginated questions from an existing session
+// Get all questions from an existing session
 export const getSessionQuestions = async (req, res, next) => {
   try {
     const { progressId, sessionId } = req.params;
-    const { page = 1 } = req.query;
-    const perPage = 10;
     const userId = req.user && (req.user.id || req.user._id);
     if (!userId) throw new UnauthorizedError('Unauthorized');
-
+    
     const session = await QuizSession.findById(sessionId);
     if (!session) throw new NotFoundError('Session không tồn tại');
 
@@ -140,19 +138,14 @@ export const getSessionQuestions = async (req, res, next) => {
     }
 
     const total = session.questionIds.length;
-    const totalPages = Math.max(1, Math.ceil(total / perPage));
-    const p = Math.max(1, parseInt(page, 10));
-    const start = (p - 1) * perPage;
-    const end = start + perPage;
-    const slice = session.questionIds.slice(start, end);
 
-    // fetch question docs and preserve the sequence as in session.questionIds
-    const questionDocs = await Question.find({ _id: { $in: slice } });
+    // fetch all question docs and preserve the sequence as in session.questionIds
+    const questionDocs = await Question.find({ _id: { $in: session.questionIds } });
     // Build a map from id -> doc for quick lookup
     const questionMap = new Map();
     for (const q of questionDocs) questionMap.set(String(q._id), q);
 
-    const questionsNoAnswer = slice.map(id => {
+    const questionsNoAnswer = session.questionIds.map(id => {
       const q = questionMap.get(String(id));
       if (!q) return null;
       const obj = q.toObject();
@@ -162,7 +155,7 @@ export const getSessionQuestions = async (req, res, next) => {
       return obj;
     }).filter(Boolean);
 
-    return res.status(200).json({ page: p, perPage, total, totalPages, questions: questionsNoAnswer });
+    return res.status(200).json({ total, questions: questionsNoAnswer });
   } catch (err) {
     next(err);
   }

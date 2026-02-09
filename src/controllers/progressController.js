@@ -238,6 +238,66 @@ export const completeProgressController = async (req, res, next) => {
       return res.status(404).json({ message: 'Progress không tìm thấy' });
     }
 
+    // Kiểm tra loại progress: phải là "Khởi động" hoặc "Hình thành kiến thức"
+    const progressName = progress.progressName || '';
+    const isValidType = progressName.includes('Khởi động') || progressName.includes('Hình thành kiến thức');
+    
+    if (!isValidType) {
+      return res.status(400).json({ 
+        message: 'Chỉ có thể đánh dấu hoàn thành progress loại "Khởi động" hoặc "Hình thành kiến thức"' 
+      });
+    }
+
+    // Lấy thông tin lesson
+    const lesson = await Lesson.findById(progress.lessonId);
+    if (!lesson) {
+      return res.status(404).json({ message: 'Lesson không tìm thấy' });
+    }
+
+    // Kiểm tra lesson trước đã hoàn thành chưa
+    if (lesson.order > 1) {
+      const previousLesson = await Lesson.findOne({
+        chapterId: lesson.chapterId,
+        order: lesson.order - 1
+      });
+
+      if (previousLesson) {
+        const previousLessonCompletion = await LessonCompletion.findOne({
+          userId,
+          lessonId: previousLesson._id,
+          isCompleted: true
+        });
+        
+        if (!previousLessonCompletion) {
+          return res.status(400).json({ 
+            message: 'Bạn phải hoàn thành lesson trước đó trước khi đánh dấu progress này' 
+          });
+        }
+      }
+    }
+
+    // Kiểm tra progress trước đã hoàn thành chưa
+    if (progress.stepNumber > 1) {
+      const previousProgress = await Progress.findOne({
+        lessonId: progress.lessonId,
+        stepNumber: progress.stepNumber - 1
+      });
+
+      if (previousProgress) {
+        const previousActivity = await UserActivity.findOne({
+          userId,
+          progressId: previousProgress._id,
+          isCompleted: true
+        });
+
+        if (!previousActivity) {
+          return res.status(400).json({ 
+            message: 'Bạn phải hoàn thành progress trước đó trước khi đánh dấu progress này' 
+          });
+        }
+      }
+    }
+
     // Tìm hoặc tạo UserActivity
     let activity = await UserActivity.findOne({ progressId, userId });
 
