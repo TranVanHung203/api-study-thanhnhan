@@ -240,11 +240,11 @@ export const completeProgressController = async (req, res, next) => {
 
     // Kiểm tra loại progress: phải là "Khởi động" hoặc "Hình thành kiến thức"
     const progressName = progress.progressName || '';
-    const isValidType = progressName.includes('Khởi động') || progressName.includes('Hình thành kiến thức');
+    const isValidType = progressName.includes('Khởi động') || progressName.includes('Hình thành kiến thức') || progressName.includes('Vận dụng');
     
     if (!isValidType) {
       return res.status(400).json({ 
-        message: 'Chỉ có thể đánh dấu hoàn thành progress loại "Khởi động" hoặc "Hình thành kiến thức"' 
+        message: 'Chỉ có thể đánh dấu hoàn thành progress loại "Khởi động" hoặc "Hình thành kiến thức", "Vận dụng"' 
       });
     }
 
