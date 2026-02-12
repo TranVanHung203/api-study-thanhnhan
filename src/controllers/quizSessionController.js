@@ -152,6 +152,16 @@ export const getSessionQuestions = async (req, res, next) => {
       if ('answer' in obj) delete obj.answer;
       if ('correctAnswer' in obj) delete obj.correctAnswer;
       // removed: if('order' in obj) delete obj.order;
+      
+      // Parse rawQuestion if it's stored as a JSON string in DB
+      if (obj.rawQuestion && typeof obj.rawQuestion === 'string') {
+        try {
+          obj.rawQuestion = JSON.parse(obj.rawQuestion);
+        } catch (e) {
+          // If parsing fails, keep original string value
+        }
+      }
+      
       return obj;
     }).filter(Boolean);
 
