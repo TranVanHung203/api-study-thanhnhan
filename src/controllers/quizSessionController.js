@@ -297,10 +297,6 @@ export const submitQuizSession = async (req, res, next) => {
       if (ans == null) return '';
       if (typeof ans === 'string') return ans.trim();
       if (typeof ans === 'number') return String(ans).trim();
-      if (typeof ans === 'object') {
-        if (ans.text != null) return String(ans.text).trim();
-        return '';
-      }
       return String(ans).trim();
     };
 
@@ -317,11 +313,9 @@ export const submitQuizSession = async (req, res, next) => {
         if (typeof userAnswer === 'number') {
           isCorrect = userAnswer === idx;
         } else if (correctChoice) {
-          const correctText = getText(correctChoice?.text ?? correctChoice);
+          const correctText = getText(correctChoice);
           isCorrect = getText(userAnswer) === correctText;
         }
-      } else if (typeof storedAnswer === 'object' && storedAnswer.text != null) {
-        isCorrect = getText(userAnswer) === getText(storedAnswer.text);
       } else if (typeof storedAnswer === 'string') {
         isCorrect = getText(userAnswer) === getText(storedAnswer);
       }

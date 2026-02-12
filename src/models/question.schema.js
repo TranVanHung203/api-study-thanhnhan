@@ -1,18 +1,13 @@
 import mongoose from 'mongoose';
 
-const ChoiceSchema = new mongoose.Schema({
-  // Always store choice content in `text`. If it's an image URL, store the URL string here.
-  text: { type: String, required: true }
-}, { _id: false });
-
 const QuestionSchema = new mongoose.Schema({
   quizId: { type: mongoose.Schema.Types.ObjectId, ref: 'Quiz', required: true },
   questionText: { type: String, required: false },
   rawQuestion: { type: mongoose.Schema.Types.Mixed, required: false, default: null },
   imageQuestion: { type: String, required: false },
-  // choices: array of objects { text } - if a choice is an image, store the image URL string in `text`
+  // choices: array of strings - if a choice is an image, store the image URL string directly
   choices: {
-    type: [ChoiceSchema],
+    type: [String],
     required: true,
     validate: {
       validator: function (v) {
@@ -29,7 +24,7 @@ const QuestionSchema = new mongoose.Schema({
   questionType: { type: String, enum: ['single', 'multiple', 'text', 'image'], default: 'single' },
   // detailType: optional string to describe a more specific subtype of the question
   detailType: { type: String, required: false },
-  // answer: either a numeric index (0-based) into `choices`, or an object { text }
+  // answer: either a numeric index (0-based) into `choices`, or a string
   answer: { type: mongoose.Schema.Types.Mixed, required: true },
   order: { type: Number, required: false },
   createdAt: { type: Date, default: Date.now }
