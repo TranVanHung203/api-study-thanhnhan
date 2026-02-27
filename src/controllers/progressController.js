@@ -240,7 +240,7 @@ export const completeProgressController = async (req, res, next) => {
 
     // Kiểm tra loại progress: phải là "Khởi động" hoặc "Hình thành kiến thức"
     const progressName = progress.progressName || '';
-    const isValidType = progressName.includes('Khởi động') || progressName.includes('Hình thành kiến thức') || progressName.includes('Vận dụng');
+    const isValidType = progressName.includes('Khởi động') || progressName.includes('Khám phá') || progressName.includes('Vận dụng');
     
     if (!isValidType) {
       return res.status(400).json({ 
