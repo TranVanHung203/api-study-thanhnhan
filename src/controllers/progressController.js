@@ -62,23 +62,29 @@ export const getProgressByLessonController = async (req, res, next) => {
       }
     }
 
-    // Lấy UserActivity để biết progress nào completed
+    // Lấy UserActivity để biết progress nào đã có hoạt động và progress nào completed
     let userActivities = [];
     const progressIds = progresses.map(p => p._id);
     if (userId && progressIds.length > 0) {
       userActivities = await UserActivity.find({
         userId,
-        progressId: { $in: progressIds },
-        isCompleted: true
-      });
+        progressId: { $in: progressIds }
+      }).select('progressId isCompleted');
     }
 
-    // Tìm step hoàn thành cao nhất
-    let maxCompletedStep = 0;
+    const activityProgressIdSet = new Set();
+    const completedProgressIdSet = new Set();
     userActivities.forEach(ua => {
-      const progress = progresses.find(p => p._id.toString() === ua.progressId.toString());
-      if (progress && progress.stepNumber > maxCompletedStep) {
-        maxCompletedStep = progress.stepNumber;
+      const progressIdStr = ua.progressId.toString();
+      activityProgressIdSet.add(progressIdStr);
+      if (ua.isCompleted) completedProgressIdSet.add(progressIdStr);
+    });
+
+    // Tìm step completed cao nhất (chỉ tính activity có isCompleted = true)
+    let maxCompletedStep = 0;
+    progresses.forEach(p => {
+      if (completedProgressIdSet.has(p._id.toString()) && p.stepNumber > maxCompletedStep) {
+        maxCompletedStep = p.stepNumber;
       }
     });
 
@@ -110,7 +116,8 @@ export const getProgressByLessonController = async (req, res, next) => {
         progressName: p.progressName || null,
         progressSlug: createSlug(p.progressName),
         lessonSlug,
-        isLock
+        isLock,
+        isComplete: activityProgressIdSet.has(p._id.toString())
       };
     });
 
