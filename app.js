@@ -30,6 +30,7 @@ import videoRoutes from './src/routes/videoRoutes.js';
 import exerciseRoutes from './src/routes/exerciseRoutes.js';
 import quizNewRoutes from './src/routes/quizNewRoutes.js';
 import questionRoutes from './src/routes/questionRoutes.js';
+import quizAttemptRoutes from './src/routes/quizAttemptRoutes.js';
 import activityRoutes from './src/routes/activityRoutes.js';
 import rewardRoutes from './src/routes/rewardRoutes.js';
 import characterRoutes from './src/routes/characterRoutes.js';
@@ -108,6 +109,7 @@ const swaggerOptions = {
     './src/routes/classRoutes.js',
     // './src/routes/skillRoutes.js',
     './src/routes/progressRoutes.js',
+    './src/routes/quizAttemptRoutes.js',
     // './src/routes/videoRoutes.js',
     // './src/routes/exerciseRoutes.js',
     // './src/routes/quizNewRoutes.js',
@@ -158,6 +160,7 @@ app.use('/videos', videoRoutes);
 app.use('/exercises', exerciseRoutes);
 app.use('/quizzes', quizNewRoutes);
 app.use('/questions', questionRoutes);
+app.use('/quiz-attempts', quizAttemptRoutes);
 app.use('/activities', activityRoutes);
 app.use('/rewards', rewardRoutes);
 app.use('/characters', characterRoutes);
