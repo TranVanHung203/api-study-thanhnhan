@@ -1,4 +1,6 @@
 import QuizAttempt from '../models/quizAttempt.schema.js';
+import Progress from '../models/progress.schema.js';
+import mongoose from 'mongoose';
 
 const parseDateOnly = (value) => {
   const raw = String(value).trim();
@@ -48,7 +50,16 @@ const parseDateParam = (value, endOfDay = false) => {
   return date;
 };
 
-const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const normalizeText = (text) => {
+  if (!text) return '';
+  return String(text)
+    .trim()
+    .toLowerCase()
+    .replace(/[\u0111\u0110]/g, 'd')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ');
+};
 
 export const getQuizAttemptsController = async (req, res, next) => {
   try {
@@ -58,8 +69,40 @@ export const getQuizAttemptsController = async (req, res, next) => {
     const limit = Number.isNaN(limitRaw) ? 20 : Math.max(1, Math.min(100, limitRaw));
     const skip = (page - 1) * limit;
 
-    const { name, date, fromDate, toDate } = req.query;
+    const { date, fromDate, toDate } = req.query;
+    const userId = req.params.userId || req.query.userId;
+    const lessonId = req.params.lessonId || req.query.lessonId;
     const matchStage = {};
+
+    if (!userId) {
+      return res.status(400).json({ message: 'userId la bat buoc.' });
+    }
+
+    if (!lessonId) {
+      return res.status(400).json({ message: 'lessonId la bat buoc.' });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ message: 'userId khong hop le.' });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(lessonId)) {
+      return res.status(400).json({ message: 'lessonId khong hop le.' });
+    }
+
+    matchStage.userId = new mongoose.Types.ObjectId(userId);
+
+    const progressList = await Progress.find({ lessonId: new mongoose.Types.ObjectId(lessonId) })
+      .select('_id progressName')
+      .lean();
+
+    const practiceProgress = progressList.find((item) => normalizeText(item.progressName) === 'luyen tap');
+
+    if (!practiceProgress) {
+      return res.status(404).json({ message: 'Khong tim thay progress "Luyen tap" trong lesson nay.' });
+    }
+
+    matchStage.progressId = practiceProgress._id;
 
     // Priority: exact day filter via `date`; fallback to range via fromDate/toDate.
     if (date) {
@@ -103,20 +146,8 @@ export const getQuizAttemptsController = async (req, res, next) => {
       { $unwind: '$user' }
     ];
 
-    if (name && name.trim()) {
-      const safeName = escapeRegex(name.trim());
-      pipeline.push({
-        $match: {
-          $or: [
-            { 'user.fullName': { $regex: safeName, $options: 'i' } },
-            { 'user.username': { $regex: safeName, $options: 'i' } }
-          ]
-        }
-      });
-    }
-
     pipeline.push(
-      { $sort: { createdAt: -1 } },
+      { $sort: { createdAt: -1, _id: -1 } },
       {
         $facet: {
           metadata: [{ $count: 'total' }],
@@ -137,7 +168,6 @@ export const getQuizAttemptsController = async (req, res, next) => {
                 score: 1,
                 isCompleted: 1,
                 createdAt: 1,
-                attemptDate: '$createdAt',
                 fullName: '$user.fullName',
                 details: {
                   $map: {

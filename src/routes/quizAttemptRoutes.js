@@ -8,9 +8,9 @@ router.all('*', authToken);
 
 /**
  * @swagger
- * /quiz-attempts:
+ * /quiz-attempts/{userId}/{lessonId}:
  *   get:
- *     summary: Lấy danh sách lịch sử làm quiz (phân trang, lọc theo ngày và tên)
+ *     summary: Lấy lịch sử làm quiz theo userId và lessonId (progress Luyện tập)
  *     tags: [Quiz Attempts]
  *     security:
  *       - bearerAuth: []
@@ -32,12 +32,18 @@ router.all('*', authToken);
  *           maximum: 100
  *           default: 20
  *         description: Số bản ghi trên mỗi trang
- *       - in: query
- *         name: name
- *         required: false
+ *       - in: path
+ *         name: userId
+ *         required: true
  *         schema:
  *           type: string
- *         description: Lọc theo fullName hoặc username người làm quiz
+ *         description: userId của người làm quiz
+ *       - in: path
+ *         name: lessonId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: lessonId để tìm progressName "Luyện tập"
  *       - in: query
  *         name: date
  *         required: false
@@ -86,9 +92,6 @@ router.all('*', authToken);
  *                       createdAt:
  *                         type: string
  *                         format: date-time
- *                       attemptDate:
- *                         type: string
- *                         format: date-time
  *                       fullName:
  *                         type: string
  *                         nullable: true
@@ -119,10 +122,10 @@ router.all('*', authToken);
  *                             isCorrectAnswer:
  *                               nullable: true
  *       400:
- *         description: Dữ liệu filter ngày không hợp lệ
+ *         description: Dữ liệu userId/lessonId/ngày không hợp lệ
  *       401:
  *         description: Chưa đăng nhập hoặc token không hợp lệ
  */
-router.get('/', getQuizAttemptsController);
+router.get('/:userId/:lessonId', getQuizAttemptsController);
 
 export default router;

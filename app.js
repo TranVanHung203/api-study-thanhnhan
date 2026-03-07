@@ -35,6 +35,7 @@ import activityRoutes from './src/routes/activityRoutes.js';
 import rewardRoutes from './src/routes/rewardRoutes.js';
 import characterRoutes from './src/routes/characterRoutes.js';
 import ratingRoutes from './src/routes/ratingRoutes.js';
+import userRoutes from './src/routes/userRoutes.js';
 
 // Import Swagger
 import swaggerUi from 'swagger-ui-express';
@@ -105,6 +106,7 @@ const swaggerOptions = {
   // Thêm/bớt file tùy ý
   apis: [
     './src/routes/authRoutes.js',
+    './src/routes/userRoutes.js',
     //'./src/routes/chapterRoutes.js',
     './src/routes/classRoutes.js',
     // './src/routes/skillRoutes.js',
@@ -165,6 +167,7 @@ app.use('/activities', activityRoutes);
 app.use('/rewards', rewardRoutes);
 app.use('/characters', characterRoutes);
 app.use('/ratings', ratingRoutes);
+app.use('/users', userRoutes);
 
 app.use(errorHandler);
 
