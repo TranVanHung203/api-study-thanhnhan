@@ -9,6 +9,7 @@ import UserActivity from '../models/userActivity.schema.js';
 import Progress from '../models/progress.schema.js';
 import Lesson from '../models/lesson.schema.js';
 import Reward from '../models/reward.schema.js';
+import Rating from '../models/rating.schema.js';
 import BadRequestError from '../errors/badRequestError.js';
 import NotFoundError from '../errors/notFoundError.js';
 import UnauthorizedError from '../errors/unauthorizedError.js';
@@ -256,11 +257,15 @@ export const submitQuizSession = async (req, res, next) => {
     }
 
     // Nếu không có answers -> chỉ xoá session
+    const hadRating = await Rating.exists({ userId, progressId });
+    const isCheckRating = !!hadRating;
+
     if (!answers || !Array.isArray(answers)) {
       await QuizSession.deleteOne({ _id: sessionId });
       return res.status(200).json({
         message: 'Session cleared',
         totalQuestions: session.questionIds.length,
+        isCheckRating,
       });
     }
 
@@ -403,6 +408,7 @@ export const submitQuizSession = async (req, res, next) => {
         totalQuestions,
         percentCorrect,
         isCheck: isCheckFlag,
+        isCheckRating,
       });
     }
 
@@ -421,6 +427,7 @@ export const submitQuizSession = async (req, res, next) => {
         totalQuestions,
         percentCorrect,
         isCheck: true,
+        isCheckRating,
       });
     }
 
@@ -456,6 +463,7 @@ export const submitQuizSession = async (req, res, next) => {
       totalQuestions,
       percentCorrect,
       isCheck: true,
+      isCheckRating,
     });
   } catch (err) {
     next(err);
