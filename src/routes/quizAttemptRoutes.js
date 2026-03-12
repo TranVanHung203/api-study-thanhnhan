@@ -8,6 +8,61 @@ router.all('*', authToken);
 
 /**
  * @swagger
+ * /quiz-attempts/lesson/{lessonId}:
+ *   get:
+ *     summary: Lay lich su lam quiz theo lessonId cua tai khoan dang dang nhap
+ *     tags: [Quiz Attempts]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: lessonId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: lessonId de tim progressName "Luyen tap"
+ *       - in: query
+ *         name: page
+ *         required: false
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           default: 1
+ *       - in: query
+ *         name: limit
+ *         required: false
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *           default: 20
+ *       - in: query
+ *         name: date
+ *         required: false
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: fromDate
+ *         required: false
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: toDate
+ *         required: false
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Danh sach lan lam quiz
+ *       400:
+ *         description: Du lieu lessonId/ngay khong hop le
+ *       401:
+ *         description: Chua dang nhap hoac token khong hop le
+ */
+router.get('/lesson/:lessonId', getQuizAttemptsController);
+
+/**
+ * @swagger
  * /quiz-attempts/{userId}/{lessonId}:
  *   get:
  *     summary: Lấy lịch sử làm quiz theo userId và lessonId (progress Luyện tập)

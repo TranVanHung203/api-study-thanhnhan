@@ -70,12 +70,12 @@ export const getQuizAttemptsController = async (req, res, next) => {
     const skip = (page - 1) * limit;
 
     const { date, fromDate, toDate } = req.query;
-    const userId = req.params.userId || req.query.userId;
+    const userId = req.params.userId || req.query.userId || req.user?.id || req.user?._id;
     const lessonId = req.params.lessonId || req.query.lessonId;
     const matchStage = {};
 
     if (!userId) {
-      return res.status(400).json({ message: 'userId la bat buoc.' });
+      return res.status(401).json({ message: 'Khong xac dinh duoc user dang dang nhap.' });
     }
 
     if (!lessonId) {
