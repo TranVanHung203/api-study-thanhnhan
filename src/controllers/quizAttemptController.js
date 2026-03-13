@@ -68,6 +68,8 @@ export const getQuizAttemptsController = async (req, res, next) => {
     const page = Number.isNaN(pageRaw) ? 1 : Math.max(1, pageRaw);
     const limit = Number.isNaN(limitRaw) ? 20 : Math.max(1, Math.min(100, limitRaw));
     const skip = (page - 1) * limit;
+    const hasUserIdParam = typeof req.params.userId === 'string' && req.params.userId.trim() !== '';
+    const sortDirection = hasUserIdParam ? -1 : 1;
 
     const { date, fromDate, toDate } = req.query;
     const userId = req.params.userId || req.query.userId || req.user?.id || req.user?._id;
@@ -147,7 +149,7 @@ export const getQuizAttemptsController = async (req, res, next) => {
     ];
 
     pipeline.push(
-      { $sort: { createdAt: -1, _id: -1 } },
+      { $sort: { createdAt: sortDirection, _id: sortDirection } },
       {
         $facet: {
           metadata: [{ $count: 'total' }],
