@@ -22,6 +22,29 @@ const idEquals = (a, b) => {
   return String(a) === String(b);
 };
 
+const parsedQuizMaxScore = Number(process.env.QUIZ_SESSION_MAX_SCORE);
+
+const QUIZ_SESSION_SCORING = {
+  // Change this value, or set QUIZ_SESSION_MAX_SCORE in env, if you want
+  // quiz submissions to use another score scale later.
+  maxScore:
+    Number.isFinite(parsedQuizMaxScore) && parsedQuizMaxScore > 0
+      ? parsedQuizMaxScore
+      : 15,
+  passPercent: 50,
+  precision: 2,
+};
+
+const roundScore = (value, precision = QUIZ_SESSION_SCORING.precision) => {
+  if (!Number.isFinite(value)) return 0;
+  return Number(value.toFixed(precision));
+};
+
+const calculateQuizScore = (correctCount, totalQuestions) => {
+  if (totalQuestions <= 0 || QUIZ_SESSION_SCORING.maxScore <= 0) return 0;
+  return roundScore((correctCount / totalQuestions) * QUIZ_SESSION_SCORING.maxScore);
+};
+
 // Start a quiz session: select `count` random questions from a quiz under the given progress
 // Optimized: parallel fetch, single aggregate query, in-memory sampling
 export const startQuizSession = async (req, res, next) => {
@@ -338,6 +361,8 @@ export const submitQuizSession = async (req, res, next) => {
 
     const totalQuestions = sessionQuestionIds.length;
     const percentCorrect = totalQuestions > 0 ? (correctCount / totalQuestions) * 100 : 0;
+    const score = calculateQuizScore(correctCount, totalQuestions);
+    const isPassed = percentCorrect >= QUIZ_SESSION_SCORING.passPercent;
 
     // ===================== 7) Lưu QuizAttempt (luôn lưu) =====================
     const details = [];
@@ -362,8 +387,8 @@ export const submitQuizSession = async (req, res, next) => {
       userId,
       progressId,
       sessionId: session._id,
-      score: percentCorrect,
-      isCompleted: percentCorrect >= 50,
+      score,
+      isCompleted: isPassed,
       details,
     }).save();
 
@@ -382,12 +407,12 @@ export const submitQuizSession = async (req, res, next) => {
       await new UserActivity({
         userId,
         progressId,
-        score: percentCorrect,
-        isCompleted: percentCorrect >= 50,
-        bonusEarned: percentCorrect >= 50 ? bonusEarned : 0,
+        score,
+        isCompleted: isPassed,
+        bonusEarned: isPassed ? bonusEarned : 0,
       }).save();
 
-      if (percentCorrect >= 50 && bonusEarned > 0) {
+      if (isPassed && bonusEarned > 0) {
         await Reward.findOneAndUpdate(
           { userId },
           { $inc: { totalPoints: bonusEarned } },
@@ -397,13 +422,15 @@ export const submitQuizSession = async (req, res, next) => {
 
       await QuizSession.deleteOne({ _id: sessionId });
 
-      return res.status(percentCorrect >= 50 ? 201 : 200).json({
-        isCorrect: percentCorrect >= 50,
+      return res.status(isPassed ? 201 : 200).json({
+        isCorrect: isPassed,
         message:
-          percentCorrect >= 50
+          isPassed
             ? 'Quiz hoàn thành (>=50% đúng), đã ghi nhận và cộng điểm thưởng nếu có'
             : 'Quiz chưa hoàn thành, đã ghi nhận lần thử',
-        bonusEarned: percentCorrect >= 50 ? bonusEarned : 0,
+        bonusEarned: isPassed ? bonusEarned : 0,
+        score,
+        scoreScale: QUIZ_SESSION_SCORING.maxScore,
         correctCount,
         totalQuestions,
         percentCorrect,
@@ -419,10 +446,12 @@ export const submitQuizSession = async (req, res, next) => {
       await QuizSession.deleteOne({ _id: sessionId });
 
       return res.status(200).json({
-        isCorrect: percentCorrect >= 50,
+        isCorrect: isPassed,
         message:
           'Quiz đã hoàn thành trước đó. Kết quả lần làm mới được ghi nhận nhưng điểm thưởng không được cộng thêm.',
         bonusEarned: prevBonus,
+        score,
+        scoreScale: QUIZ_SESSION_SCORING.maxScore,
         correctCount,
         totalQuestions,
         percentCorrect,
@@ -432,9 +461,9 @@ export const submitQuizSession = async (req, res, next) => {
     }
 
     // Case C: Có activity nhưng chưa completed => update, nếu pass thì cộng bonus 1 lần
-    existingActivity.score = percentCorrect;
+    existingActivity.score = score;
 
-    if (percentCorrect >= 50) {
+    if (isPassed) {
       existingActivity.isCompleted = true;
 
       const prevBonus = existingActivity.bonusEarned || 0;
@@ -452,13 +481,15 @@ export const submitQuizSession = async (req, res, next) => {
     await existingActivity.save();
     await QuizSession.deleteOne({ _id: sessionId });
 
-    return res.status(percentCorrect >= 50 ? 201 : 200).json({
-      isCorrect: percentCorrect >= 50,
+    return res.status(isPassed ? 201 : 200).json({
+      isCorrect: isPassed,
       message:
-        percentCorrect >= 50
+        isPassed
           ? 'Quiz hoàn thành — đã cập nhật trạng thái hoàn thành'
           : 'Quiz chưa hoàn thành — đã cập nhật lần thử',
-      bonusEarned: percentCorrect >= 50 ? (existingActivity.bonusEarned || 0) : 0,
+      bonusEarned: isPassed ? (existingActivity.bonusEarned || 0) : 0,
+      score,
+      scoreScale: QUIZ_SESSION_SCORING.maxScore,
       correctCount,
       totalQuestions,
       percentCorrect,
