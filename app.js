@@ -42,6 +42,44 @@ import swaggerUi from 'swagger-ui-express';
 import swaggerJsdoc from 'swagger-jsdoc';
 import path from 'path';
 import expressStatic from 'express';
+import os from 'os';
+
+// Lấy IP LAN thật — loại bỏ adapter ảo theo tên VÀ dải IP VPN đã biết
+function getLocalIP() {
+  const interfaces = os.networkInterfaces();
+
+  const VIRTUAL_NAME = /vmware|virtualbox|vbox|vethernet|ldplayer|hamachi|radmin|nordvpn|docker|loopback|pseudo|tap|tunnel|teredo|isatap/i;
+  const REAL_NAME    = /^wi-fi|^ethernet|^local area connection|^wlan|^eth/i;
+
+  // Dải IP của VPN/adapter ảo đã biết — loại bỏ tuyệt đối
+  const BLOCKED_RANGES = [
+    /^25\./,           // Radmin VPN / Hamachi
+    /^26\./,           // Radmin VPN
+    /^192\.168\.56\./, // VirtualBox Host-Only
+    /^192\.168\.99\./, // VirtualBox alternate
+    /^192\.168\.233\./, // VMware NAT
+    /^172\.(1[6-9]|2\d|3[01])\./, // Docker bridge
+  ];
+
+  const realIPs     = [];
+  const fallbackIPs = [];
+
+  for (const [name, addrs] of Object.entries(interfaces)) {
+    for (const iface of addrs) {
+      if (iface.family !== 'IPv4' || iface.internal) continue;
+      if (VIRTUAL_NAME.test(name)) continue;
+      const ip = iface.address;
+      if (BLOCKED_RANGES.some(re => re.test(ip))) continue;
+      if (REAL_NAME.test(name)) {
+        realIPs.push(ip);
+      } else {
+        fallbackIPs.push(ip);
+      }
+    }
+  }
+
+  return realIPs[0] || fallbackIPs[0] || 'localhost';
+}
 
 // Import cleanup jobs
 import { startCleanupJob, startExpiredGuestCleanup } from './src/jobs/cleanupJob.js';
@@ -62,7 +100,13 @@ app.use(cors({
 // Kết nối đến cơ sở dữ liệu
 databaseConfig.connect();
 
+const PORT = process.env.PORT || 5000;
+const HOST = process.env.HOST || '0.0.0.0';
+const LOCAL_IP = getLocalIP();
+
 // Swagger configuration
+// Không khai báo servers cố định — Swagger UI tự dùng host hiện tại
+// => laptop/điện thoại/máy server đều gọi đúng IP mà không bị CORS
 const swaggerOptions = {
   definition: {
     openapi: '3.0.0',
@@ -71,15 +115,6 @@ const swaggerOptions = {
       version: '1.0.0',
       description: 'API dạy học online: quản lý khoá học, bài học, người dùng, quiz, thông báo...'
     },
-    // Dynamically select the server shown in Swagger UI.
-    // - In production set NODE_ENV=production (or set SWAGGER_SERVER_URL to an explicit URL).
-    // - Locally the default will be http://localhost:5000.
-    servers: [
-      {
-        url: process.env.SWAGGER_SERVER_URL || (process.env.NODE_ENV === 'production' ? 'https://api-study-thanhnhan.onrender.com' : 'http://localhost:5000'),
-        description: process.env.SWAGGER_SERVER_URL ? 'Configured server' : (process.env.NODE_ENV === 'production' ? 'Production server' : 'Local server')
-      }
-    ],
     components: {
       securitySchemes: {
         bearerAuth: {
@@ -175,7 +210,10 @@ app.use(errorHandler);
 // startCleanupJob();        // Xóa dữ liệu orphan mỗi giờ
 // startExpiredGuestCleanup(); // Xóa guest hết hạn mỗi ngày lúc 3:00 AM
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+app.listen(PORT, HOST, () => {
+  console.log(`Server running on ${HOST}:${PORT}`);
+  console.log(`  Local (same machine) : http://127.0.0.1:${PORT}`);
+  console.log(`  LDPlayer / Emulator  : http://10.0.2.2:${PORT}`);
+  console.log(`  LAN (other devices)  : http://${LOCAL_IP}:${PORT}`);
+  console.log(`  Swagger              : http://localhost:${PORT}/api-docs`);
 });
