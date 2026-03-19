@@ -467,40 +467,40 @@ router.post('/google/token', googleTokenController);
 //  */
 // router.delete('/guest', authToken, deleteGuestController);
 
-// /**
-//  * @swagger
-//  * /auth/guest/convert:
-//  *   post:
-//  *     summary: Chuyển tài khoản khách thành user thường (giữ nguyên dữ liệu học tập)
-//  *     tags: [Auth]
-//  *     security:
-//  *       - bearerAuth: []
-//  *     requestBody:
-//  *       required: true
-//  *       content:
-//  *         application/json:
-//  *           schema:
-//  *             type: object
-//  *             required:
-//  *               - username
-//  *               - email
-//  *               - password
-//  *             properties:
-//  *               username:
-//  *                 type: string
-//  *                 example: "newuser123"
-//  *               email:
-//  *                 type: string
-//  *                 example: "newuser@example.com"
-//  *               password:
-//  *                 type: string
-//  *                 example: "password123"
-//  *     responses:
-//  *       200:
-//  *         description: Chuyển đổi thành công, dữ liệu học tập được giữ nguyên
-//  *       400:
-//  *         description: Tài khoản đã là user thường hoặc username/email đã tồn tại
-//  */
-// router.post('/guest/convert', authToken, convertGuestToUserController);
+/**
+ * @swagger
+ * /auth/guest/convert:
+ *   post:
+ *     summary: Chuyển tài khoản khách thành user thường (giữ nguyên dữ liệu học tập)
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - username
+ *               - email
+ *               - password
+ *             properties:
+ *               username:
+ *                 type: string
+ *                 example: "newuser123"
+ *               email:
+ *                 type: string
+ *                 example: "newuser@example.com"
+ *               password:
+ *                 type: string
+ *                 example: "password123"
+ *     responses:
+ *       200:
+ *         description: Chuyển đổi thành công, dữ liệu học tập được giữ nguyên
+ *       400:
+ *         description: Tài khoản đã là user thường hoặc username/email đã tồn tại
+ */
+router.post('/guest/convert', authToken, convertGuestToUserController);
 
 export default router;

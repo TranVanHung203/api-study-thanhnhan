@@ -568,13 +568,6 @@ export const convertGuestToUserController = async (req, res, next) => {
 
     return res.status(200).json({
       message: 'Chuyển đổi tài khoản thành công! Dữ liệu học tập được giữ nguyên.',
-      user: {
-        id: updatedUser._id,
-        username: updatedUser.username,
-        email: updatedUser.email,
-        fullName: updatedUser.fullName,
-        isGuest: false
-      }
     });
   } catch (error) {
     next(error);

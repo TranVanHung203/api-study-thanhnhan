@@ -27,6 +27,7 @@ const QuestionSchema = new mongoose.Schema({
   // answer: either a numeric index (0-based) into `choices`, or a string
   answer: { type: mongoose.Schema.Types.Mixed, required: true },
   order: { type: Number, required: false },
+  hintVoice: { type: String, required: false },
   createdAt: { type: Date, default: Date.now }
 });
 
