@@ -27,6 +27,11 @@ const OTPVerificationSchema = new mongoose.Schema({
     ref: 'Class',
     required: false
   },
+  guestUserId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: false
+  },
   createdAt: {
     type: Date,
     default: Date.now,

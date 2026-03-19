@@ -522,26 +522,30 @@ export const deleteGuestController = async (req, res, next) => {
   }
 };
 
-// Chuyển từ guest sang user thường (đăng ký chính thức)
-export const convertGuestToUserController = async (req, res, next) => {
+// Bước 1: Gửi OTP để chuyển guest sang user thường
+export const sendOTPForConvertController = async (req, res, next) => {
   try {
     const userId = req.user.id;
-    const { username, email, password } = req.body;
+    const { username, email, password, fullName } = req.body;
 
-    if (!username || !email || !password) {
-      throw new BadRequestError('Vui lòng điền đầy đủ: username, email, password');
+    if (!username || !email || !password || !fullName) {
+      throw new BadRequestError('Vui lòng điền đầy đủ: username, email, password, fullName');
+    }
+
+    if (password.length < 8) {
+      throw new BadRequestError('Mật khẩu phải có ít nhất 8 ký tự');
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      throw new BadRequestError('Email không hợp lệ');
     }
 
     const user = await User.findById(userId);
-    if (!user) {
-      throw new NotFoundError('User không tìm thấy');
-    }
+    if (!user) throw new NotFoundError('User không tìm thấy');
+    if (!user.isGuest) throw new BadRequestError('Tài khoản này đã là user thường');
 
-    if (!user.isGuest) {
-      throw new BadRequestError('Tài khoản này đã là user thường');
-    }
-
-    // Kiểm tra username/email đã tồn tại
+    // Kiểm tra username/email đã tồn tại ở user khác
     const existingUser = await User.findOne({
       $or: [{ username }, { email }],
       _id: { $ne: userId }
@@ -550,24 +554,90 @@ export const convertGuestToUserController = async (req, res, next) => {
       throw new BadRequestError('Username hoặc email đã tồn tại');
     }
 
-    // Hash password
     const passwordHash = await bcrypt.hash(password, 10);
+    const otp = generateOTP();
 
-    // Cập nhật user từ guest sang user thường
-    const updatedUser = await User.findByIdAndUpdate(
-      userId,
-      {
-        username,
-        email,
-        passwordHash,
-        isGuest: false,
-        guestExpiresAt: null
-      },
-      { new: true }
-    );
+    // Xóa OTP cũ của email này (nếu có)
+    await OTPVerification.deleteMany({ email });
+
+    const otpVerification = new OTPVerification({
+      email,
+      otp,
+      username,
+      passwordHash,
+      fullName,
+      guestUserId: userId
+    });
+    await otpVerification.save();
+
+    sendOTPEmail(email, otp, fullName).catch((error) => {
+      console.error(`Failed to send OTP email to ${email}:`, error);
+    });
 
     return res.status(200).json({
-      message: 'Chuyển đổi tài khoản thành công! Dữ liệu học tập được giữ nguyên.',
+      message: 'OTP đã được gửi đến email của bạn. Vui lòng kiểm tra và nhập mã OTP.',
+      email
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Bước 2: Xác thực OTP và hoàn tất chuyển đổi guest sang user thường
+export const verifyOTPAndConvertController = async (req, res, next) => {
+  try {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      throw new BadRequestError('Vui lòng cung cấp email và mã OTP');
+    }
+
+    const otpRecord = await OTPVerification.findOne({ email, otp });
+    if (!otpRecord) {
+      throw new BadRequestError('Mã OTP không hợp lệ hoặc đã hết hạn');
+    }
+
+    if (!otpRecord.guestUserId) {
+      await OTPVerification.deleteOne({ _id: otpRecord._id });
+      throw new BadRequestError('OTP này không dùng để chuyển đổi tài khoản');
+    }
+
+    const user = await User.findById(otpRecord.guestUserId);
+    if (!user) {
+      await OTPVerification.deleteOne({ _id: otpRecord._id });
+      throw new NotFoundError('User không tìm thấy');
+    }
+
+    if (!user.isGuest) {
+      await OTPVerification.deleteOne({ _id: otpRecord._id });
+      throw new BadRequestError('Tài khoản này đã là user thường');
+    }
+
+    // Kiểm tra lại username/email chưa bị chiếm
+    const existingUser = await User.findOne({
+      $or: [{ username: otpRecord.username }, { email: otpRecord.email }],
+      _id: { $ne: user._id }
+    });
+    if (existingUser) {
+      await OTPVerification.deleteOne({ _id: otpRecord._id });
+      throw new BadRequestError('Username hoặc email đã tồn tại');
+    }
+
+    // Cập nhật guest thành user thường, giữ nguyên toàn bộ dữ liệu học tập
+    await User.findByIdAndUpdate(user._id, {
+      username: otpRecord.username,
+      email: otpRecord.email,
+      passwordHash: otpRecord.passwordHash,
+      fullName: otpRecord.fullName,
+      isGuest: false,
+      guestExpiresAt: null,
+      emailVerified: true
+    });
+
+    await OTPVerification.deleteOne({ _id: otpRecord._id });
+
+    return res.status(200).json({
+      message: 'Chuyển đổi tài khoản thành công! Dữ liệu học tập được giữ nguyên.'
     });
   } catch (error) {
     next(error);

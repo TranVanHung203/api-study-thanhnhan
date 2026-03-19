@@ -8,7 +8,8 @@ import {
   logoutController,
   guestLoginController,
   deleteGuestController,
-  convertGuestToUserController
+  sendOTPForConvertController,
+  verifyOTPAndConvertController
   , googleTokenController
   , changeFullNameController
   , changeFullNameAndAttachCharacterController
@@ -471,7 +472,7 @@ router.post('/google/token', googleTokenController);
  * @swagger
  * /auth/guest/convert:
  *   post:
- *     summary: Chuyển tài khoản khách thành user thường (giữ nguyên dữ liệu học tập)
+ *     summary: Gửi OTP để chuyển tài khoản khách thành user thường
  *     tags: [Auth]
  *     security:
  *       - bearerAuth: []
@@ -485,6 +486,7 @@ router.post('/google/token', googleTokenController);
  *               - username
  *               - email
  *               - password
+ *               - fullName
  *             properties:
  *               username:
  *                 type: string
@@ -495,12 +497,51 @@ router.post('/google/token', googleTokenController);
  *               password:
  *                 type: string
  *                 example: "password123"
+ *               fullName:
+ *                 type: string
+ *                 example: "Nguyễn Văn A"
+ *     responses:
+ *       200:
+ *         description: OTP đã được gửi đến email
+ *       400:
+ *         description: Thiếu thông tin, mật khẩu ngắn, email không hợp lệ, hoặc username/email đã tồn tại
+ *       401:
+ *         description: Chưa xác thực
+ */
+router.post('/guest/convert', authToken, sendOTPForConvertController);
+
+/**
+ * @swagger
+ * /auth/guest/convert/verify:
+ *   post:
+ *     summary: Xác thực OTP và hoàn tất chuyển đổi tài khoản khách thành user thường
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *               - otp
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 example: "newuser@example.com"
+ *               otp:
+ *                 type: string
+ *                 example: "123456"
  *     responses:
  *       200:
  *         description: Chuyển đổi thành công, dữ liệu học tập được giữ nguyên
  *       400:
- *         description: Tài khoản đã là user thường hoặc username/email đã tồn tại
+ *         description: OTP không hợp lệ hoặc đã hết hạn
+ *       401:
+ *         description: Chưa xác thực
  */
-router.post('/guest/convert', authToken, convertGuestToUserController);
+router.post('/guest/convert/verify', authToken, verifyOTPAndConvertController);
 
 export default router;
