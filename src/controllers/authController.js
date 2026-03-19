@@ -158,7 +158,7 @@ export const getUserController = async (req, res, next) => {
     const userId = req.user.id;
     const user = await User.findById(userId)
       .populate('classId')
-      .select('_id fullName email classId characterId');
+      .select('_id fullName email classId characterId isGuest');
 
     if (!user) throw new NotFoundError('User không tìm thấy');
 
@@ -167,7 +167,8 @@ export const getUserController = async (req, res, next) => {
       fullName: user.fullName,
       email: user.email,
       classId: user.classId || null,
-      characterId: user.characterId || null
+      characterId: user.characterId || null,
+      isGuest: user.isGuest ?? false
     });
   } catch (error) {
     next(error);

@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import jwt from 'jsonwebtoken';
+import User from '../models/user.schema.js';
 
 const SECRET_KEY = process.env.SECRET_KEY || 'your-secret-key';
 
@@ -52,4 +53,16 @@ const authToken = (req, res, next) => {
     }
 }
 
-export { authToken };
+const requireGuest = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user.id).select('isGuest');
+    if (!user || !user.isGuest) {
+      return res.status(403).json({ message: 'Chỉ tài khoản khách mới được phép thực hiện thao tác này' });
+    }
+    next();
+  } catch (error) {
+    next(error);
+  }
+};
+
+export { authToken, requireGuest };

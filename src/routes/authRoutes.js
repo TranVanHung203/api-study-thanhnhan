@@ -1,6 +1,5 @@
 import express from 'express';
 import {
-
   loginController,
   refreshTokenController,
   changePasswordController,
@@ -16,7 +15,7 @@ import {
   , sendOTPForRegisterController
   , verifyOTPAndRegisterController
 } from '../controllers/authController.js';
-import { authToken } from '../middlewares/authMiddleware.js';
+import { authToken, requireGuest } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
 
@@ -508,7 +507,7 @@ router.post('/google/token', googleTokenController);
  *       401:
  *         description: Chưa xác thực
  */
-router.post('/guest/convert', authToken, sendOTPForConvertController);
+router.post('/guest/convert', authToken, requireGuest, sendOTPForConvertController);
 
 /**
  * @swagger
@@ -542,6 +541,6 @@ router.post('/guest/convert', authToken, sendOTPForConvertController);
  *       401:
  *         description: Chưa xác thực
  */
-router.post('/guest/convert/verify', authToken, verifyOTPAndConvertController);
+router.post('/guest/convert/verify', authToken, requireGuest, verifyOTPAndConvertController);
 
 export default router;
