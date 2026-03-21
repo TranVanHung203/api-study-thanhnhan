@@ -157,7 +157,6 @@ export const getUserController = async (req, res, next) => {
   try {
     const userId = req.user.id;
     const user = await User.findById(userId)
-      .populate('classId')
       .select('_id fullName email classId characterId isGuest');
 
     if (!user) throw new NotFoundError('User không tìm thấy');
