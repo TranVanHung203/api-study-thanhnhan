@@ -13,7 +13,7 @@ import {
   completeProgressController
 } from '../controllers/progressController.js';
 import { authToken } from '../middlewares/authMiddleware.js';
-import { getQuizConfigByProgress, upsertQuizConfigForProgress,createQuizConfigForProgress } from '../controllers/quizConfigController.js';
+import { getQuizConfigByProgress, upsertQuizConfigForProgress, createQuizConfigForProgress, deleteQuizConfigForProgress } from '../controllers/quizConfigController.js';
 
 const router = express.Router();
 
@@ -233,6 +233,29 @@ router.put('/:id/quiz/config', upsertQuizConfigForProgress);
  *         description: Created
  */
 router.post('/:id/quiz/config', createQuizConfigForProgress);
+
+/**
+ * @swagger
+ * /progress/{id}/quiz/config:
+ *   delete:
+ *     summary: Xóa cấu hình quiz của một progress
+ *     tags: [Progress]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         description: Progress ID
+ *         schema:
+ *           type: string
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Xóa thành công
+ *       404:
+ *         description: Không tìm thấy cấu hình
+ */
+router.delete('/:id/quiz/config', deleteQuizConfigForProgress);
 
 /**
  * @swagger

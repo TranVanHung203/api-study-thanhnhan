@@ -86,4 +86,15 @@ export const createQuizConfigForProgress = async (req, res, next) => {
   }
 };
 
-export default { getQuizConfigByProgress, upsertQuizConfigForProgress, createQuizConfigForProgress };
+export const deleteQuizConfigForProgress = async (req, res, next) => {
+  try {
+    const { id } = req.params; // progressId
+    const deleted = await QuizConfig.findOneAndDelete({ progressId: id });
+    if (!deleted) throw new NotFoundError('No quiz config found for this progress');
+    return res.status(200).json({ message: 'Quiz config đã xóa thành công' });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export default { getQuizConfigByProgress, upsertQuizConfigForProgress, createQuizConfigForProgress, deleteQuizConfigForProgress };

@@ -36,6 +36,7 @@ import rewardRoutes from './src/routes/rewardRoutes.js';
 import characterRoutes from './src/routes/characterRoutes.js';
 import ratingRoutes from './src/routes/ratingRoutes.js';
 import userRoutes from './src/routes/userRoutes.js';
+import quizAssignmentRoutes from './src/routes/quizAssignmentRoutes.js';
 
 // Import Swagger
 import swaggerUi from 'swagger-ui-express';
@@ -149,12 +150,13 @@ const swaggerOptions = {
     './src/routes/quizAttemptRoutes.js',
     // './src/routes/videoRoutes.js',
     // './src/routes/exerciseRoutes.js',
-    // './src/routes/quizNewRoutes.js',
+    './src/routes/quizNewRoutes.js',
     './src/routes/questionRoutes.js',
     './src/routes/characterRoutes.js',
       //'./src/routes/activityRoutes.js',
       './src/routes/ratingRoutes.js',
     // './src/routes/rewardRoutes.js',
+    './src/routes/quizAssignmentRoutes.js'
   ],
 };
 
@@ -203,6 +205,7 @@ app.use('/rewards', rewardRoutes);
 app.use('/characters', characterRoutes);
 app.use('/ratings', ratingRoutes);
 app.use('/users', userRoutes);
+app.use('/assignments', quizAssignmentRoutes);
 
 app.use(errorHandler);
 

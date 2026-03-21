@@ -21,12 +21,11 @@ const QuestionSchema = new mongoose.Schema({
   // - multiple: multiple-choice (multiple correct answers)
   // - text: free-text answer
   // - image: image-based choice
-  questionType: { type: String, enum: ['single', 'multiple', 'text', 'image'], default: 'single' },
+  questionType: { type: String, default: 'single' },
   // detailType: optional string to describe a more specific subtype of the question
   detailType: { type: String, required: false },
   // answer: either a numeric index (0-based) into `choices`, or a string
   answer: { type: mongoose.Schema.Types.Mixed, required: true },
-  order: { type: Number, required: false },
   hintVoice: { type: String, required: false },
   createdAt: { type: Date, default: Date.now }
 });

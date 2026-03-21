@@ -20,6 +20,11 @@ const QuizSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Progress'
   },
+  createdBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: false
+  },
   createdAt: { 
     type: Date, 
     default: Date.now 
