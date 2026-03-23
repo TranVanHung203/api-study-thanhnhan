@@ -216,27 +216,32 @@ export const getClassChaptersMapController = async (req, res, next) => {
       completedLessonMap.set(lc.lessonId.toString(), lc.isCompleted);
     });
 
-    // 5. Build response: mỗi chapter bọc lessons của nó
+    // 5. Tìm lesson đầu tiên chưa hoàn thành trên toàn bộ chapters (chỉ 1 isCurrent toàn cục)
+    let currentLessonId = null;
+    outer: for (const chapter of chapters) {
+      const chapterLessons = allLessons.filter(
+        lesson => lesson.chapterId.toString() === chapter._id.toString()
+      );
+      for (const lesson of chapterLessons) {
+        const isCompleted = completedLessonMap.get(lesson._id.toString()) || false;
+        if (!isCompleted) {
+          currentLessonId = lesson._id.toString();
+          break outer;
+        }
+      }
+    }
+
+    // Build response: mỗi chapter bọc lessons của nó
     const chaptersWithLessons = chapters.map(chapter => {
       // Lấy lessons của chapter này
       const chapterLessons = allLessons.filter(
         lesson => lesson.chapterId.toString() === chapter._id.toString()
       );
 
-      // Tìm lesson đầu tiên chưa hoàn thành trong chapter này
-      let currentLessonOrder = null;
-      for (const lesson of chapterLessons) {
-        const isCompleted = completedLessonMap.get(lesson._id.toString()) || false;
-        if (!isCompleted) {
-          currentLessonOrder = lesson.order;
-          break;
-        }
-      }
-
       // Build lessons với status
       const lessonsWithStatus = chapterLessons.map(lesson => {
         const isCompleted = completedLessonMap.get(lesson._id.toString()) || false;
-        const isCurrent = currentLessonOrder === lesson.order;
+        const isCurrent = currentLessonId === lesson._id.toString();
 
         return {
           _id: lesson._id,
