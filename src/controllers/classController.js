@@ -217,6 +217,7 @@ export const getClassChaptersMapController = async (req, res, next) => {
     });
 
     // 5. Tìm lesson đầu tiên chưa hoàn thành trên toàn bộ chapters (chỉ 1 isCurrent toàn cục)
+    // Nếu tất cả đã hoàn thành, giữ isCurrent = true tại lesson cuối cùng
     let currentLessonId = null;
     outer: for (const chapter of chapters) {
       const chapterLessons = allLessons.filter(
@@ -229,6 +230,9 @@ export const getClassChaptersMapController = async (req, res, next) => {
           break outer;
         }
       }
+    }
+    if (currentLessonId === null && allLessons.length > 0) {
+      currentLessonId = allLessons[allLessons.length - 1]._id.toString();
     }
 
     // Build response: mỗi chapter bọc lessons của nó
