@@ -1,10 +1,10 @@
 import express from 'express';
 import {
-  getSkillsByChapterController,
-  createSkillController,
-  updateSkillController,
-  deleteSkillController
-} from '../controllers/skillController.js';
+  getLessonsByChapterController,
+  createLessonController,
+  updateLessonController,
+  deleteLessonController
+} from '../controllers/lessonController.js';
 import { authToken } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
@@ -13,10 +13,10 @@ router.all('*', authToken);
 
 /**
  * @swagger
- * /skills/chapter/{chapterId}:
+ * /lessons/chapter/{chapterId}:
  *   get:
- *     summary: Lấy danh sách kỹ năng của một chapter
- *     tags: [Skills]
+ *     summary: Lấy danh sách bài học của một chapter
+ *     tags: [Lessons]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -27,18 +27,18 @@ router.all('*', authToken);
  *           type: string
  *     responses:
  *       200:
- *         description: Danh sách kỹ năng
+ *         description: Danh sách bài học
  *       401:
  *         description: Không có token hoặc token không hợp lệ
  */
-router.get('/chapter/:chapterId', getSkillsByChapterController);
+router.get('/chapter/:chapterId', getLessonsByChapterController);
 
 /**
  * @swagger
- * /skills:
+ * /lessons:
  *   post:
- *     summary: Tạo kỹ năng mới
- *     tags: [Skills]
+ *     summary: Tạo bài học mới
+ *     tags: [Lessons]
  *     requestBody:
  *       required: true
  *       content:
@@ -47,11 +47,11 @@ router.get('/chapter/:chapterId', getSkillsByChapterController);
  *             type: object
  *             required:
  *               - chapterId
- *               - skillName
+ *               - lessonName
  *             properties:
  *               chapterId:
  *                 type: string
- *               skillName:
+ *               lessonName:
  *                 type: string
  *               description:
  *                 type: string
@@ -60,19 +60,19 @@ router.get('/chapter/:chapterId', getSkillsByChapterController);
  *                 description: Nếu không truyền sẽ tự động lấy order cao nhất + 1
  *     responses:
  *       201:
- *         description: Kỹ năng được tạo thành công
+ *         description: Bài học được tạo thành công
  */
-router.post('/', createSkillController);
+router.post('/', createLessonController);
 
 /**
  * @swagger
- * /skills/{skillId}:
+ * /lessons/{lessonId}:
  *   patch:
- *     summary: Cập nhật kỹ năng
- *     tags: [Skills]
+ *     summary: Cập nhật bài học
+ *     tags: [Lessons]
  *     parameters:
  *       - in: path
- *         name: skillId
+ *         name: lessonId
  *         required: true
  *         schema:
  *           type: string
@@ -86,17 +86,17 @@ router.post('/', createSkillController);
  *       200:
  *         description: Cập nhật thành công
  */
-router.patch('/:skillId', updateSkillController);
+router.patch('/:lessonId', updateLessonController);
 
 /**
  * @swagger
- * /skills/{skillId}:
+ * /lessons/{lessonId}:
  *   delete:
- *     summary: Xóa kỹ năng
- *     tags: [Skills]
+ *     summary: Xóa bài học
+ *     tags: [Lessons]
  *     parameters:
  *       - in: path
- *         name: skillId
+ *         name: lessonId
  *         required: true
  *         schema:
  *           type: string
@@ -104,6 +104,6 @@ router.patch('/:skillId', updateSkillController);
  *       200:
  *         description: Xóa thành công
  */
-router.delete('/:skillId', deleteSkillController);
+router.delete('/:lessonId', deleteLessonController);
 
 export default router;

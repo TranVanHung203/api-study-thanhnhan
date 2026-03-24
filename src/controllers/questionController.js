@@ -1,5 +1,8 @@
 import mongoose from 'mongoose';
 import Question from '../models/question.schema.js';
+import Quiz from '../models/quiz.schema.js';
+import QuizAttempt from '../models/quizAttempt.schema.js';
+import AssignmentAttempt from '../models/assignmentAttempt.schema.js';
 
 // Lấy câu hỏi của một quiz
 export const getQuestionsByQuizController = async (req, res, next) => {
@@ -45,16 +48,21 @@ export const createQuestionController = async (req, res, next) => {
       quizId,
       questionText,
       rawQuestion,
-      questionVoice,
       imageQuestion,
       choices,
       answer,
       questionType,
-      hintVoice,
-      order
+      detailType,
+      hintVoice
     } = req.body;
-    // Expected `choices` shape: [ { text }, ... ] with length >= 2. If value is an image URL, store URL string in `text`.
-    if (!Array.isArray(choices) || choices.length < 2) {
+    // Kiểm tra quiz tồn tại và do user hiện tại tạo
+    const quiz = await Quiz.findOne({ _id: quizId, createdBy: req.user.id });
+    if (!quiz) {
+      return res.status(404).json({ message: 'Quiz không tìm thấy hoặc bạn không có quyền thêm câu hỏi' });
+    }
+
+    // Expected `choices` shape: string[] with length >= 2.
+    if (!Array.isArray(choices) || choices.length < 2 || choices.some((c) => typeof c !== 'string')) {
       return res.status(400).json({ message: 'choices must be an array with at least two items' });
     }
 
@@ -75,14 +83,12 @@ export const createQuestionController = async (req, res, next) => {
       quizId,
       questionText,
       rawQuestion,
-      questionVoice,
       imageQuestion,
       choices,
-      // answer can be number (index) or object
       answer,
       questionType,
-      hintVoice,
-      order: order || 0
+      detailType,
+      hintVoice
     });
 
     await question.save();
@@ -118,11 +124,22 @@ export const getQuestionForStudentController = async (req, res, next) => {
 export const updateQuestionController = async (req, res, next) => {
   try {
     const { questionId } = req.params;
-    const { questionText, rawQuestion, questionVoice, imageQuestion, choices, answer, hintVoice, order } = req.body;
+    const { questionText, rawQuestion, imageQuestion, choices, answer, questionType, detailType, hintVoice } = req.body;
+
+
+    // Kiểm tra question tồn tại và quiz do user hiện tại tạo
+    const existing = await Question.findById(questionId).lean();
+    if (!existing) {
+      return res.status(404).json({ message: 'Câu hỏi không tìm thấy' });
+    }
+    const quiz = await Quiz.findOne({ _id: existing.quizId, createdBy: req.user.id });
+    if (!quiz) {
+      return res.status(403).json({ message: 'Bạn không có quyền chỉnh sửa câu hỏi này' });
+    }
 
     const question = await Question.findByIdAndUpdate(
       questionId,
-      { questionText, rawQuestion, questionVoice, imageQuestion, choices, answer, hintVoice, order },
+      { questionText, rawQuestion, imageQuestion, choices, answer, questionType, detailType, hintVoice },
       { new: true }
     );
 
@@ -139,6 +156,25 @@ export const updateQuestionController = async (req, res, next) => {
 export const deleteQuestionController = async (req, res, next) => {
   try {
     const { questionId } = req.params;
+
+    const existing = await Question.findById(questionId).lean();
+    if (!existing) {
+      return res.status(404).json({ message: 'Câu hỏi không tìm thấy' });
+    }
+
+    // Kiểm tra quyền
+    const quiz = await Quiz.findOne({ _id: existing.quizId, createdBy: req.user.id });
+    if (!quiz) {
+      return res.status(403).json({ message: 'Bạn không có quyền xóa câu hỏi này' });
+    }
+
+    // Kiểm tra câu hỏi có trong lịch sử làm bài không
+    const usedInAttempt = await QuizAttempt.exists({ 'details.questionId': questionId });
+    const usedInAssignment = await AssignmentAttempt.exists({ 'details.questionId': questionId });
+    if (usedInAttempt || usedInAssignment) {
+      return res.status(400).json({ message: 'Không thể xóa câu hỏi vì đã có học sinh làm bài liên quan' });
+    }
+
     await Question.findByIdAndDelete(questionId);
 
     return res.status(200).json({
@@ -158,37 +194,31 @@ export const checkAnswerController = async (req, res, next) => {
     if (!question) {
       return res.status(404).json({ message: 'Câu hỏi không tìm thấy' });
     }
-    // Normalize stored answer to string for direct comparison
-    let storedText = null;
+    const toText = (value) => {
+      if (value === undefined || value === null) return null;
+      if (typeof value === 'number') return String(value);
+      if (typeof value === 'string') return value;
+      return String(value);
+    };
+
     const stored = question.answer;
-    if (stored === undefined || stored === null) storedText = null;
-    else if (typeof stored === 'number') {
-      const idx = stored;
-      const correctChoice = question.choices && question.choices[idx];
-      storedText = correctChoice ? (correctChoice.text || String(correctChoice)) : null;
-    } else if (typeof stored === 'object') {
-      if (stored.text) storedText = stored.text;
-      else storedText = String(stored);
+    let storedText = null;
+    if (typeof stored === 'number') {
+      const correctChoice = question.choices && question.choices[stored];
+      storedText = correctChoice ?? null;
     } else {
-      storedText = String(stored);
+      storedText = toText(stored);
     }
 
-    // Normalize userAnswer to string
     let userText = null;
-    if (userAnswer === undefined || userAnswer === null) userText = null;
-    else if (typeof userAnswer === 'number') {
-      // If user passed index, map to choice text
-      const idx = userAnswer;
-      const choice = question.choices && question.choices[idx];
-      userText = choice ? (choice.text || String(choice)) : String(userAnswer);
-    } else if (typeof userAnswer === 'object') {
-      if (userAnswer.text) userText = userAnswer.text;
-      else userText = String(userAnswer);
+    if (typeof userAnswer === 'number') {
+      const choice = question.choices && question.choices[userAnswer];
+      userText = choice ?? toText(userAnswer);
     } else {
-      userText = String(userAnswer);
+      userText = toText(userAnswer);
     }
 
-    const isCorrect = (storedText !== null && userText !== null && storedText === userText);
+    const isCorrect = storedText !== null && userText !== null && storedText === userText;
 
     return res.status(200).json({ isCorrect});
   } catch (error) {

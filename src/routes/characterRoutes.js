@@ -4,6 +4,7 @@ import {
   updateCharacterController,
   deleteCharacterController,
   listCharactersController,
+  getCharacterByIdController,
   attachCharacterToUserController,
   detachCharacterFromUserController
 } from '../controllers/characterController.js';
@@ -54,6 +55,36 @@ const router = express.Router();
  *         description: Danh sách characters
  */
 router.get('/', authToken, listCharactersController);
+
+/**
+ * @swagger
+ * /characters/{id}:
+ *   get:
+ *     summary: Lấy thông tin một character theo id
+ *     tags: [Characters]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Character id
+ *     responses:
+ *       200:
+ *         description: Thông tin character
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 character:
+ *                   $ref: '#/components/schemas/Character'
+ *       404:
+ *         description: Character không tìm thấy
+ */
+router.get('/:id', authToken, getCharacterByIdController);
 
 // /**
 //  * @swagger
@@ -110,7 +141,7 @@ router.get('/', authToken, listCharactersController);
  * @swagger
  * /characters/attach:
  *   post:
- *     summary: Gắn character vào user hiện tại (lưu giá trị vào `characterUrl`)
+ *     summary: Gắn character vào user hiện tại (lưu giá trị vào `characterId`)
  *     tags: [Characters]
  *     security:
  *       - bearerAuth: []
@@ -136,7 +167,7 @@ router.post('/attach', authToken, attachCharacterToUserController);
  * @swagger
  * /characters/detach:
  *   post:
- *     summary: Bỏ gắn character khỏi user hiện tại (xóa nếu `characterUrl` trùng khớp)
+ *     summary: Bỏ gắn character khỏi user hiện tại (xóa nếu `characterId` trùng khớp)
  *     tags: [Characters]
  *     security:
  *       - bearerAuth: []
@@ -147,11 +178,11 @@ router.post('/attach', authToken, attachCharacterToUserController);
  *           schema:
  *             type: object
  *             required:
- *               - url
+ *               - characterId
  *             properties:
- *               url:
+ *               characterId:
  *                 type: string
- *                 example: "https://cdn.example.com/mascot-a.png"
+ *                 example: "63f1a2b4e1d2f3a4b5c6d7e8"
  *     responses:
  *       200:
  *         description: Detached

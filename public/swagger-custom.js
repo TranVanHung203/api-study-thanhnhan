@@ -18,8 +18,8 @@
       try {
         const req = args[0];
         const method = (args[1] && args[1].method) || 'GET';
-        // detect login endpoint - adjust path if your login path differs
-        if (typeof req === 'string' && req.includes('/auth/login') && method.toUpperCase() === 'POST') {
+        // detect login/guest endpoints - capture accessToken from both
+        if (typeof req === 'string' && (req.includes('/auth/login') || req.includes('/auth/guest')) && method.toUpperCase() === 'POST') {
           safeJson(resp).then(function(data) {
             if (data && (data.accessToken || data.token || data.access_token)) {
               const token = data.accessToken || data.token || data.access_token;

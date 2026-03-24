@@ -15,6 +15,7 @@ router.all('*', authToken);
 /**
  * @swagger
  * /quizzes:
+ * 
  *   get:
  *     summary: Lấy danh sách bài quiz
  *     tags: [Quizzes]
@@ -45,31 +46,13 @@ router.get('/', getQuizzesController);
  *                 type: number
  *               bonusPoints:
  *                 type: number
- *               voiceDescription:
- *                 type: string
  *     responses:
  *       201:
  *         description: Bài quiz được tạo thành công
  */
 router.post('/', createQuizController);
 
-/**
- * @swagger
- * /quizzes/{quizId}:
- *   get:
- *     summary: Lấy chi tiết bài quiz (kèm theo câu hỏi)
- *     tags: [Quizzes]
- *     parameters:
- *       - in: path
- *         name: quizId
- *         required: true
- *         schema:
- *           type: string
- *     responses:
- *       200:
- *         description: Chi tiết bài quiz và câu hỏi
- */
-router.get('/:quizId', getQuizDetailController);
+
 
 /**
  * @swagger
@@ -98,8 +81,6 @@ router.get('/:quizId', getQuizDetailController);
  *                 type: number
  *               bonusPoints:
  *                 type: number
- *               voiceDescription:
- *                 type: string
  *     responses:
  *       200:
  *         description: Cập nhật thành công
@@ -123,5 +104,11 @@ router.patch('/:quizId', updateQuizController);
  *         description: Xóa thành công
  */
 router.delete('/:quizId', deleteQuizController);
+
+
+
+
+
+
 
 export default router;

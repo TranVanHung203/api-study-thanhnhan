@@ -26,8 +26,8 @@ export const upsertQuizConfigForProgress = async (req, res, next) => {
     }
     let sum = 0;
     for (const p of parts) {
-      if (!p || typeof p.type !== 'string' || !Number.isInteger(p.count) || p.count <= 0 || !Number.isInteger(p.order)) {
-        throw new BadRequestError('Each part must have `type`(string), `count`(positive int), `order`(int)');
+      if (!p || typeof p.type !== 'string' || !Number.isInteger(p.count) || p.count <= 0 ) {
+        throw new BadRequestError('Each part must have `type`(string), `count`(positive int)');
       }
       sum += p.count;
     }
@@ -59,8 +59,8 @@ export const createQuizConfigForProgress = async (req, res, next) => {
     }
     let sum = 0;
     for (const p of parts) {
-      if (!p || typeof p.type !== 'string' || !Number.isInteger(p.count) || p.count <= 0 || !Number.isInteger(p.order)) {
-        throw new BadRequestError('Each part must have `type`(string), `count`(positive int), `order`(int)');
+      if (!p || typeof p.type !== 'string' || !Number.isInteger(p.count) || p.count <= 0 ) {
+        throw new BadRequestError('Each part must have `type`(string), `count`(positive int)');
       }
       sum += p.count;
     }
@@ -86,4 +86,15 @@ export const createQuizConfigForProgress = async (req, res, next) => {
   }
 };
 
-export default { getQuizConfigByProgress, upsertQuizConfigForProgress, createQuizConfigForProgress };
+export const deleteQuizConfigForProgress = async (req, res, next) => {
+  try {
+    const { id } = req.params; // progressId
+    const deleted = await QuizConfig.findOneAndDelete({ progressId: id });
+    if (!deleted) throw new NotFoundError('No quiz config found for this progress');
+    return res.status(200).json({ message: 'Quiz config đã xóa thành công' });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export default { getQuizConfigByProgress, upsertQuizConfigForProgress, createQuizConfigForProgress, deleteQuizConfigForProgress };

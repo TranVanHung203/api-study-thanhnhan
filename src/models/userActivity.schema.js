@@ -11,11 +11,6 @@ const UserActivitySchema = new mongoose.Schema({
     ref: 'Progress', 
     required: true 
   },
-  contentType: { 
-    type: String, 
-    required: true,
-    enum: ['video', 'exercise', 'quiz'] 
-  },
   score: { 
     type: Number, 
     default: 0 
@@ -29,6 +24,10 @@ const UserActivitySchema = new mongoose.Schema({
     default: 0 
   },
   completedAt: { 
+    type: Date, 
+    default: null 
+  },
+  createdAt: { 
     type: Date, 
     default: Date.now 
   }

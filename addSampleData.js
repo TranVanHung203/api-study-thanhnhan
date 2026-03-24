@@ -5,7 +5,7 @@ import 'dotenv/config';
 import ClassModel from './src/models/class.schema.js';
 import Chapter from './src/models/chapter.schema.js';
 import User from './src/models/user.schema.js';
-import Skill from './src/models/skill.schema.js';
+import Lesson from './src/models/lesson.schema.js';
 import Progress from './src/models/progress.schema.js';
 import Video from './src/models/video.schema.js';
 import Exercise from './src/models/exercise.schema.js';
@@ -33,7 +33,7 @@ const clearAll = async () => {
     ClassModel.deleteMany({}),
     Chapter.deleteMany({}),
     User.deleteMany({}),
-    Skill.deleteMany({}),
+    Lesson.deleteMany({}),
     Progress.deleteMany({}),
     Video.deleteMany({}),
     Exercise.deleteMany({}),
@@ -65,14 +65,14 @@ const seed = async () => {
     await Reward.create({ userId: u1._id, totalPoints: 0 });
     await Reward.create({ userId: u2._id, totalPoints: 0 });
 
-    // Skills
-    const skillsChapter1 = await Skill.insertMany([
-      { chapterId: chapters[0]._id, skillName: 'Kỹ năng 1', description: 'Mô tả 1', order: 1, skillVoice: null },
-      { chapterId: chapters[0]._id, skillName: 'Kỹ năng 2', description: 'Mô tả 2', order: 2, skillVoice: null }
+    // Lessons
+    const lessonsChapter1 = await Lesson.insertMany([
+      { chapterId: chapters[0]._id, lessonName: 'Bài học 1', description: 'Mô tả 1', order: 1 },
+      { chapterId: chapters[0]._id, lessonName: 'Bài học 2', description: 'Mô tả 2', order: 2 }
     ]);
-    const skillsChapter2 = await Skill.insertMany([
-      { chapterId: chapters[1]._id, skillName: 'Kỹ năng 3', description: 'Mô tả 3', order: 1, skillVoice: null },
-      { chapterId: chapters[1]._id, skillName: 'Kỹ năng 4', description: 'Mô tả 4', order: 2, skillVoice: null }
+    const lessonsChapter2 = await Lesson.insertMany([
+      { chapterId: chapters[1]._id, lessonName: 'Bài học 3', description: 'Mô tả 3', order: 1 },
+      { chapterId: chapters[1]._id, lessonName: 'Bài học 4', description: 'Mô tả 4', order: 2 }
     ]);
 
     // Videos, Exercises, Quizzes
@@ -133,11 +133,9 @@ const seed = async () => {
       sampleQuestions.push({
         quizId: quizzes[quizIdx]._id,
         questionText: `Sample question ${q+1} for ${quizzes[quizIdx].title}`,
-        questionVoice: null,
         imageQuestion: (q % 7 === 0) ? placeholderImage(q) : null,
         choices: choicesArray,
         answer: correctIndex,
-        hintVoice: null,
         order: q + 1
       });
     }
@@ -145,28 +143,28 @@ const seed = async () => {
     await Question.insertMany(sampleQuestions);
 
     // Create progresses and link content.progressId
-    const p1 = await Progress.create({ skillId: skillsChapter1[0]._id, stepNumber: 1, contentType: 'video' });
+    const p1 = await Progress.create({ lessonId: lessonsChapter1[0]._id, stepNumber: 1, contentType: 'video' });
     await Video.findByIdAndUpdate(videos[0]._id, { progressId: p1._id });
-    const p2 = await Progress.create({ skillId: skillsChapter1[0]._id, stepNumber: 2, contentType: 'exercise' });
+    const p2 = await Progress.create({ lessonId: lessonsChapter1[0]._id, stepNumber: 2, contentType: 'exercise' });
     await Exercise.findByIdAndUpdate(exercises[0]._id, { progressId: p2._id });
 
-    const p3 = await Progress.create({ skillId: skillsChapter1[1]._id, stepNumber: 1, contentType: 'video' });
+    const p3 = await Progress.create({ lessonId: lessonsChapter1[1]._id, stepNumber: 1, contentType: 'video' });
     await Video.findByIdAndUpdate(videos[1]._id, { progressId: p3._id });
-    const p4 = await Progress.create({ skillId: skillsChapter1[1]._id, stepNumber: 2, contentType: 'exercise' });
+    const p4 = await Progress.create({ lessonId: lessonsChapter1[1]._id, stepNumber: 2, contentType: 'exercise' });
     await Exercise.findByIdAndUpdate(exercises[1]._id, { progressId: p4._id });
-    const p5 = await Progress.create({ skillId: skillsChapter1[1]._id, stepNumber: 3, contentType: 'quiz' });
+    const p5 = await Progress.create({ lessonId: lessonsChapter1[1]._id, stepNumber: 3, contentType: 'quiz' });
     await Quiz.findByIdAndUpdate(quizzes[0]._id, { progressId: p5._id });
 
-    const p6 = await Progress.create({ skillId: skillsChapter2[0]._id, stepNumber: 1, contentType: 'video' });
+    const p6 = await Progress.create({ lessonId: lessonsChapter2[0]._id, stepNumber: 1, contentType: 'video' });
     await Video.findByIdAndUpdate(videos[2]._id, { progressId: p6._id });
-    const p7 = await Progress.create({ skillId: skillsChapter2[0]._id, stepNumber: 2, contentType: 'exercise' });
+    const p7 = await Progress.create({ lessonId: lessonsChapter2[0]._id, stepNumber: 2, contentType: 'exercise' });
     await Exercise.findByIdAndUpdate(exercises[2]._id, { progressId: p7._id });
 
-    const p8 = await Progress.create({ skillId: skillsChapter2[1]._id, stepNumber: 1, contentType: 'video' });
+    const p8 = await Progress.create({ lessonId: lessonsChapter2[1]._id, stepNumber: 1, contentType: 'video' });
     await Video.findByIdAndUpdate(videos[3]._id, { progressId: p8._id });
-    const p9 = await Progress.create({ skillId: skillsChapter2[1]._id, stepNumber: 2, contentType: 'exercise' });
+    const p9 = await Progress.create({ lessonId: lessonsChapter2[1]._id, stepNumber: 2, contentType: 'exercise' });
     await Exercise.findByIdAndUpdate(exercises[3]._id, { progressId: p9._id });
-    const p10 = await Progress.create({ skillId: skillsChapter2[1]._id, stepNumber: 3, contentType: 'quiz' });
+    const p10 = await Progress.create({ lessonId: lessonsChapter2[1]._id, stepNumber: 3, contentType: 'quiz' });
     await Quiz.findByIdAndUpdate(quizzes[1]._id, { progressId: p10._id });
 
     // Sample user activities

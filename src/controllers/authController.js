@@ -2,6 +2,8 @@ import User from '../models/user.schema.js';
 import Reward from '../models/reward.schema.js';
 import UserActivity from '../models/userActivity.schema.js';
 import RefreshToken from '../models/refreshToken.schema.js';
+import OTPVerification from '../models/otpVerification.schema.js';
+import PasswordResetOTP from '../models/passwordResetOtp.schema.js';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
@@ -11,6 +13,7 @@ import UnauthorizedError from '../errors/unauthorizedError.js';
 import ForbiddenError from '../errors/forbiddenError.js';
 import { OAuth2Client } from 'google-auth-library';
 import Character from '../models/character.schema.js';
+import { generateOTP, sendOTPEmail, sendPasswordResetOTPEmail } from '../config/emailConfig.js';
 
 const SECRET_KEY = process.env.SECRET_KEY || 'your-secret-key';
 const ACCESS_TOKEN_EXPIRY = process.env.ACCESS_TOKEN_EXPIRY || '15m';
@@ -18,6 +21,11 @@ const REFRESH_TOKEN_EXPIRY_DAYS = parseInt(process.env.REFRESH_TOKEN_EXPIRY_DAYS
 const GUEST_EXPIRY_DAYS = parseInt(process.env.GUEST_EXPIRY_DAYS) || 7;
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
 const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const escapeRegex = (value) => {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+};
 
 // Tạo Access Token
 const createAccessToken = (user) => {
@@ -53,55 +61,6 @@ const createRefreshToken = async (user, deviceInfo = null) => {
   return token;
 };
 
-// Đăng ký user
-export const registerController = async (req, res, next) => {
-  try {
-    const { username, email, password, fullName, classId } = req.body;
-
-    // Validation - chỉ cần username, email, password, fullName
-    if (!username || !email || !password || !fullName) {
-      throw new BadRequestError('Vui lòng điền đầy đủ thông tin: username, email, password, fullName');
-    }
-
-    // Kiểm tra user đã tồn tại
-    const existingUser = await User.findOne({ $or: [{ username }, { email }] });
-    if (existingUser) {
-      throw new BadRequestError('Username hoặc email đã tồn tại');
-    }
-
-    // Hash password
-    const passwordHash = await bcrypt.hash(password, 10);
-
-    // Tạo user mới - classId mặc định null, giáo viên chỉnh sửa sau hoặc tự động nâng cấp
-    const newUser = new User({
-      username,
-      email,
-      passwordHash,
-      fullName,
-      classId: null
-    });
-
-    await newUser.save();
-
-    // Tạo reward record
-    const reward = new Reward({ userId: newUser._id });
-    await reward.save();
-
-    return res.status(201).json({
-      message: 'Đăng ký thành công',
-      user: {
-        id: newUser._id,
-        username: newUser.username,
-        email: newUser.email,
-        fullName: newUser.fullName,
-        classId: null
-      }
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
 // Đăng nhập
 export const loginController = async (req, res, next) => {
   try {
@@ -111,13 +70,13 @@ export const loginController = async (req, res, next) => {
     // Tìm user
     const user = await User.findOne({ username }).populate('classId');
     if (!user) {
-      throw new UnauthorizedError('Không tìm thấy tên đăng nhập');
+      throw new UnauthorizedError('Không tìm thấy tên đăng nhập!');
     }
 
     // Kiểm tra password
     const isValidPassword = await bcrypt.compare(password, user.passwordHash);
     if (!isValidPassword) {
-      throw new UnauthorizedError('Mật khẩu không đúng, vui lòng nhập lại');
+      throw new UnauthorizedError('Mật khẩu không đúng! Vui lòng thử lại.');
     }
 
     // Tạo tokens
@@ -141,14 +100,14 @@ export const refreshTokenController = async (req, res, next) => {
     const deviceInfo = req.headers['user-agent'] || null;
 
     if (!refreshToken) {
-      throw new UnauthorizedError('Refresh token không tìm thấy');
+      throw new UnauthorizedError('Refresh token không hợp lệ');
     }
 
     // Kiểm tra refresh token có trong database không
     const storedToken = await RefreshToken.findOne({ token: refreshToken });
 
     if (!storedToken) {
-      throw new UnauthorizedError('Refresh token không hợp lệ hoặc đã bị revoke');
+      throw new UnauthorizedError('Refresh token không hợp lệ');
     }
 
     // Kiểm tra token đã bị revoke chưa
@@ -204,8 +163,7 @@ export const getUserController = async (req, res, next) => {
   try {
     const userId = req.user.id;
     const user = await User.findById(userId)
-      .populate('classId')
-      .select('_id fullName email classId characterUrl');
+      .select('_id fullName email classId characterId isGuest roles');
 
     if (!user) throw new NotFoundError('User không tìm thấy');
 
@@ -214,8 +172,9 @@ export const getUserController = async (req, res, next) => {
       fullName: user.fullName,
       email: user.email,
       classId: user.classId || null,
-      characterUrl: user.characterUrl || null
-
+      characterId: user.characterId || null,
+      isGuest: user.isGuest ?? false,
+      roles: user.roles || []
     });
   } catch (error) {
     next(error);
@@ -273,6 +232,111 @@ export const changePasswordController = async (req, res, next) => {
   }
 };
 
+// Gui OTP quen mat khau
+export const forgotPasswordController = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+
+    if (!email || typeof email !== 'string') {
+      throw new BadRequestError('Vui lòng cung cấp email');
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!EMAIL_REGEX.test(normalizedEmail)) {
+      throw new BadRequestError('Email không hợp lệ');
+    }
+
+    const safeResponse = {
+      message: 'Nếu email tồn tại, mã OTP đặt lại mật khẩu đã được gửi.',
+      email: normalizedEmail
+    };
+
+    const escapedEmail = escapeRegex(normalizedEmail);
+    const user = await User.findOne({
+      email: { $regex: new RegExp(`^${escapedEmail}$`, 'i') }
+    });
+
+    if (!user || user.isGuest) {
+      return res.status(200).json(safeResponse);
+    }
+
+    const otp = generateOTP();
+
+    await PasswordResetOTP.deleteMany({ email: normalizedEmail });
+    await PasswordResetOTP.create({ email: normalizedEmail, otp });
+
+    sendPasswordResetOTPEmail(normalizedEmail, otp, user.fullName || 'ban').catch((error) => {
+      console.error(`Failed to send password reset OTP to ${normalizedEmail}:`, error);
+    });
+
+    return res.status(200).json(safeResponse);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Dat lai mat khau bang OTP
+export const resetPasswordController = async (req, res, next) => {
+  try {
+    const { email, otp, newPassword, confirmPassword } = req.body;
+
+    if (!email || !otp || !newPassword || !confirmPassword) {
+      throw new BadRequestError('Vui lòng cung cấp đầy đủ: email, otp, newPassword, confirmPassword');
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!EMAIL_REGEX.test(normalizedEmail)) {
+      throw new BadRequestError('Email không hợp lệ');
+    }
+
+    if (newPassword.length < 8) {
+      throw new BadRequestError('Mật khẩu mới phải có ít nhất 8 ký tự');
+    }
+
+    if (newPassword !== confirmPassword) {
+      throw new BadRequestError('Mật khẩu mới không khớp');
+    }
+
+    const otpRecord = await PasswordResetOTP.findOne({
+      email: normalizedEmail,
+      otp: String(otp).trim()
+    });
+
+    if (!otpRecord) {
+      throw new BadRequestError('Mã OTP không hợp lệ hoặc đã hết hạn');
+    }
+
+    const escapedEmail = escapeRegex(normalizedEmail);
+    const user = await User.findOne({
+      email: { $regex: new RegExp(`^${escapedEmail}$`, 'i') }
+    });
+
+    if (!user || user.isGuest) {
+      await PasswordResetOTP.deleteOne({ _id: otpRecord._id });
+      throw new NotFoundError('User không tìm thấy');
+    }
+
+    if (user.passwordHash) {
+      const isSamePassword = await bcrypt.compare(newPassword, user.passwordHash);
+      if (isSamePassword) {
+        throw new BadRequestError('Mật khẩu mới phải khác mật khẩu cũ');
+      }
+    }
+
+    const newPasswordHash = await bcrypt.hash(newPassword, 10);
+
+    await User.findByIdAndUpdate(user._id, { passwordHash: newPasswordHash });
+    await PasswordResetOTP.deleteMany({ email: normalizedEmail });
+    await RefreshToken.updateMany({ userId: user._id }, { isRevoked: true });
+
+    return res.status(200).json({
+      message: 'Đặt lại mật khẩu thành công. Vui lòng đăng nhập lại.'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // Logout
 export const logoutController = async (req, res, next) => {
   try {
@@ -288,17 +352,17 @@ export const logoutController = async (req, res, next) => {
     }
 
     // Nếu có userId, xóa tất cả refresh tokens của user (optional - logout khỏi tất cả thiết bị)
-    // await RefreshToken.updateMany({ userId }, { isRevoked: true });
+    await RefreshToken.updateMany({ userId }, { isRevoked: true });
 
-    // Nếu là guest, xóa tất cả dữ liệu liên quan
-    if (userId) {
-      const user = await User.findById(userId);
-      if (user && user.isGuest) {
-        // Xóa tất cả refresh tokens của guest
-        await RefreshToken.deleteMany({ userId });
-        await deleteGuestData(userId);
-      }
-    }
+    // // Nếu là guest, xóa tất cả dữ liệu liên quan
+    // if (userId) {
+    //   const user = await User.findById(userId);
+    //   if (user && user.isGuest) {
+    //     // Xóa tất cả refresh tokens của guest
+    //     await RefreshToken.deleteMany({ userId });
+    //     await deleteGuestData(userId);
+    //   }
+    // }
 
     return res.status(200).json({ message: 'Đăng xuất thành công' });
   } catch (error) {
@@ -309,11 +373,7 @@ export const logoutController = async (req, res, next) => {
 // Đăng nhập khách (Guest Login)
 export const guestLoginController = async (req, res, next) => {
   try {
-    const { fullName } = req.body;
-
-    if (!fullName) {
-      throw new BadRequestError('Vui lòng nhập tên của bạn');
-    }
+    const { fullName = 'Người dùng' } = req.body;
 
     // Tạo thời gian hết hạn (7 ngày từ bây giờ)
     const guestExpiresAt = new Date();
@@ -360,30 +420,67 @@ export const guestLoginController = async (req, res, next) => {
   }
 };
 
-// Verify Google ID token (Android / Flutter client)
+// Verify Google ID token (Android / Flutter client) hoặc accessToken (Web)
 export const googleTokenController = async (req, res, next) => {
   try {
-    const { idToken } = req.body;
+    const { token } = req.body;
     const deviceInfo = req.headers['user-agent'] || null;
 
-    if (!idToken) {
-      throw new BadRequestError('Missing idToken');
+    if (!token) {
+      throw new BadRequestError('Missing token');
     }
 
-    // Verify idToken using google-auth-library
-    let ticket;
-    try {
-      ticket = await googleClient.verifyIdToken({ idToken, audience: GOOGLE_CLIENT_ID });
-    } catch (err) {
-      throw new UnauthorizedError('Invalid Google idToken');
+    let payload;
+
+    // Detect token type: idToken (JWT format) vs accessToken (ya29. prefix)
+    const isAccessToken = token.startsWith('ya29.') || !token.includes('.');
+
+    if (!isAccessToken) {
+      // Verify idToken using google-auth-library (Android/iOS)
+      let ticket;
+      try {
+        ticket = await googleClient.verifyIdToken({ idToken: token, audience: GOOGLE_CLIENT_ID });
+      } catch (err) {
+        throw new UnauthorizedError('Invalid Google idToken');
+      }
+      payload = ticket.getPayload();
+    } else {
+      // Sử dụng accessToken để lấy thông tin user từ Google API (Web)
+      try {
+        const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch user info');
+        }
+
+        const userInfo = await response.json();
+        // Map userinfo response to payload format tương tự idToken
+        payload = {
+          sub: userInfo.sub,
+          email: userInfo.email,
+          email_verified: userInfo.email_verified,
+          name: userInfo.name,
+          given_name: userInfo.given_name,
+          picture: userInfo.picture
+        };
+      } catch (err) {
+        console.error('Error fetching Google user info:', err);
+        throw new UnauthorizedError('Invalid Google accessToken');
+      }
     }
 
-    const payload = ticket.getPayload();
     const googleId = payload.sub;
     const email = payload.email || null;
     const email_verified = payload.email_verified || false;
-    const emailLocalPart = email ? email.split('@')[0].replace(/[^a-zA-Z0-9_.-]/g, ' ') : null;
-    // allow client to send `fullName` when token payload omits name
+    const emailLocalPart = email
+      ? email.split('@')[0].replace(/[^a-zA-Z0-9_.-]/g, ' ')
+      : null;
+
+    // Allow client to send `fullName` when token payload omits name
     const clientFullName = req.body.fullName || null;
     const fullName = payload.name || payload.given_name || clientFullName || emailLocalPart || 'Google User';
     const picture = payload.picture || null;
@@ -433,12 +530,12 @@ export const googleTokenController = async (req, res, next) => {
 
     // If still not found, create new user
     if (!user) {
-      // generate a safe unique username (avoid collisions by including timestamp)
+      // Generate a safe unique username (avoid collisions by including timestamp)
       const generatedUsername = email
-        ? (email.split('@')[0].replace(/[^a-zA-Z0-9_.-]/g, '') || `googleuser`) + `_${Date.now()}`
+        ? (email.split('@')[0].replace(/[^a-zA-Z0-9_.-]/g, '') || 'googleuser') + `_${Date.now()}`
         : `google_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-      // create a random password hash so required passwordHash field is satisfied
+      // Create a random password hash so required passwordHash field is satisfied
       const randomPassword = Math.random().toString(36) + Date.now().toString(36);
       const passwordHashForOauth = await bcrypt.hash(randomPassword, 10);
 
@@ -464,12 +561,12 @@ export const googleTokenController = async (req, res, next) => {
     }
 
     // Issue tokens
-    const accessToken = createAccessToken(user);
+    const newAccessToken = createAccessToken(user);
     const refreshToken = await createRefreshToken(user, deviceInfo);
 
     return res.status(200).json({
       message: 'Google sign-in successful',
-      accessToken,
+      accessToken: newAccessToken,
       refreshToken,
       user: {
         id: user._id,
@@ -537,26 +634,30 @@ export const deleteGuestController = async (req, res, next) => {
   }
 };
 
-// Chuyển từ guest sang user thường (đăng ký chính thức)
-export const convertGuestToUserController = async (req, res, next) => {
+// Bước 1: Gửi OTP để chuyển guest sang user thường
+export const sendOTPForConvertController = async (req, res, next) => {
   try {
     const userId = req.user.id;
-    const { username, email, password } = req.body;
+    const { username, email, password, fullName } = req.body;
 
-    if (!username || !email || !password) {
-      throw new BadRequestError('Vui lòng điền đầy đủ: username, email, password');
+    if (!username || !email || !password || !fullName) {
+      throw new BadRequestError('Vui lòng điền đầy đủ: username, email, password, fullName');
+    }
+
+    if (password.length < 8) {
+      throw new BadRequestError('Mật khẩu phải có ít nhất 8 ký tự');
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      throw new BadRequestError('Email không hợp lệ');
     }
 
     const user = await User.findById(userId);
-    if (!user) {
-      throw new NotFoundError('User không tìm thấy');
-    }
+    if (!user) throw new NotFoundError('User không tìm thấy');
+    if (!user.isGuest) throw new BadRequestError('Tài khoản này đã là user thường');
 
-    if (!user.isGuest) {
-      throw new BadRequestError('Tài khoản này đã là user thường');
-    }
-
-    // Kiểm tra username/email đã tồn tại
+    // Kiểm tra username/email đã tồn tại ở user khác
     const existingUser = await User.findOne({
       $or: [{ username }, { email }],
       _id: { $ne: userId }
@@ -565,31 +666,90 @@ export const convertGuestToUserController = async (req, res, next) => {
       throw new BadRequestError('Username hoặc email đã tồn tại');
     }
 
-    // Hash password
     const passwordHash = await bcrypt.hash(password, 10);
+    const otp = generateOTP();
 
-    // Cập nhật user từ guest sang user thường
-    const updatedUser = await User.findByIdAndUpdate(
-      userId,
-      {
-        username,
-        email,
-        passwordHash,
-        isGuest: false,
-        guestExpiresAt: null
-      },
-      { new: true }
-    );
+    // Xóa OTP cũ của email này (nếu có)
+    await OTPVerification.deleteMany({ email });
+
+    const otpVerification = new OTPVerification({
+      email,
+      otp,
+      username,
+      passwordHash,
+      fullName,
+      guestUserId: userId
+    });
+    await otpVerification.save();
+
+    sendOTPEmail(email, otp, fullName).catch((error) => {
+      console.error(`Failed to send OTP email to ${email}:`, error);
+    });
 
     return res.status(200).json({
-      message: 'Chuyển đổi tài khoản thành công! Dữ liệu học tập được giữ nguyên.',
-      user: {
-        id: updatedUser._id,
-        username: updatedUser.username,
-        email: updatedUser.email,
-        fullName: updatedUser.fullName,
-        isGuest: false
-      }
+      message: 'OTP đã được gửi đến email của bạn. Vui lòng kiểm tra và nhập mã OTP.',
+      email
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Bước 2: Xác thực OTP và hoàn tất chuyển đổi guest sang user thường
+export const verifyOTPAndConvertController = async (req, res, next) => {
+  try {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      throw new BadRequestError('Vui lòng cung cấp email và mã OTP');
+    }
+
+    const otpRecord = await OTPVerification.findOne({ email, otp });
+    if (!otpRecord) {
+      throw new BadRequestError('Mã OTP không hợp lệ hoặc đã hết hạn');
+    }
+
+    if (!otpRecord.guestUserId) {
+      await OTPVerification.deleteOne({ _id: otpRecord._id });
+      throw new BadRequestError('OTP này không dùng để chuyển đổi tài khoản');
+    }
+
+    const user = await User.findById(otpRecord.guestUserId);
+    if (!user) {
+      await OTPVerification.deleteOne({ _id: otpRecord._id });
+      throw new NotFoundError('User không tìm thấy');
+    }
+
+    if (!user.isGuest) {
+      await OTPVerification.deleteOne({ _id: otpRecord._id });
+      throw new BadRequestError('Tài khoản này đã là user thường');
+    }
+
+    // Kiểm tra lại username/email chưa bị chiếm
+    const existingUser = await User.findOne({
+      $or: [{ username: otpRecord.username }, { email: otpRecord.email }],
+      _id: { $ne: user._id }
+    });
+    if (existingUser) {
+      await OTPVerification.deleteOne({ _id: otpRecord._id });
+      throw new BadRequestError('Username hoặc email đã tồn tại');
+    }
+
+    // Cập nhật guest thành user thường, giữ nguyên toàn bộ dữ liệu học tập
+    await User.findByIdAndUpdate(user._id, {
+      username: otpRecord.username,
+      email: otpRecord.email,
+      passwordHash: otpRecord.passwordHash,
+      fullName: otpRecord.fullName,
+      isGuest: false,
+      guestExpiresAt: null,
+      emailVerified: true
+    });
+
+    await OTPVerification.deleteOne({ _id: otpRecord._id });
+
+    return res.status(200).json({
+      message: 'Chuyển đổi tài khoản thành công! Dữ liệu học tập được giữ nguyên.'
     });
   } catch (error) {
     next(error);
@@ -640,12 +800,150 @@ export const changeFullNameAndAttachCharacterController = async (req, res, next)
     const character = await Character.findById(characterId);
     if (!character) throw new NotFoundError('Character không tìm thấy');
 
-    // Apply updates
+    // Apply updates: store reference to character id
     user.fullName = fullName.trim();
-    user.characterUrl = character.url;
+    user.characterId = character._id;
     await user.save();
 
-    return res.status(200).json({ message: 'Cập nhật tên và gán character thành công', fullName: user.fullName, characterUrl: user.characterUrl });
+    return res.status(200).json({
+      message: 'Cập nhật tên và gán character thành công',
+      fullName: user.fullName,
+      characterId: user.characterId
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Gửi OTP để đăng ký
+export const sendOTPForRegisterController = async (req, res, next) => {
+  try {
+    const { username, email, password, fullName } = req.body;
+
+    // Validation
+    if (!username || !email || !password || !fullName) {
+      throw new BadRequestError('Vui lòng điền đầy đủ thông tin: username, email, password, fullName');
+    }
+
+    // Validate password length
+    if (password.length < 8) {
+      throw new BadRequestError('Mật khẩu phải có ít nhất 8 ký tự');
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      throw new BadRequestError('Email không hợp lệ');
+    }
+
+    // Kiểm tra user đã tồn tại
+    const existingUser = await User.findOne({ $or: [{ username }, { email }] });
+    if (existingUser) {
+      throw new BadRequestError('Username hoặc email đã tồn tại');
+    }
+
+    // Hash password
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    // Tạo OTP
+    const otp = generateOTP();
+
+    // Xóa OTP cũ của email này (nếu có)
+    await OTPVerification.deleteMany({ email });
+
+    // Lưu thông tin tạm thời cùng OTP
+    const otpVerification = new OTPVerification({
+      email,
+      otp,
+      username,
+      passwordHash,
+      fullName
+    });
+
+    await otpVerification.save();
+
+    // Gửi OTP qua email (asynchronous - không chờ gửi xong)
+    sendOTPEmail(email, otp, fullName).catch((error) => {
+      console.error(`Failed to send OTP email to ${email}:`, error);
+    });
+
+    return res.status(200).json({
+      message: 'OTP đã được gửi đến email của bạn. Vui lòng kiểm tra và nhập mã OTP.',
+      email: email
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Xác thực OTP và hoàn tất đăng ký
+export const verifyOTPAndRegisterController = async (req, res, next) => {
+  try {
+    const { email, otp } = req.body;
+
+    // Validation
+    if (!email || !otp) {
+      throw new BadRequestError('Vui lòng cung cấp email và mã OTP');
+    }
+
+    // Tìm OTP verification record
+    const otpRecord = await OTPVerification.findOne({ email, otp });
+
+    if (!otpRecord) {
+      throw new BadRequestError('Mã OTP không hợp lệ hoặc đã hết hạn');
+    }
+
+    // Kiểm tra lại user có tồn tại không (double check)
+    const existingUser = await User.findOne({
+      $or: [{ username: otpRecord.username }, { email: otpRecord.email }]
+    });
+
+    if (existingUser) {
+      // Xóa OTP record
+      await OTPVerification.deleteOne({ _id: otpRecord._id });
+      throw new BadRequestError('Username hoặc email đã tồn tại');
+    }
+
+    // Tạo user mới từ thông tin đã lưu
+    const newUser = new User({
+      username: otpRecord.username,
+      email: otpRecord.email,
+      passwordHash: otpRecord.passwordHash,
+      fullName: otpRecord.fullName,
+      classId: null,
+      googleId: null,
+      provider: 'local',
+      avatar: null,
+      characterId: null,
+      roles: ['student'],
+      isGuest: false
+    });
+
+    await newUser.save();
+
+    // Tạo reward record
+    const reward = new Reward({ userId: newUser._id });
+    await reward.save();
+
+    // Xóa OTP record sau khi đăng ký thành công
+    await OTPVerification.deleteOne({ _id: otpRecord._id });
+
+    // Tạo tokens
+    const accessToken = createAccessToken(newUser);
+    const refreshToken = await createRefreshToken(newUser);
+
+    return res.status(201).json({
+      message: 'Đăng ký thành công',
+      accessToken,
+      refreshToken,
+      user: {
+        id: newUser._id,
+        username: newUser.username,
+        email: newUser.email,
+        fullName: newUser.fullName,
+        classId: newUser.classId
+      }
+    });
   } catch (error) {
     next(error);
   }
