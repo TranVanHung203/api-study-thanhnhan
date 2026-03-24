@@ -3,6 +3,7 @@ import Reward from '../models/reward.schema.js';
 import UserActivity from '../models/userActivity.schema.js';
 import RefreshToken from '../models/refreshToken.schema.js';
 import OTPVerification from '../models/otpVerification.schema.js';
+import PasswordResetOTP from '../models/passwordResetOtp.schema.js';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
@@ -12,7 +13,7 @@ import UnauthorizedError from '../errors/unauthorizedError.js';
 import ForbiddenError from '../errors/forbiddenError.js';
 import { OAuth2Client } from 'google-auth-library';
 import Character from '../models/character.schema.js';
-import { generateOTP, sendOTPEmail } from '../config/emailConfig.js';
+import { generateOTP, sendOTPEmail, sendPasswordResetOTPEmail } from '../config/emailConfig.js';
 
 const SECRET_KEY = process.env.SECRET_KEY || 'your-secret-key';
 const ACCESS_TOKEN_EXPIRY = process.env.ACCESS_TOKEN_EXPIRY || '15m';
@@ -20,6 +21,11 @@ const REFRESH_TOKEN_EXPIRY_DAYS = parseInt(process.env.REFRESH_TOKEN_EXPIRY_DAYS
 const GUEST_EXPIRY_DAYS = parseInt(process.env.GUEST_EXPIRY_DAYS) || 7;
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
 const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const escapeRegex = (value) => {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+};
 
 // Tạo Access Token
 const createAccessToken = (user) => {
@@ -157,7 +163,7 @@ export const getUserController = async (req, res, next) => {
   try {
     const userId = req.user.id;
     const user = await User.findById(userId)
-      .select('_id fullName email classId characterId isGuest');
+      .select('_id fullName email classId characterId isGuest roles');
 
     if (!user) throw new NotFoundError('User không tìm thấy');
 
@@ -167,7 +173,8 @@ export const getUserController = async (req, res, next) => {
       email: user.email,
       classId: user.classId || null,
       characterId: user.characterId || null,
-      isGuest: user.isGuest ?? false
+      isGuest: user.isGuest ?? false,
+      roles: user.roles || []
     });
   } catch (error) {
     next(error);
@@ -219,6 +226,111 @@ export const changePasswordController = async (req, res, next) => {
 
     return res.status(200).json({
       message: 'Đổi mật khẩu thành công'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Gui OTP quen mat khau
+export const forgotPasswordController = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+
+    if (!email || typeof email !== 'string') {
+      throw new BadRequestError('Vui lòng cung cấp email');
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!EMAIL_REGEX.test(normalizedEmail)) {
+      throw new BadRequestError('Email không hợp lệ');
+    }
+
+    const safeResponse = {
+      message: 'Nếu email tồn tại, mã OTP đặt lại mật khẩu đã được gửi.',
+      email: normalizedEmail
+    };
+
+    const escapedEmail = escapeRegex(normalizedEmail);
+    const user = await User.findOne({
+      email: { $regex: new RegExp(`^${escapedEmail}$`, 'i') }
+    });
+
+    if (!user || user.isGuest) {
+      return res.status(200).json(safeResponse);
+    }
+
+    const otp = generateOTP();
+
+    await PasswordResetOTP.deleteMany({ email: normalizedEmail });
+    await PasswordResetOTP.create({ email: normalizedEmail, otp });
+
+    sendPasswordResetOTPEmail(normalizedEmail, otp, user.fullName || 'ban').catch((error) => {
+      console.error(`Failed to send password reset OTP to ${normalizedEmail}:`, error);
+    });
+
+    return res.status(200).json(safeResponse);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Dat lai mat khau bang OTP
+export const resetPasswordController = async (req, res, next) => {
+  try {
+    const { email, otp, newPassword, confirmPassword } = req.body;
+
+    if (!email || !otp || !newPassword || !confirmPassword) {
+      throw new BadRequestError('Vui lòng cung cấp đầy đủ: email, otp, newPassword, confirmPassword');
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!EMAIL_REGEX.test(normalizedEmail)) {
+      throw new BadRequestError('Email không hợp lệ');
+    }
+
+    if (newPassword.length < 8) {
+      throw new BadRequestError('Mật khẩu mới phải có ít nhất 8 ký tự');
+    }
+
+    if (newPassword !== confirmPassword) {
+      throw new BadRequestError('Mật khẩu mới không khớp');
+    }
+
+    const otpRecord = await PasswordResetOTP.findOne({
+      email: normalizedEmail,
+      otp: String(otp).trim()
+    });
+
+    if (!otpRecord) {
+      throw new BadRequestError('Mã OTP không hợp lệ hoặc đã hết hạn');
+    }
+
+    const escapedEmail = escapeRegex(normalizedEmail);
+    const user = await User.findOne({
+      email: { $regex: new RegExp(`^${escapedEmail}$`, 'i') }
+    });
+
+    if (!user || user.isGuest) {
+      await PasswordResetOTP.deleteOne({ _id: otpRecord._id });
+      throw new NotFoundError('User không tìm thấy');
+    }
+
+    if (user.passwordHash) {
+      const isSamePassword = await bcrypt.compare(newPassword, user.passwordHash);
+      if (isSamePassword) {
+        throw new BadRequestError('Mật khẩu mới phải khác mật khẩu cũ');
+      }
+    }
+
+    const newPasswordHash = await bcrypt.hash(newPassword, 10);
+
+    await User.findByIdAndUpdate(user._id, { passwordHash: newPasswordHash });
+    await PasswordResetOTP.deleteMany({ email: normalizedEmail });
+    await RefreshToken.updateMany({ userId: user._id }, { isRevoked: true });
+
+    return res.status(200).json({
+      message: 'Đặt lại mật khẩu thành công. Vui lòng đăng nhập lại.'
     });
   } catch (error) {
     next(error);

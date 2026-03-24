@@ -2,6 +2,8 @@ import express from 'express';
 import {
   loginController,
   refreshTokenController,
+  forgotPasswordController,
+  resetPasswordController,
   changePasswordController,
   getUserController,
   logoutController,
@@ -195,6 +197,72 @@ router.post('/login', loginController);
  *         description: Refresh token không hợp lệ hoặc đã hết hạn
  */
 router.post('/refresh', refreshTokenController);
+
+/**
+ * @swagger
+ * /auth/forgot-password:
+ *   post:
+ *     summary: Gui OTP de quen mat khau
+ *     tags: [Auth]
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 example: "student1@example.com"
+ *     responses:
+ *       200:
+ *         description: Tra ve thanh cong va gui OTP neu email ton tai
+ *       400:
+ *         description: Email khong hop le
+ */
+router.post('/forgot-password', forgotPasswordController);
+
+/**
+ * @swagger
+ * /auth/reset-password:
+ *   post:
+ *     summary: Dat lai mat khau bang OTP
+ *     tags: [Auth]
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *               - otp
+ *               - newPassword
+ *               - confirmPassword
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 example: "student1@example.com"
+ *               otp:
+ *                 type: string
+ *                 example: "123456"
+ *               newPassword:
+ *                 type: string
+ *                 example: "newPassword123"
+ *               confirmPassword:
+ *                 type: string
+ *                 example: "newPassword123"
+ *     responses:
+ *       200:
+ *         description: Dat lai mat khau thanh cong
+ *       400:
+ *         description: OTP khong hop le, het han, hoac validation that bai
+ */
+router.post('/reset-password', resetPasswordController);
 
 /**
  * @swagger
