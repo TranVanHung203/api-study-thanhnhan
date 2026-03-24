@@ -257,7 +257,7 @@ export const forgotPasswordController = async (req, res, next) => {
     });
 
     if (!user || user.isGuest) {
-      return res.status(200).json(safeResponse);
+      throw new NotFoundError('Không tìm thấy tài khoản');
     }
 
     const otp = generateOTP();
