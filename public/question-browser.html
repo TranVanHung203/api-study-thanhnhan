@@ -486,7 +486,7 @@
               <th style="width: 210px">Hint Voice</th>
               <th style="width: 140px">Answer</th>
               <th style="width: 210px">QuizId</th>
-              <th style="width: 180px">Created At</th>
+              <th style="width: 180px">Raw Question</th>
               <th style="width: 150px">Actions</th>
             </tr>
           </thead>
@@ -1051,15 +1051,15 @@
       }
 
       const choices = parseChoicesInput(els.editChoices.value);
-      if (choices.length < 2) {
-        throw new Error('Choices phai co it nhat 2 dong');
+      if (choices.length > 0 && choices.length < 2) {
+        throw new Error('Choices phai co it nhat 2 dong (hoac de trong neu khong co choices)');
       }
 
       const payload = {
         questionText: els.editQuestionText.value.trim(),
         rawQuestion: parseRawQuestionInput(els.editRawQuestion.value),
         imageQuestion: els.editImageQuestion.value.trim(),
-        choices,
+        choices: choices.length > 0 ? choices : null,
         answer: parseAnswerInput(els.editAnswer.value),
         questionType: els.editQuestionType.value.trim(),
         detailType: els.editDetailType.value.trim(),
@@ -1109,8 +1109,11 @@
       questions.forEach((q, idx) => {
         const tr = document.createElement('tr');
 
-        const questionText = q.questionText || (q.rawQuestion ? JSON.stringify(q.rawQuestion) : '-');
-        const createdAtText = q.createdAt ? new Date(q.createdAt).toLocaleString() : '-';
+        const questionText = q.questionText || '-';
+        let rawQuestionText = '-';
+        if (q.rawQuestion !== undefined && q.rawQuestion !== null) {
+          rawQuestionText = typeof q.rawQuestion === 'string' ? q.rawQuestion : JSON.stringify(q.rawQuestion);
+        }
 
         const cells = [
           String((page - 1) * limit + idx + 1),
@@ -1122,7 +1125,7 @@
           '',
           '',
           q.quizId || '-',
-          createdAtText,
+          rawQuestionText,
           ''
         ];
 
