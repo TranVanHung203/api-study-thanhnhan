@@ -409,18 +409,18 @@ export const deleteQuestionController = async (req, res, next) => {
       return res.status(404).json({ message: 'Câu hỏi không tìm thấy' });
     }
 
-    // Kiểm tra quyền
-    const quiz = await Quiz.findOne({ _id: existing.quizId, createdBy: req.user.id });
-    if (!quiz) {
-      return res.status(403).json({ message: 'Bạn không có quyền xóa câu hỏi này' });
-    }
+    // // Kiểm tra quyền
+    // const quiz = await Quiz.findOne({ _id: existing.quizId, createdBy: req.user.id });
+    // if (!quiz) {
+    //   return res.status(403).json({ message: 'Bạn không có quyền xóa câu hỏi này' });
+    // }
 
-    // Kiểm tra câu hỏi có trong lịch sử làm bài không
-    const usedInAttempt = await QuizAttempt.exists({ 'details.questionId': questionId });
-    const usedInAssignment = await AssignmentAttempt.exists({ 'details.questionId': questionId });
-    if (usedInAttempt || usedInAssignment) {
-      return res.status(400).json({ message: 'Không thể xóa câu hỏi vì đã có học sinh làm bài liên quan' });
-    }
+    // // Kiểm tra câu hỏi có trong lịch sử làm bài không
+    // const usedInAttempt = await QuizAttempt.exists({ 'details.questionId': questionId });
+    // const usedInAssignment = await AssignmentAttempt.exists({ 'details.questionId': questionId });
+    // if (usedInAttempt || usedInAssignment) {
+    //   return res.status(400).json({ message: 'Không thể xóa câu hỏi vì đã có học sinh làm bài liên quan' });
+    // }
 
     await Question.findByIdAndDelete(questionId);
 
