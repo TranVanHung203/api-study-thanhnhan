@@ -291,6 +291,14 @@
       color: #a0231a;
     }
 
+    tr.row-deleting {
+      transition: opacity 0.35s ease, transform 0.35s ease, background-color 0.15s ease;
+      opacity: 0;
+      transform: translateX(40px);
+      pointer-events: none;
+      background-color: #fff1ef !important;
+    }
+
     .modal-overlay {
       position: fixed;
       inset: 0;
@@ -1065,14 +1073,26 @@
       setStatus('Cap nhat question thanh cong');
     }
 
-    async function deleteQuestion(questionId) {
+    async function deleteQuestion(questionId, rowEl) {
       if (!questionId) return;
       const ok = window.confirm('Ban chac chan muon xoa question nay?');
       if (!ok) return;
 
       setStatus('Dang xoa question...');
       await apiRequest('DELETE', `/questions/${questionId}`);
-      await loadQuestions();
+
+      if (rowEl) {
+        rowEl.classList.add('row-deleting');
+        await new Promise((resolve) => setTimeout(resolve, 370));
+        rowEl.remove();
+        const remaining = els.tableBody.querySelectorAll('tr').length;
+        if (remaining === 0) {
+          const tr = document.createElement('tr');
+          tr.innerHTML = '<td colspan="11" class="empty">No question found</td>';
+          els.tableBody.appendChild(tr);
+        }
+      }
+
       setStatus('Xoa question thanh cong');
     }
 
@@ -1183,7 +1203,7 @@
             deleteBtn.className = 'btn-mini delete';
             deleteBtn.textContent = 'Xoa';
             deleteBtn.addEventListener('click', () => {
-              runSafe(() => deleteQuestion(q._id));
+              runSafe(() => deleteQuestion(q._id, tr));
             });
             actionWrap.appendChild(deleteBtn);
 
