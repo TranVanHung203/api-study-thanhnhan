@@ -542,7 +542,7 @@
           <textarea id="editChoices"></textarea>
         </div>
         <div class="span-2">
-          <label for="editAnswer">Answer (co the la index, text, hoac JSON array)</label>
+          <label for="editAnswer">Answer (string)</label>
           <textarea id="editAnswer"></textarea>
         </div>
         <div class="span-2">
@@ -910,28 +910,7 @@
       }
     }
 
-    function resolveAnswerItem(question, answerItem) {
-      const choices = Array.isArray(question?.choices) ? question.choices : [];
-
-      if (typeof answerItem === 'number' && choices[answerItem] !== undefined) {
-        return choices[answerItem];
-      }
-
-      if (typeof answerItem === 'string') {
-        const trimmed = answerItem.trim();
-        if (/^\d+$/.test(trimmed)) {
-          const index = Number.parseInt(trimmed, 10);
-          if (!Number.isNaN(index) && choices[index] !== undefined) {
-            return choices[index];
-          }
-        }
-        return trimmed;
-      }
-
-      return answerItem;
-    }
-
-    function renderAnswer(answer, question) {
+    function renderAnswer(answer) {
       if (answer === undefined || answer === null || answer === '') {
         return '-';
       }
@@ -942,8 +921,7 @@
       let hasContent = false;
 
       items.forEach((item, idx) => {
-        const resolved = resolveAnswerItem(question, item);
-        const text = toDisplayString(resolved);
+        const text = toDisplayString(item);
         if (!text && text !== '0') {
           return;
         }
@@ -990,17 +968,9 @@
     }
 
     function parseAnswerInput(value) {
-      const trimmed = String(value || '').trim();
-      if (!trimmed) return '';
-
-      try {
-        return JSON.parse(trimmed);
-      } catch (error) {
-        if (/^-?\d+(\.\d+)?$/.test(trimmed)) {
-          return Number(trimmed);
-        }
-        return trimmed;
-      }
+      const rawValue = String(value ?? '');
+      if (!rawValue.trim()) return '';
+      return rawValue;
     }
 
     function openEditModal(question) {
@@ -1173,7 +1143,7 @@
               td.appendChild(createSpeakableInline(String(hintVoice), String(hintVoice)));
             }
           } else if (cellIndex === 7) {
-            const renderedAnswer = renderAnswer(q.answer, q);
+            const renderedAnswer = renderAnswer(q.answer);
             if (typeof renderedAnswer === 'string') {
               td.textContent = renderedAnswer;
             } else {
@@ -1345,4 +1315,3 @@
   </script>
 </body>
 </html>
-
