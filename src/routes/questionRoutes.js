@@ -5,13 +5,116 @@ import {
   getQuestionForStudentController,
   updateQuestionController,
   deleteQuestionController,
-  checkAnswerController
+  checkAnswerController,
+  getAllQuestionsController,
+  getQuestionFilterOptionsController
 } from '../controllers/questionController.js';
 import { authToken } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
 
 router.all('*', authToken);
+
+/**
+ * @swagger
+ * /questions/filter-options:
+ *   get:
+ *     summary: Lay cac gia tri questionType/detailType de loc
+ *     tags: [Questions]
+ *     parameters:
+ *       - in: query
+ *         name: questionType
+ *         schema:
+ *           type: string
+ *         required: false
+ *         description: Neu co, tra ve detailType theo questionType nay
+ *     responses:
+ *       200:
+ *         description: Danh sach options bo loc
+ */
+router.get('/filter-options', getQuestionFilterOptionsController);
+
+/**
+ * @swagger
+ * /questions:
+ *   get:
+ *     summary: Lay danh sach question co phan trang va bo loc tuy chinh
+ *     tags: [Questions]
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *         required: false
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *         required: false
+ *       - in: query
+ *         name: questionId
+ *         schema:
+ *           type: string
+ *         required: false
+ *       - in: query
+ *         name: quizId
+ *         schema:
+ *           type: string
+ *         required: false
+ *       - in: query
+ *         name: questionType
+ *         schema:
+ *           type: string
+ *         required: false
+ *       - in: query
+ *         name: detailType
+ *         schema:
+ *           type: string
+ *         required: false
+ *       - in: query
+ *         name: hasImage
+ *         schema:
+ *           type: boolean
+ *         required: false
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         required: false
+ *       - in: query
+ *         name: sortBy
+ *         schema:
+ *           type: string
+ *         required: false
+ *       - in: query
+ *         name: sortOrder
+ *         schema:
+ *           type: string
+ *           enum: [asc, desc]
+ *         required: false
+ *       - in: query
+ *         name: createdFrom
+ *         schema:
+ *           type: string
+ *         required: false
+ *       - in: query
+ *         name: createdTo
+ *         schema:
+ *           type: string
+ *         required: false
+ *       - in: query
+ *         name: filters
+ *         schema:
+ *           type: string
+ *         required: false
+ *         description: JSON string cho custom filters
+ *     responses:
+ *       200:
+ *         description: Danh sach question da phan trang
+ *       400:
+ *         description: Du lieu query khong hop le
+ */
+router.get('/', getAllQuestionsController);
 
 // // /**
 // //  * @swagger

@@ -16,6 +16,7 @@ import {
   , changeFullNameAndAttachCharacterController
   , sendOTPForRegisterController
   , verifyOTPAndRegisterController
+  , setShowCaseViewController
 } from '../controllers/authController.js';
 import { authToken, requireGuest } from '../middlewares/authMiddleware.js';
 
@@ -610,5 +611,33 @@ router.post('/guest/convert', authToken, requireGuest, sendOTPForConvertControll
  *         description: Chưa xác thực
  */
 router.post('/guest/convert/verify', authToken, requireGuest, verifyOTPAndConvertController);
+
+/**
+ * @swagger
+ * /auth/set-showcase-view:
+ *   post:
+ *     summary: Bật chế độ xem showcase cho user
+ *     description: Đánh dấu isShowCaseView = true cho user hiện tại. Tạo field nếu chưa có, cập nhật nếu đã có.
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Cập nhật thành công
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Cập nhật isShowCaseView thành công"
+ *                 isShowCaseView:
+ *                   type: boolean
+ *                   example: true
+ *       401:
+ *         description: Chưa xác thực
+ */
+router.post('/set-showcase-view', authToken, setShowCaseViewController);
 
 export default router;

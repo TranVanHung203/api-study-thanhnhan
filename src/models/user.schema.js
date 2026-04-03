@@ -60,6 +60,10 @@ const UserSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  isShowCaseView: {
+    type: Boolean,
+    default: false
+  },
   createdAt: { 
     type: Date, 
     default: Date.now 

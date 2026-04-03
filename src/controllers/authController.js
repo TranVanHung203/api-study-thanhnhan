@@ -163,7 +163,7 @@ export const getUserController = async (req, res, next) => {
   try {
     const userId = req.user.id;
     const user = await User.findById(userId)
-      .select('_id fullName email classId characterId isGuest roles');
+      .select('_id fullName email classId characterId isGuest roles isShowCaseView');
 
     if (!user) throw new NotFoundError('User không tìm thấy');
 
@@ -174,7 +174,8 @@ export const getUserController = async (req, res, next) => {
       classId: user.classId || null,
       characterId: user.characterId || null,
       isGuest: user.isGuest ?? false,
-      roles: user.roles || []
+      roles: user.roles || [],
+      isShowCaseView: user.isShowCaseView ?? false
     });
   } catch (error) {
     next(error);
@@ -257,7 +258,7 @@ export const forgotPasswordController = async (req, res, next) => {
     });
 
     if (!user || user.isGuest) {
-      return res.status(200).json(safeResponse);
+      throw new NotFoundError('Không tìm thấy tài khoản');
     }
 
     const otp = generateOTP();
@@ -751,6 +752,17 @@ export const verifyOTPAndConvertController = async (req, res, next) => {
     return res.status(200).json({
       message: 'Chuyển đổi tài khoản thành công! Dữ liệu học tập được giữ nguyên.'
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Bật isShowCaseView (tạo nếu chưa có, cập nhật nếu đã có)
+export const setShowCaseViewController = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    await User.findByIdAndUpdate(userId, { $set: { isShowCaseView: true } }, { upsert: false });
+    return res.status(200).json({ message: 'Cập nhật isShowCaseView thành công', isShowCaseView: true });
   } catch (error) {
     next(error);
   }

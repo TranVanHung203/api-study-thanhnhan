@@ -172,6 +172,7 @@ const swaggerUiOptions = {
 
 // Serve static files (for swagger custom script)
 app.use('/public', express.static(path.join(process.cwd(), 'public')));
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 // Inject custom JS into Swagger UI to auto-attach access token
 const swaggerUiOptionsWithCustom = Object.assign({}, swaggerUiOptions, {

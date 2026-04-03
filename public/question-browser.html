@@ -1,0 +1,1317 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Question Browser</title>
+  <style>
+    :root {
+      --bg: #f4f7fb;
+      --card: #ffffff;
+      --line: #d7deea;
+      --text: #1d2a3a;
+      --muted: #6a788c;
+      --accent: #1f7ae0;
+      --accent-soft: #e9f3ff;
+      --danger: #b42318;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(180deg, #eef4ff 0%, var(--bg) 45%);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    .wrap {
+      max-width: 1400px;
+      margin: 20px auto;
+      padding: 0 16px 24px;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      box-shadow: 0 10px 26px rgba(12, 28, 58, 0.07);
+      padding: 14px;
+    }
+
+    .title {
+      margin: 6px 0 14px;
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: 0.2px;
+    }
+
+    .muted {
+      color: var(--muted);
+      font-size: 13px;
+      margin-top: 2px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(130px, 1fr));
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .grid .wide {
+      grid-column: span 2;
+    }
+
+    label {
+      display: block;
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 4px;
+      font-weight: 600;
+    }
+
+    input,
+    select,
+    textarea,
+    button {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 9px 10px;
+      font-size: 14px;
+      color: var(--text);
+      background: #fff;
+    }
+
+    textarea {
+      min-height: 82px;
+      resize: vertical;
+      font-family: Consolas, "Courier New", monospace;
+    }
+
+    input:focus,
+    select:focus,
+    textarea:focus,
+    button:focus {
+      outline: 2px solid #bfdcff;
+      border-color: var(--accent);
+    }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+      align-items: end;
+      margin-top: 10px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      cursor: pointer;
+      border: 1px solid var(--accent);
+      color: #fff;
+      background: var(--accent);
+      min-width: 130px;
+      max-width: 220px;
+      transition: 0.2s ease;
+    }
+
+    .btn.secondary {
+      border-color: var(--line);
+      background: #fff;
+      color: var(--text);
+    }
+
+    .btn:hover {
+      filter: brightness(0.96);
+    }
+
+    .status {
+      margin-top: 10px;
+      font-size: 13px;
+      padding: 8px 10px;
+      border-radius: 10px;
+      background: #f3f5f8;
+      border: 1px solid var(--line);
+      color: #334155;
+    }
+
+    .status.error {
+      background: #fff3f2;
+      border-color: #f3cac7;
+      color: var(--danger);
+    }
+
+    .table-wrap {
+      margin-top: 14px;
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+    }
+
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      min-width: 1200px;
+      background: #fff;
+    }
+
+    th,
+    td {
+      border-bottom: 1px solid #e7edf7;
+      padding: 10px;
+      text-align: left;
+      vertical-align: top;
+      font-size: 13px;
+    }
+
+    th {
+      background: #f8fbff;
+      color: #334155;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+
+    .chip {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: #1259ab;
+      font-size: 12px;
+      border: 1px solid #cde3ff;
+    }
+
+    .image-box {
+      display: inline-flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .image-preview {
+      width: 130px;
+      max-height: 86px;
+      object-fit: cover;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #f8fafc;
+    }
+
+    .choices {
+      margin: 0;
+      padding-left: 16px;
+      display: grid;
+      gap: 6px;
+    }
+
+    .speak-inline {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .tts-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      min-width: 28px;
+      max-width: 28px;
+      height: 28px;
+      padding: 0;
+      border: 1px solid #c9d8ee;
+      border-radius: 8px;
+      background: #f5f9ff;
+      cursor: pointer;
+      transition: 0.15s ease;
+    }
+
+    .tts-btn:hover {
+      background: #e9f2ff;
+      border-color: #9fc2f1;
+    }
+
+    .tts-btn:disabled {
+      opacity: 0.55;
+      cursor: wait;
+    }
+
+    .tts-btn svg {
+      width: 14px;
+      height: 14px;
+      fill: #1f7ae0;
+    }
+
+    .pagination {
+      margin-top: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .pagination .btn {
+      width: auto;
+      min-width: 95px;
+      padding: 8px 14px;
+    }
+
+    .row-actions {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .btn-mini {
+      width: auto;
+      min-width: 58px;
+      max-width: none;
+      padding: 6px 8px;
+      border-radius: 8px;
+      font-size: 12px;
+      cursor: pointer;
+      border: 1px solid var(--line);
+      background: #fff;
+    }
+
+    .btn-mini.edit {
+      border-color: #9fc2f1;
+      background: #eef5ff;
+      color: #0f5eb6;
+    }
+
+    .btn-mini.delete {
+      border-color: #efb8b3;
+      background: #fff1ef;
+      color: #a0231a;
+    }
+
+    tr.row-deleting {
+      transition: opacity 0.35s ease, transform 0.35s ease, background-color 0.15s ease;
+      opacity: 0;
+      transform: translateX(40px);
+      pointer-events: none;
+      background-color: #fff1ef !important;
+    }
+
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.45);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      padding: 14px;
+    }
+
+    .modal-overlay.hidden {
+      display: none;
+    }
+
+    .modal-card {
+      width: min(920px, 100%);
+      max-height: 92vh;
+      overflow: auto;
+      background: #fff;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      box-shadow: 0 20px 40px rgba(15, 23, 42, 0.18);
+      padding: 14px;
+    }
+
+    .modal-title {
+      margin: 0 0 10px;
+      font-size: 20px;
+      font-weight: 700;
+    }
+
+    .edit-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(220px, 1fr));
+      gap: 10px;
+    }
+
+    .edit-grid .span-2 {
+      grid-column: span 2;
+    }
+
+    .modal-actions {
+      margin-top: 12px;
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+    }
+
+    .empty {
+      text-align: center;
+      padding: 14px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    @media (max-width: 900px) {
+      .grid {
+        grid-template-columns: repeat(2, minmax(140px, 1fr));
+      }
+
+      .grid .wide {
+        grid-column: span 2;
+      }
+
+      .edit-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .edit-grid .span-2 {
+        grid-column: span 1;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div class="title">Question Browser (Paginate + Filter)</div>
+      <div class="muted">Nhap token Bearer de test API /questions va /questions/filter-options</div>
+
+      <div class="grid">
+        <div class="wide">
+          <label for="apiBase">API Base URL</label>
+          <input id="apiBase" type="text" placeholder="http://localhost:5000" />
+        </div>
+        <div class="wide">
+          <label for="token">Bearer Token</label>
+          <input id="token" type="text" placeholder="Paste access token" />
+        </div>
+
+        <div>
+          <label for="page">Page</label>
+          <input id="page" type="number" min="1" value="1" />
+        </div>
+        <div>
+          <label for="limit">Limit</label>
+          <input id="limit" type="number" min="1" max="100" value="10" />
+        </div>
+        <div>
+          <label for="sortBy">Sort By</label>
+          <select id="sortBy">
+            <option value="createdAt">createdAt</option>
+            <option value="questionText">questionText</option>
+            <option value="questionType">questionType</option>
+            <option value="detailType">detailType</option>
+            <option value="quizId">quizId</option>
+          </select>
+        </div>
+        <div>
+          <label for="sortOrder">Sort Order</label>
+          <select id="sortOrder">
+            <option value="desc">desc</option>
+            <option value="asc">asc</option>
+          </select>
+        </div>
+
+        <div class="wide">
+          <label for="search">Search (questionText/detailType/choices)</label>
+          <input id="search" type="text" placeholder="Type keyword..." />
+        </div>
+        <div>
+          <label for="quizId">QuizId</label>
+          <input id="quizId" type="text" placeholder="ObjectId" />
+        </div>
+        <div>
+          <label for="questionId">QuestionId</label>
+          <input id="questionId" type="text" placeholder="ObjectId" />
+        </div>
+        <div>
+          <label for="hasImage">Has Image</label>
+          <select id="hasImage">
+            <option value="">All</option>
+            <option value="true">Only with image</option>
+            <option value="false">Only no image</option>
+          </select>
+        </div>
+
+        <div>
+          <label for="questionType">Question Type</label>
+          <select id="questionType">
+            <option value="">All</option>
+          </select>
+        </div>
+        <div>
+          <label for="detailType">Detail Type (jump by questionType)</label>
+          <select id="detailType">
+            <option value="">All</option>
+          </select>
+        </div>
+
+        <div>
+          <label for="createdFrom">Created From</label>
+          <input id="createdFrom" type="date" />
+        </div>
+        <div>
+          <label for="createdTo">Created To</label>
+          <input id="createdTo" type="date" />
+        </div>
+        <div class="wide">
+          <label for="filters">Custom filters JSON (optional)</label>
+          <textarea id="filters" placeholder='{"questionType":"single","detailType":["add","sub"]}'></textarea>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button id="btnLoadFilters" class="btn secondary" type="button">Reload filter options</button>
+        <button id="btnApply" class="btn" type="button">Load questions</button>
+        <button id="btnReset" class="btn secondary" type="button">Reset filters</button>
+      </div>
+
+      <div id="status" class="status">Ready</div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 50px">#</th>
+              <th style="width: 230px">Question</th>
+              <th style="width: 120px">Question Type</th>
+              <th style="width: 120px">Detail Type</th>
+              <th style="width: 170px">Question Image</th>
+              <th style="width: 300px">Choices</th>
+              <th style="width: 210px">Hint Voice</th>
+              <th style="width: 140px">Answer</th>
+              <th style="width: 210px">QuizId</th>
+              <th style="width: 180px">Raw Question</th>
+              <th style="width: 150px">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody">
+            <tr><td colspan="11" class="empty">No data</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="pagination">
+        <button id="btnPrev" class="btn secondary" type="button">Prev</button>
+        <button id="btnNext" class="btn secondary" type="button">Next</button>
+        <span id="pageInfo" class="chip">Page 1 / 1</span>
+        <span id="totalInfo" class="chip">Total: 0</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="editModal" class="modal-overlay hidden">
+    <div class="modal-card">
+      <h3 class="modal-title">Sua Question</h3>
+      <div class="edit-grid">
+        <div>
+          <label for="editQuestionId">Question ID</label>
+          <input id="editQuestionId" type="text" readonly />
+        </div>
+        <div>
+          <label for="editQuizId">Quiz ID</label>
+          <input id="editQuizId" type="text" readonly />
+        </div>
+        <div class="span-2">
+          <label for="editQuestionText">Question Text</label>
+          <textarea id="editQuestionText"></textarea>
+        </div>
+        <div>
+          <label for="editQuestionType">Question Type</label>
+          <input id="editQuestionType" type="text" />
+        </div>
+        <div>
+          <label for="editDetailType">Detail Type</label>
+          <input id="editDetailType" type="text" />
+        </div>
+        <div class="span-2">
+          <label for="editImageQuestion">Image Question URL</label>
+          <input id="editImageQuestion" type="text" />
+        </div>
+        <div class="span-2">
+          <label for="editHintVoice">Hint Voice</label>
+          <input id="editHintVoice" type="text" />
+        </div>
+        <div class="span-2">
+          <label for="editChoices">Choices (moi dong 1 choice)</label>
+          <textarea id="editChoices"></textarea>
+        </div>
+        <div class="span-2">
+          <label for="editAnswer">Answer (string)</label>
+          <textarea id="editAnswer"></textarea>
+        </div>
+        <div class="span-2">
+          <label for="editRawQuestion">Raw Question (JSON hoac text)</label>
+          <textarea id="editRawQuestion"></textarea>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button id="btnCancelEdit" type="button" class="btn secondary">Huy</button>
+        <button id="btnSaveEdit" type="button" class="btn">Luu thay doi</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const IMAGE_EXT_REGEX = /\.(png|jpe?g|gif|webp|bmp|svg)(\?.*)?$/i;
+    const TTS_API_URL = 'https://voice.apithanhnhan.id.vn/tss';
+    const TTS_FALLBACK_API_URL = TTS_API_URL.endsWith('/tss')
+      ? TTS_API_URL.replace(/\/tss$/, '/tts')
+      : '';
+    const TTS_DEFAULTS = {
+      voice: 'vi-VN-HoaiMyNeural',
+      rate: '-10%',
+      volume: '+100%',
+      pitch: '+0Hz'
+    };
+
+    const els = {
+      apiBase: document.getElementById('apiBase'),
+      token: document.getElementById('token'),
+      page: document.getElementById('page'),
+      limit: document.getElementById('limit'),
+      sortBy: document.getElementById('sortBy'),
+      sortOrder: document.getElementById('sortOrder'),
+      search: document.getElementById('search'),
+      quizId: document.getElementById('quizId'),
+      questionId: document.getElementById('questionId'),
+      hasImage: document.getElementById('hasImage'),
+      questionType: document.getElementById('questionType'),
+      detailType: document.getElementById('detailType'),
+      createdFrom: document.getElementById('createdFrom'),
+      createdTo: document.getElementById('createdTo'),
+      filters: document.getElementById('filters'),
+      btnLoadFilters: document.getElementById('btnLoadFilters'),
+      btnApply: document.getElementById('btnApply'),
+      btnReset: document.getElementById('btnReset'),
+      btnPrev: document.getElementById('btnPrev'),
+      btnNext: document.getElementById('btnNext'),
+      status: document.getElementById('status'),
+      pageInfo: document.getElementById('pageInfo'),
+      totalInfo: document.getElementById('totalInfo'),
+      tableBody: document.getElementById('tableBody'),
+      editModal: document.getElementById('editModal'),
+      editQuestionId: document.getElementById('editQuestionId'),
+      editQuizId: document.getElementById('editQuizId'),
+      editQuestionText: document.getElementById('editQuestionText'),
+      editQuestionType: document.getElementById('editQuestionType'),
+      editDetailType: document.getElementById('editDetailType'),
+      editImageQuestion: document.getElementById('editImageQuestion'),
+      editHintVoice: document.getElementById('editHintVoice'),
+      editChoices: document.getElementById('editChoices'),
+      editAnswer: document.getElementById('editAnswer'),
+      editRawQuestion: document.getElementById('editRawQuestion'),
+      btnCancelEdit: document.getElementById('btnCancelEdit'),
+      btnSaveEdit: document.getElementById('btnSaveEdit')
+    };
+
+    const state = {
+      totalPages: 1,
+      detailTypesByQuestionType: {},
+      allDetailTypes: [],
+      activeTtsAudio: null,
+      editingQuestion: null
+    };
+
+    const defaultBase = `${window.location.protocol}//${window.location.host}`;
+    els.apiBase.value = defaultBase;
+    els.token.value = localStorage.getItem('questionBrowserToken') || '';
+
+    function setStatus(message, isError = false) {
+      els.status.textContent = message;
+      els.status.classList.toggle('error', Boolean(isError));
+    }
+
+    function buildUrl(path, params = {}) {
+      const base = (els.apiBase.value || defaultBase).replace(/\/$/, '');
+      const url = new URL(`${base}${path}`);
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          url.searchParams.set(key, value);
+        }
+      });
+      return url.toString();
+    }
+
+    function looksLikeImage(value) {
+      if (typeof value !== 'string') return false;
+      const trimmed = value.trim();
+      if (!trimmed) return false;
+      if (trimmed.startsWith('data:image/')) return true;
+      if (IMAGE_EXT_REGEX.test(trimmed)) return true;
+      if (trimmed.startsWith('/uploads/') || trimmed.startsWith('uploads/')) return true;
+      if (/cloudinary\.com/i.test(trimmed) && /\/image\//i.test(trimmed)) return true;
+      return false;
+    }
+
+    function looksLikeAudio(value) {
+      if (typeof value !== 'string') return false;
+      const trimmed = value.trim();
+      if (!trimmed) return false;
+      if (trimmed.startsWith('data:audio/')) return true;
+      if (/\.(mp3|wav|ogg|m4a|aac|webm)(\?.*)?$/i.test(trimmed)) return true;
+      return false;
+    }
+
+    function normalizeImageUrl(value) {
+      if (typeof value !== 'string') return '';
+      const trimmed = value.trim();
+      if (!trimmed) return '';
+      if (/^https?:\/\//i.test(trimmed) || trimmed.startsWith('data:image/')) {
+        return trimmed;
+      }
+      const base = (els.apiBase.value || defaultBase).replace(/\/$/, '');
+      if (trimmed.startsWith('/')) {
+        return `${base}${trimmed}`;
+      }
+      return `${base}/${trimmed}`;
+    }
+
+    function createImagePreview(urlValue) {
+      const src = normalizeImageUrl(urlValue);
+      if (!src) return '-';
+      const wrap = document.createElement('div');
+      wrap.className = 'image-box';
+
+      const img = document.createElement('img');
+      img.className = 'image-preview';
+      img.src = src;
+      img.alt = 'image';
+      img.loading = 'lazy';
+      wrap.appendChild(img);
+
+      const link = document.createElement('a');
+      link.href = src;
+      link.target = '_blank';
+      link.rel = 'noreferrer';
+      link.textContent = 'Open';
+      wrap.appendChild(link);
+
+      return wrap;
+    }
+
+    function isSpeakableText(value) {
+      if (typeof value !== 'string') return false;
+      const trimmed = value.trim();
+      if (!trimmed) return false;
+      if (looksLikeImage(trimmed) || looksLikeAudio(trimmed)) return false;
+      return true;
+    }
+
+    function buildTtsUrl(text, apiUrl = TTS_API_URL) {
+      const url = new URL(apiUrl);
+      url.searchParams.set('text', text);
+      url.searchParams.set('voice', TTS_DEFAULTS.voice);
+      url.searchParams.set('rate', TTS_DEFAULTS.rate);
+      url.searchParams.set('volume', TTS_DEFAULTS.volume);
+      url.searchParams.set('pitch', TTS_DEFAULTS.pitch);
+      return url.toString();
+    }
+
+    async function speakText(text) {
+      const normalized = (text || '').trim();
+      if (!normalized) return;
+
+      if (state.activeTtsAudio) {
+        state.activeTtsAudio.pause();
+        state.activeTtsAudio.currentTime = 0;
+        state.activeTtsAudio = null;
+      }
+
+      setStatus(`Generating voice for: ${normalized.slice(0, 80)}${normalized.length > 80 ? '...' : ''}`);
+      const sourceUrls = [buildTtsUrl(normalized)];
+      if (TTS_FALLBACK_API_URL) {
+        sourceUrls.push(buildTtsUrl(normalized, TTS_FALLBACK_API_URL));
+      }
+
+      let lastError = null;
+      for (const sourceUrl of sourceUrls) {
+        const audio = new Audio(sourceUrl);
+        audio.preload = 'auto';
+        state.activeTtsAudio = audio;
+
+        audio.addEventListener('ended', () => {
+          if (state.activeTtsAudio === audio) {
+            state.activeTtsAudio = null;
+          }
+        });
+        audio.addEventListener('error', () => {
+          if (state.activeTtsAudio === audio) {
+            state.activeTtsAudio = null;
+          }
+        });
+
+        try {
+          await audio.play();
+          return;
+        } catch (error) {
+          lastError = error;
+        }
+      }
+
+      throw lastError || new Error('Failed to play TTS');
+    }
+
+    function createTtsButton(text) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'tts-btn';
+      button.title = 'Play voice';
+      button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9v6h4l5 4V5L7 9H3zm13.5 3c0-1.77-1-3.29-2.5-4.03v8.05A4.49 4.49 0 0 0 16.5 12zm0-7v2.06c2.89.86 5 3.54 5 6.94s-2.11 6.08-5 6.94V23c4.01-.91 7-4.49 7-8.99S20.51 5.91 16.5 5z"></path></svg>';
+
+      button.addEventListener('click', async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!isSpeakableText(text)) return;
+
+        button.disabled = true;
+        try {
+          await speakText(text);
+        } catch (error) {
+          setStatus(error.message || 'Failed to play TTS', true);
+        } finally {
+          setTimeout(() => {
+            button.disabled = false;
+          }, 250);
+        }
+      });
+
+      return button;
+    }
+
+    function createSpeakableInline(displayText, textForTts) {
+      const wrap = document.createElement('span');
+      wrap.className = 'speak-inline';
+
+      const textSpan = document.createElement('span');
+      textSpan.textContent = displayText;
+      wrap.appendChild(textSpan);
+
+      if (isSpeakableText(textForTts)) {
+        wrap.appendChild(createTtsButton(textForTts));
+      }
+
+      return wrap;
+    }
+
+    function fillSelect(selectEl, options, includeAll = true) {
+      selectEl.innerHTML = '';
+      if (includeAll) {
+        const allOpt = document.createElement('option');
+        allOpt.value = '';
+        allOpt.textContent = 'All';
+        selectEl.appendChild(allOpt);
+      }
+
+      options.forEach((item) => {
+        const opt = document.createElement('option');
+        opt.value = item.value;
+        opt.textContent = `${item.value} (${item.count})`;
+        selectEl.appendChild(opt);
+      });
+    }
+
+    function renderDetailTypeOptions() {
+      const selectedQuestionType = els.questionType.value;
+      const selectedOld = els.detailType.value;
+      const options = selectedQuestionType
+        ? (state.detailTypesByQuestionType[selectedQuestionType] || [])
+        : state.allDetailTypes;
+
+      fillSelect(els.detailType, options, true);
+      if (selectedOld && options.some((opt) => opt.value === selectedOld)) {
+        els.detailType.value = selectedOld;
+      }
+    }
+
+    async function apiRequest(method, path, { params, body } = {}) {
+      const headers = {
+        'Content-Type': 'application/json'
+      };
+
+      const token = (els.token.value || '').trim();
+      if (!token) {
+        throw new Error('Please input Bearer token before calling API');
+      }
+      headers.Authorization = `Bearer ${token}`;
+
+      const response = await fetch(buildUrl(path, params), {
+        method,
+        headers,
+        body: body === undefined ? undefined : JSON.stringify(body)
+      });
+      const payload = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        const message = payload?.message || `Request failed (${response.status})`;
+        throw new Error(message);
+      }
+
+      return payload;
+    }
+
+    async function apiGet(path, params) {
+      return apiRequest('GET', path, { params });
+    }
+
+    async function loadFilterOptions() {
+      const questionType = (els.questionType.value || '').trim();
+      const payload = await apiGet('/questions/filter-options', questionType ? { questionType } : {});
+
+      fillSelect(els.questionType, payload.questionTypes || [], true);
+      state.detailTypesByQuestionType = payload.detailTypesByQuestionType || {};
+      state.allDetailTypes = payload.detailTypes || [];
+
+      if (questionType) {
+        els.questionType.value = questionType;
+      }
+      renderDetailTypeOptions();
+    }
+
+    function renderChoices(choices) {
+      if (!Array.isArray(choices) || choices.length === 0) return '-';
+
+      const ul = document.createElement('ul');
+      ul.className = 'choices';
+
+      choices.forEach((choice, index) => {
+        const li = document.createElement('li');
+        if (looksLikeImage(choice)) {
+          li.appendChild(document.createTextNode(`${index}: `));
+          const preview = createImagePreview(choice);
+          if (typeof preview === 'string') {
+            li.appendChild(document.createTextNode(choice));
+          } else {
+            li.appendChild(preview);
+          }
+        } else {
+          li.appendChild(createSpeakableInline(`${index}: ${choice}`, String(choice)));
+        }
+        ul.appendChild(li);
+      });
+
+      return ul;
+    }
+
+    function toDisplayString(value) {
+      if (value === undefined || value === null) return '';
+      if (typeof value === 'string') return value;
+      if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+      try {
+        return JSON.stringify(value);
+      } catch (error) {
+        return String(value);
+      }
+    }
+
+    function renderAnswer(answer) {
+      if (answer === undefined || answer === null || answer === '') {
+        return '-';
+      }
+
+      const items = Array.isArray(answer) ? answer : [answer];
+      const ul = document.createElement('ul');
+      ul.className = 'choices';
+      let hasContent = false;
+
+      items.forEach((item, idx) => {
+        const text = toDisplayString(item);
+        if (!text && text !== '0') {
+          return;
+        }
+
+        hasContent = true;
+        const li = document.createElement('li');
+        if (looksLikeImage(text)) {
+          if (items.length > 1) {
+            li.appendChild(document.createTextNode(`${idx}: `));
+          }
+          const preview = createImagePreview(text);
+          if (typeof preview === 'string') {
+            li.appendChild(document.createTextNode(text));
+          } else {
+            li.appendChild(preview);
+          }
+        } else {
+          const displayText = items.length > 1 ? `${idx}: ${text}` : text;
+          li.appendChild(createSpeakableInline(displayText, text));
+        }
+        ul.appendChild(li);
+      });
+
+      if (!hasContent) return '-';
+      return ul;
+    }
+
+    function parseChoicesInput(value) {
+      return String(value || '')
+        .split(/\r?\n/)
+        .map((item) => item.trim())
+        .filter(Boolean);
+    }
+
+    function parseRawQuestionInput(value) {
+      const trimmed = String(value || '').trim();
+      if (!trimmed) return null;
+
+      try {
+        return JSON.parse(trimmed);
+      } catch (error) {
+        return trimmed;
+      }
+    }
+
+    function parseAnswerInput(value) {
+      const rawValue = String(value ?? '');
+      if (!rawValue.trim()) return '';
+      return rawValue;
+    }
+
+    function openEditModal(question) {
+      state.editingQuestion = question;
+      els.editQuestionId.value = question?._id || '';
+      els.editQuizId.value = question?.quizId || '';
+      els.editQuestionText.value = question?.questionText || '';
+      els.editQuestionType.value = question?.questionType || '';
+      els.editDetailType.value = question?.detailType || '';
+      els.editImageQuestion.value = question?.imageQuestion || '';
+      els.editHintVoice.value = question?.hintVoice || '';
+
+      const choices = Array.isArray(question?.choices) ? question.choices : [];
+      els.editChoices.value = choices.join('\n');
+
+      if (typeof question?.answer === 'string') {
+        els.editAnswer.value = question.answer;
+      } else if (question?.answer === undefined || question?.answer === null) {
+        els.editAnswer.value = '';
+      } else {
+        els.editAnswer.value = JSON.stringify(question.answer);
+      }
+
+      if (question?.rawQuestion === undefined || question?.rawQuestion === null) {
+        els.editRawQuestion.value = '';
+      } else if (typeof question.rawQuestion === 'string') {
+        els.editRawQuestion.value = question.rawQuestion;
+      } else {
+        try {
+          els.editRawQuestion.value = JSON.stringify(question.rawQuestion);
+        } catch (error) {
+          els.editRawQuestion.value = String(question.rawQuestion);
+        }
+      }
+
+      els.editModal.classList.remove('hidden');
+    }
+
+    function closeEditModal() {
+      state.editingQuestion = null;
+      els.editModal.classList.add('hidden');
+    }
+
+    async function saveEditQuestion() {
+      const questionId = state.editingQuestion?._id;
+      if (!questionId) {
+        throw new Error('Khong tim thay question de sua');
+      }
+
+      const choices = parseChoicesInput(els.editChoices.value);
+      if (choices.length > 0 && choices.length < 2) {
+        throw new Error('Choices phai co it nhat 2 dong (hoac de trong neu khong co choices)');
+      }
+
+      const payload = {
+        questionText: els.editQuestionText.value.trim(),
+        rawQuestion: parseRawQuestionInput(els.editRawQuestion.value),
+        imageQuestion: els.editImageQuestion.value.trim(),
+        choices: choices.length > 0 ? choices : null,
+        answer: parseAnswerInput(els.editAnswer.value),
+        questionType: els.editQuestionType.value.trim(),
+        detailType: els.editDetailType.value.trim(),
+        hintVoice: els.editHintVoice.value.trim()
+      };
+
+      setStatus('Dang cap nhat question...');
+      await apiRequest('PATCH', `/questions/${questionId}`, { body: payload });
+      closeEditModal();
+      await loadQuestions();
+      setStatus('Cap nhat question thanh cong');
+    }
+
+    async function deleteQuestion(questionId, rowEl) {
+      if (!questionId) return;
+      const ok = window.confirm('Ban chac chan muon xoa question nay?');
+      if (!ok) return;
+
+      setStatus('Dang xoa question...');
+      await apiRequest('DELETE', `/questions/${questionId}`);
+
+      if (rowEl) {
+        rowEl.classList.add('row-deleting');
+        await new Promise((resolve) => setTimeout(resolve, 370));
+        rowEl.remove();
+        const remaining = els.tableBody.querySelectorAll('tr').length;
+        if (remaining === 0) {
+          const tr = document.createElement('tr');
+          tr.innerHTML = '<td colspan="11" class="empty">No question found</td>';
+          els.tableBody.appendChild(tr);
+        }
+      }
+
+      setStatus('Xoa question thanh cong');
+    }
+
+    function renderQuestions(questions, page, limit) {
+      els.tableBody.innerHTML = '';
+
+      if (!Array.isArray(questions) || questions.length === 0) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = '<td colspan="11" class="empty">No question found</td>';
+        els.tableBody.appendChild(tr);
+        return;
+      }
+
+      questions.forEach((q, idx) => {
+        const tr = document.createElement('tr');
+
+        const questionText = q.questionText || '-';
+        let rawQuestionText = '-';
+        if (q.rawQuestion !== undefined && q.rawQuestion !== null) {
+          rawQuestionText = typeof q.rawQuestion === 'string' ? q.rawQuestion : JSON.stringify(q.rawQuestion);
+        }
+
+        const cells = [
+          String((page - 1) * limit + idx + 1),
+          questionText,
+          q.questionType || '-',
+          q.detailType || '-',
+          '',
+          '',
+          '',
+          '',
+          q.quizId || '-',
+          rawQuestionText,
+          ''
+        ];
+
+        cells.forEach((cellValue, cellIndex) => {
+          const td = document.createElement('td');
+
+          if (cellIndex === 4) {
+            if (q.imageQuestion && looksLikeImage(q.imageQuestion)) {
+              const preview = createImagePreview(q.imageQuestion);
+              if (typeof preview === 'string') {
+                td.textContent = q.imageQuestion;
+              } else {
+                td.appendChild(preview);
+              }
+            } else {
+              td.textContent = q.imageQuestion || '-';
+            }
+          } else if (cellIndex === 5) {
+            const rendered = renderChoices(q.choices);
+            if (typeof rendered === 'string') {
+              td.textContent = rendered;
+            } else {
+              td.appendChild(rendered);
+            }
+          } else if (cellIndex === 6) {
+            const hintVoice = q.hintVoice || '';
+            if (!hintVoice) {
+              td.textContent = '-';
+            } else if (looksLikeAudio(hintVoice)) {
+              const audio = document.createElement('audio');
+              audio.controls = true;
+              audio.preload = 'none';
+              audio.src = normalizeImageUrl(hintVoice);
+              td.appendChild(audio);
+
+              const open = document.createElement('div');
+              const link = document.createElement('a');
+              link.href = normalizeImageUrl(hintVoice);
+              link.target = '_blank';
+              link.rel = 'noreferrer';
+              link.textContent = 'Open';
+              open.appendChild(link);
+              td.appendChild(open);
+            } else {
+              td.appendChild(createSpeakableInline(String(hintVoice), String(hintVoice)));
+            }
+          } else if (cellIndex === 7) {
+            const renderedAnswer = renderAnswer(q.answer);
+            if (typeof renderedAnswer === 'string') {
+              td.textContent = renderedAnswer;
+            } else {
+              td.appendChild(renderedAnswer);
+            }
+          } else if (cellIndex === 2 || cellIndex === 3) {
+            const chip = document.createElement('span');
+            chip.className = 'chip';
+            chip.textContent = cellValue;
+            td.appendChild(chip);
+          } else if (cellIndex === 1) {
+            if (cellValue !== '-' && isSpeakableText(String(cellValue))) {
+              td.appendChild(createSpeakableInline(String(cellValue), String(cellValue)));
+            } else {
+              td.textContent = cellValue;
+            }
+          } else if (cellIndex === 10) {
+            const actionWrap = document.createElement('div');
+            actionWrap.className = 'row-actions';
+
+            const editBtn = document.createElement('button');
+            editBtn.type = 'button';
+            editBtn.className = 'btn-mini edit';
+            editBtn.textContent = 'Sua';
+            editBtn.addEventListener('click', () => openEditModal(q));
+            actionWrap.appendChild(editBtn);
+
+            const deleteBtn = document.createElement('button');
+            deleteBtn.type = 'button';
+            deleteBtn.className = 'btn-mini delete';
+            deleteBtn.textContent = 'Xoa';
+            deleteBtn.addEventListener('click', () => {
+              runSafe(() => deleteQuestion(q._id, tr));
+            });
+            actionWrap.appendChild(deleteBtn);
+
+            td.appendChild(actionWrap);
+          } else {
+            td.textContent = cellValue;
+          }
+
+          tr.appendChild(td);
+        });
+
+        els.tableBody.appendChild(tr);
+      });
+    }
+
+    async function loadQuestions() {
+      const page = Number.parseInt(els.page.value, 10) || 1;
+      const limit = Number.parseInt(els.limit.value, 10) || 10;
+
+      const params = {
+        page,
+        limit,
+        search: els.search.value.trim(),
+        quizId: els.quizId.value.trim(),
+        questionId: els.questionId.value.trim(),
+        questionType: els.questionType.value,
+        detailType: els.detailType.value,
+        hasImage: els.hasImage.value,
+        sortBy: els.sortBy.value,
+        sortOrder: els.sortOrder.value,
+        createdFrom: els.createdFrom.value,
+        createdTo: els.createdTo.value
+      };
+
+      const filterText = els.filters.value.trim();
+      if (filterText) {
+        params.filters = filterText;
+      }
+
+      setStatus('Loading questions...');
+      const payload = await apiGet('/questions', params);
+
+      state.totalPages = payload.totalPages || 1;
+      els.pageInfo.textContent = `Page ${payload.page} / ${state.totalPages}`;
+      els.totalInfo.textContent = `Total: ${payload.total || 0}`;
+      els.btnPrev.disabled = payload.page <= 1;
+      els.btnNext.disabled = payload.page >= state.totalPages;
+
+      renderQuestions(payload.questions || [], payload.page || 1, payload.limit || limit);
+      setStatus(`Loaded ${payload.questions?.length || 0} question(s)`);
+    }
+
+    function resetForm() {
+      els.page.value = 1;
+      els.limit.value = 10;
+      els.search.value = '';
+      els.quizId.value = '';
+      els.questionId.value = '';
+      els.hasImage.value = '';
+      els.questionType.value = '';
+      els.detailType.value = '';
+      els.createdFrom.value = '';
+      els.createdTo.value = '';
+      els.sortBy.value = 'createdAt';
+      els.sortOrder.value = 'desc';
+      els.filters.value = '';
+      renderDetailTypeOptions();
+    }
+
+    async function runSafe(fn) {
+      try {
+        await fn();
+      } catch (error) {
+        setStatus(error.message || 'Unknown error', true);
+      }
+    }
+
+    els.btnLoadFilters.addEventListener('click', () => runSafe(loadFilterOptions));
+    els.token.addEventListener('input', () => {
+      localStorage.setItem('questionBrowserToken', els.token.value.trim());
+    });
+
+    els.questionType.addEventListener('change', () => {
+      renderDetailTypeOptions();
+      els.page.value = 1;
+      runSafe(loadQuestions);
+    });
+
+    els.btnApply.addEventListener('click', () => {
+      els.page.value = 1;
+      runSafe(loadQuestions);
+    });
+
+    els.btnReset.addEventListener('click', () => {
+      resetForm();
+      runSafe(async () => {
+        await loadFilterOptions();
+        await loadQuestions();
+      });
+    });
+
+    els.btnCancelEdit.addEventListener('click', closeEditModal);
+    els.editModal.addEventListener('click', (event) => {
+      if (event.target === els.editModal) {
+        closeEditModal();
+      }
+    });
+    els.btnSaveEdit.addEventListener('click', () => {
+      runSafe(saveEditQuestion);
+    });
+
+    els.btnPrev.addEventListener('click', () => {
+      const current = Number.parseInt(els.page.value, 10) || 1;
+      if (current > 1) {
+        els.page.value = current - 1;
+        runSafe(loadQuestions);
+      }
+    });
+
+    els.btnNext.addEventListener('click', () => {
+      const current = Number.parseInt(els.page.value, 10) || 1;
+      if (current < state.totalPages) {
+        els.page.value = current + 1;
+        runSafe(loadQuestions);
+      }
+    });
+
+    if (els.token.value.trim()) {
+      runSafe(async () => {
+        await loadFilterOptions();
+        await loadQuestions();
+      });
+    } else {
+      setStatus('Ready. Paste Bearer token, then click Reload filter options or Load questions.');
+    }
+  </script>
+</body>
+</html>

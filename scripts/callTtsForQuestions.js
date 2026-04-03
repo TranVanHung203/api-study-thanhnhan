@@ -2,7 +2,7 @@ import axios from 'axios';
 import DatabaseConfig from '../src/config/databaseConfig.js';
 import Question from '../src/models/question.schema.js';
 
-const TTS_BASE = 'https://api-voice-crack.onrender.com/tts';
+const TTS_BASE = 'https://api-voice-crack-ifq7.onrender.com/tts';
 const TTS_PARAMS = {
   voice: 'vi-VN-HoaiMyNeural',
   rate: '-10%',

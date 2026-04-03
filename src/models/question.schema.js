@@ -8,13 +8,7 @@ const QuestionSchema = new mongoose.Schema({
   // choices: array of strings - if a choice is an image, store the image URL string directly
   choices: {
     type: [String],
-    required: true,
-    validate: {
-      validator: function (v) {
-        return Array.isArray(v) && v.length >= 2;
-      },
-      message: 'A question must have at least 2 choices'
-    }
+    required: false,
   },
   // questionType indicates how the answer should be interpreted
   // - single: single-choice (default)
