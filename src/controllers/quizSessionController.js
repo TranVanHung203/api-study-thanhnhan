@@ -30,14 +30,25 @@ const QUIZ_SESSION_SCORING = {
   maxScore:
     Number.isFinite(parsedQuizMaxScore) && parsedQuizMaxScore > 0
       ? parsedQuizMaxScore
-      : 15,
+      : 10,
   passPercent: 50,
-  precision: 2,
+  rounding: {
+    lowerThreshold: 0.25, // x.00 - <x.25 => x
+    upperThreshold: 0.75, // x.25 - <x.75 => x.5, >=x.75 => x+1
+    midValue: 0.5,
+  },
 };
 
-const roundScore = (value, precision = QUIZ_SESSION_SCORING.precision) => {
+const roundScore = (value) => {
   if (!Number.isFinite(value)) return 0;
-  return Number(value.toFixed(precision));
+  const whole = Math.floor(value);
+  const fraction = Number((value - whole).toFixed(6));
+
+  if (fraction < QUIZ_SESSION_SCORING.rounding.lowerThreshold) return whole;
+  if (fraction < QUIZ_SESSION_SCORING.rounding.upperThreshold) {
+    return whole + QUIZ_SESSION_SCORING.rounding.midValue;
+  }
+  return whole + 1;
 };
 
 const calculateQuizScore = (correctCount, totalQuestions) => {
