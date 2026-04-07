@@ -1,6 +1,7 @@
 import Rating from '../models/rating.schema.js';
 import Progress from '../models/progress.schema.js';
 import UserActivity from '../models/userActivity.schema.js';
+import mongoose from 'mongoose';
 
 export const postRatingController = async (req, res, next) => {
   try {
@@ -39,4 +40,19 @@ export const getRatingsForProgressController = async (req, res, next) => {
   }
 };
 
-export default { postRatingController, getRatingsForProgressController };
+export const getRatingsByUserIdController = async (req, res, next) => {
+  try {
+    const { userId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ message: 'userId không hợp lệ' });
+    }
+
+    const ratings = await Rating.find({ userId }).populate('progressId', 'lessonId stepNumber progressName');
+    return res.status(200).json({ ratings });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export default { postRatingController, getRatingsForProgressController, getRatingsByUserIdController };

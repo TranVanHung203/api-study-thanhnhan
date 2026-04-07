@@ -952,19 +952,14 @@
     function parseChoicesInput(value) {
       return String(value || '')
         .split(/\r?\n/)
-        .map((item) => item.trim())
+        .map((item) => String(item).trim())
         .filter(Boolean);
     }
 
     function parseRawQuestionInput(value) {
       const trimmed = String(value || '').trim();
       if (!trimmed) return null;
-
-      try {
-        return JSON.parse(trimmed);
-      } catch (error) {
-        return trimmed;
-      }
+      return trimmed;
     }
 
     function parseAnswerInput(value) {
@@ -983,7 +978,9 @@
       els.editImageQuestion.value = question?.imageQuestion || '';
       els.editHintVoice.value = question?.hintVoice || '';
 
-      const choices = Array.isArray(question?.choices) ? question.choices : [];
+      const choices = Array.isArray(question?.choices)
+        ? question.choices.map((choice) => toDisplayString(choice))
+        : [];
       els.editChoices.value = choices.join('\n');
 
       if (typeof question?.answer === 'string') {
@@ -1029,7 +1026,7 @@
         questionText: els.editQuestionText.value.trim(),
         rawQuestion: parseRawQuestionInput(els.editRawQuestion.value),
         imageQuestion: els.editImageQuestion.value.trim(),
-        choices: choices.length > 0 ? choices : null,
+        choices: choices.length > 0 ? choices.map((choice) => String(choice)) : null,
         answer: parseAnswerInput(els.editAnswer.value),
         questionType: els.editQuestionType.value.trim(),
         detailType: els.editDetailType.value.trim(),
