@@ -1,5 +1,5 @@
 import express from 'express';
-import { postRatingController, getRatingsForProgressController } from '../controllers/ratingController.js';
+import { postRatingController, getRatingsForProgressController, getRatingsByUserIdController } from '../controllers/ratingController.js';
 import { authToken } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
@@ -59,5 +59,27 @@ router.post('/:progressId', postRatingController);
  *         description: Danh sách đánh giá
  */
 router.get('/:progressId', getRatingsForProgressController);
+
+/**
+ * @swagger
+ * /ratings/user/{userId}:
+ *   get:
+ *     summary: Lấy danh sách đánh giá theo userid
+ *     tags: [Ratings]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Danh sach danh gia cua user
+ *       400:
+ *         description: userId khong hop le
+ */
+router.get('/user/:userId', getRatingsByUserIdController);
 
 export default router;

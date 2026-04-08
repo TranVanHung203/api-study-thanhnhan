@@ -49,10 +49,10 @@ const UserSchema = new mongoose.Schema({
     ref: 'Character',
     default: null
   },
-  // Roles: only two roles in system: 'student' and 'teacher'
+  // Roles in system: 'student', 'teacher', 'researchobject'
   roles: {
     type: [String],
-    enum: ['student', 'teacher'],
+    enum: ['student', 'teacher', 'researchobject'],
     default: ['student']
   },
   // Guest user fields

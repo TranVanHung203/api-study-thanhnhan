@@ -10,7 +10,7 @@ router.all('*', authToken);
  * @swagger
  * /users/students:
  *   get:
- *     summary: Lay danh sach user co role student (phan trang)
+ *     summary: Lay danh sach user co role student/researchobject (phan trang)
  *     tags: [Users]
  *     security:
  *       - bearerAuth: []
@@ -32,7 +32,7 @@ router.all('*', authToken);
  *           default: 20
  *     responses:
  *       200:
- *         description: Danh sach student (chi gom fullName, email)
+ *         description: Danh sach student/researchobject (chi gom fullName, email)
  *       401:
  *         description: Khong co token hoac token khong hop le
  */

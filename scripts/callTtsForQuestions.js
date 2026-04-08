@@ -2,7 +2,7 @@ import axios from 'axios';
 import DatabaseConfig from '../src/config/databaseConfig.js';
 import Question from '../src/models/question.schema.js';
 
-const TTS_BASE = 'https://api-voice-crack-ifq7.onrender.com/tts';
+const TTS_BASE = 'http://192.168.11.230:8000/tts';
 const TTS_PARAMS = {
   voice: 'vi-VN-HoaiMyNeural',
   rate: '-10%',
@@ -56,7 +56,7 @@ async function main() {
     console.log(`  - có questionText: ${withText}`);
     console.log(`  - có hintVoice:    ${withHint}\n`);
 
-    const CONCURRENCY = 100;
+    const CONCURRENCY = 30;
     for (let i = 0; i < questions.length; i += CONCURRENCY) {
       const batch = questions.slice(i, i + CONCURRENCY);
       console.log(`Batch ${Math.floor(i / CONCURRENCY) + 1}/${Math.ceil(questions.length / CONCURRENCY)} (${i + 1}–${Math.min(i + CONCURRENCY, questions.length)}/${questions.length})`);

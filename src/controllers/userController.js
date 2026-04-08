@@ -8,7 +8,10 @@ export const getStudentsController = async (req, res, next) => {
     const limit = Number.isNaN(limitRaw) ? 20 : Math.max(1, Math.min(100, limitRaw));
     const skip = (page - 1) * limit;
 
-    const query = { roles: 'student', isGuest: { $ne: true } };
+    const query = {
+      roles: { $in: ['researchobject'] },
+      isGuest: { $ne: true }
+    };
     const [studentsRaw, total] = await Promise.all([
       User.find(query)
         .select('_id fullName email')

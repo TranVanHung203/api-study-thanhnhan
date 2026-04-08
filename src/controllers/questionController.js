@@ -222,7 +222,8 @@ export const getAllQuestionsController = async (req, res, next) => {
     }
 
     const query = andConditions.length ? { $and: andConditions } : {};
-    const sort = { [sortBy]: sortOrder };
+    // Keep pagination stable when many docs share the same primary sort value.
+    const sort = { [sortBy]: sortOrder, _id: sortOrder };
 
     const [questions, total] = await Promise.all([
       Question.find(query)
