@@ -84,6 +84,7 @@ function getLocalIP() {
 
 // Import cleanup jobs
 import { startCleanupJob, startExpiredGuestCleanup } from './src/jobs/cleanupJob.js';
+import { startDailyDatabaseBackupOverwriteJob } from './src/jobs/databaseBackupJob.js';
 
 const app = express();
 const databaseConfig = new DatabaseConfig();
@@ -213,6 +214,8 @@ app.use(errorHandler);
 // // Start cleanup jobs
 // startCleanupJob();        // Xóa dữ liệu orphan mỗi giờ
 // startExpiredGuestCleanup(); // Xóa guest hết hạn mỗi ngày lúc 3:00 AM
+
+startDailyDatabaseBackupOverwriteJob();
 
 app.listen(PORT, HOST, () => {
   console.log(`Server running on ${HOST}:${PORT}`);
