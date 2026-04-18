@@ -55,6 +55,7 @@ const calculateQuizScore = (correctCount, totalQuestions) => {
   if (totalQuestions <= 0 || QUIZ_SESSION_SCORING.maxScore <= 0) return 0;
   return roundScore((correctCount / totalQuestions) * QUIZ_SESSION_SCORING.maxScore);
 };
+const FORCE_LAST_DETAIL_TYPE = 'tach_xong_roi_cong';
 
 // Start a quiz session: select `count` random questions from a quiz under the given progress
 // Optimized: parallel fetch, single aggregate query, in-memory sampling
@@ -63,7 +64,6 @@ export const startQuizSession = async (req, res, next) => {
     const { progressId } = req.params;
     const userId = req.user && (req.user.id || req.user._id);
     if (!userId) throw new UnauthorizedError('Unauthorized');
-    const FORCE_LAST_DETAIL_TYPE = 'tach_xong_roi_cong';
 
     const shuffleArray = (arr) => {
       const a = [...arr];
@@ -207,7 +207,12 @@ export const getSessionQuestions = async (req, res, next) => {
       return obj;
     }).filter(Boolean);
 
-    return res.status(200).json({ total, questions: questionsNoAnswer });
+    const orderedQuestions = [
+      ...questionsNoAnswer.filter((q) => q.detailType !== FORCE_LAST_DETAIL_TYPE),
+      ...questionsNoAnswer.filter((q) => q.detailType === FORCE_LAST_DETAIL_TYPE),
+    ];
+
+    return res.status(200).json({ total, questions: orderedQuestions });
   } catch (err) {
     next(err);
   }
