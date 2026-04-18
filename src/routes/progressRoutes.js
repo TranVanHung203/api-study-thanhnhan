@@ -63,7 +63,7 @@ router.all('*', authToken);
  *                         description: Số thứ tự bước (1, 2, 3, ...)
  *                       contentId:
  *                         type: string
- *                         description: ID của nội dung (Video/Exercise/Quiz)
+ *                         description: ID của nội dung (Video/Quiz)
  *                       progressName:
  *                         type: string
  *                         nullable: true
@@ -435,7 +435,7 @@ router.post('/:progressId/quiz-sessions/:sessionId/submit', submitQuizSession);
 //  * @swagger
 //  * /progress:
 //  *   post:
-//  *     summary: Tạo bước tiến trình mới (video, exercise, quiz)
+//  *     summary: Tạo bước tiến trình mới (video, quiz)
 //  *     tags: [Progress]
 //  *     requestBody:
 //  *       required: true
@@ -450,7 +450,7 @@ router.post('/:progressId/quiz-sessions/:sessionId/submit', submitQuizSession);
 //  *                 type: number
 //  *               contentType:
 //  *                 type: string
-//  *                 enum: [video, exercise, quiz]
+//  *                 enum: [video, quiz]
 //  *               contentId:
 //  *                 type: string
 //  *     responses:
@@ -534,7 +534,7 @@ router.post('/:progressId/quiz-sessions/:sessionId/submit', submitQuizSession);
 //  *                       type: array
 //  *                       items:
 //  *                         type: object
-//  *                       description: Trả về danh sách exercise khi contentType === 'exercise'
+//  *                       description: Trả về danh sách content khi contentType === 'quiz'
 //  *                 - type: object
 //  *                   properties:
 //  *                     page:

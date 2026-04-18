@@ -1,89 +1,89 @@
-# 🌱 Hướng dẫn Seed Database
+﻿# ðŸŒ± HÆ°á»›ng dáº«n Seed Database
 
-## 📋 Dữ liệu sẽ tạo
+## ðŸ“‹ Dá»¯ liá»‡u sáº½ táº¡o
 
-File `seedDatabase.js` sẽ tạo dữ liệu mẫu sau:
+File `seedDatabase.js` sáº½ táº¡o dá»¯ liá»‡u máº«u sau:
 
-### 📊 Cấu trúc dữ liệu
+### ðŸ“Š Cáº¥u trÃºc dá»¯ liá»‡u
 ```
-✅ 1 Class (Lớp 1)
-  ├─ ✅ 2 Users (student1, student2)
-  ├─ ✅ 1 Skill (Cộng trong phạm vi 100)
-  │   ├─ ✅ 2 Videos
-  │   ├─ ✅ 2 Exercises
-  │   ├─ ✅ 1 Quiz (15 câu hỏi)
-  │   └─ ✅ 5 Progress steps (video→video→exercise→exercise→quiz)
-  ├─ ✅ 3 User Activities (mẫu lịch sử học)
-  └─ ✅ Rewards cho các user
+âœ… 1 Class (Lá»›p 1)
+  â”œâ”€ âœ… 2 Users (student1, student2)
+  â”œâ”€ âœ… 1 Skill (Cá»™ng trong pháº¡m vi 100)
+  â”‚   â”œâ”€ âœ… 2 Videos
+  â”‚   â”œâ”€ âœ… 2 Quizzes
+  â”‚   â”œâ”€ âœ… 1 Quiz (15 cÃ¢u há»i)
+  â”‚   â””â”€ âœ… 5 Progress steps (videoâ†’videoâ†’quizâ†’quizâ†’quiz)
+  â”œâ”€ âœ… 3 User Activities (máº«u lá»‹ch sá»­ há»c)
+  â””â”€ âœ… Rewards cho cÃ¡c user
 ```
 
 ---
 
-## 🚀 Hướng dẫn chạy
+## ðŸš€ HÆ°á»›ng dáº«n cháº¡y
 
-### Step 1: Kiểm tra MongoDB đang chạy
+### Step 1: Kiá»ƒm tra MongoDB Ä‘ang cháº¡y
 ```bash
-# Trên Windows
-# Nếu dùng Docker
+# TrÃªn Windows
+# Náº¿u dÃ¹ng Docker
 docker run -d -p 27017:27017 --name mongodb mongo
 
-# Hoặc nếu cài local, kiểm tra service MongoDB chạy
+# Hoáº·c náº¿u cÃ i local, kiá»ƒm tra service MongoDB cháº¡y
 ```
 
-### Step 2: Cấu hình file .env
-Đảm bảo `.env` có `MONGO_URI`:
+### Step 2: Cáº¥u hÃ¬nh file .env
+Äáº£m báº£o `.env` cÃ³ `MONGO_URI`:
 ```bash
 MONGO_URI=mongodb://localhost:27017/online_learning
 SECRET_KEY=your-secret-key
 PORT=5000
 ```
 
-### Step 3: Chạy seed script
+### Step 3: Cháº¡y seed script
 ```bash
 node seedDatabase.js
 ```
 
-### Step 4: Xem kết quả
+### Step 4: Xem káº¿t quáº£
 ```
-✅ Kết nối MongoDB thành công
-✅ Class đã tạo: 65a1b2c3d4e5f6g7h8i9j0k1
-✅ User #1 đã tạo: student1
-✅ User #2 đã tạo: student2
-✅ Rewards đã tạo
-✅ Skill đã tạo: 65a1b2c3d4e5f6g7h8i9j0k1
-✅ Videos đã tạo: 2
-✅ Exercises đã tạo: 2
-✅ Quiz đã tạo: 65a1b2c3d4e5f6g7h8i9j0k1
-✅ Questions đã tạo: 15
-✅ Progress steps đã tạo: 5
-✅ User Activities đã tạo: 3
-✅ Rewards đã cập nhật
+âœ… Káº¿t ná»‘i MongoDB thÃ nh cÃ´ng
+âœ… Class Ä‘Ã£ táº¡o: 65a1b2c3d4e5f6g7h8i9j0k1
+âœ… User #1 Ä‘Ã£ táº¡o: student1
+âœ… User #2 Ä‘Ã£ táº¡o: student2
+âœ… Rewards Ä‘Ã£ táº¡o
+âœ… Skill Ä‘Ã£ táº¡o: 65a1b2c3d4e5f6g7h8i9j0k1
+âœ… Videos Ä‘Ã£ táº¡o: 2
+âœ… Quizzes Ä‘Ã£ táº¡o: 2
+âœ… Quiz Ä‘Ã£ táº¡o: 65a1b2c3d4e5f6g7h8i9j0k1
+âœ… Questions Ä‘Ã£ táº¡o: 15
+âœ… Progress steps Ä‘Ã£ táº¡o: 5
+âœ… User Activities Ä‘Ã£ táº¡o: 3
+âœ… Rewards Ä‘Ã£ cáº­p nháº­t
 
 ==================================================
-✅ SEED DATABASE HOÀN TẤT!
+âœ… SEED DATABASE HOÃ€N Táº¤T!
 ==================================================
 
-📊 Dữ liệu đã tạo:
-  • Classes: 1
-  • Users: 2
-  • Skills: 1
-  • Videos: 2
-  • Exercises: 2
-  • Quiz: 1
-  • Questions: 15
-  • Progress steps: 5
-  • User activities: 3
+ðŸ“Š Dá»¯ liá»‡u Ä‘Ã£ táº¡o:
+  â€¢ Classes: 1
+  â€¢ Users: 2
+  â€¢ Skills: 1
+  â€¢ Videos: 2
+  â€¢ Quizzes: 2
+  â€¢ Quiz: 1
+  â€¢ Questions: 15
+  â€¢ Progress steps: 5
+  â€¢ User activities: 3
 
-🔐 Thông tin đăng nhập:
+ðŸ” ThÃ´ng tin Ä‘Äƒng nháº­p:
   User 1: student1 / user123
   User 2: student2 / user456
 ```
 
 ---
 
-## 🧪 Test API sau khi seed
+## ðŸ§ª Test API sau khi seed
 
-### 1. Đăng nhập
+### 1. ÄÄƒng nháº­p
 ```bash
 POST http://localhost:5000/auth/login
 Content-Type: application/json
@@ -97,38 +97,38 @@ Content-Type: application/json
 Response:
 ```json
 {
-  "message": "Đăng nhập thành công",
+  "message": "ÄÄƒng nháº­p thÃ nh cÃ´ng",
   "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
   "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
   "user": {
     "id": "65a1b2c3d4e5f6g7h8i9j0k1",
     "username": "student1",
     "email": "student1@example.com",
-    "fullName": "Nguyễn Văn A",
+    "fullName": "Nguyá»…n VÄƒn A",
     "classId": "65a1b2c3d4e5f6g7h8i9j0k2"
   }
 }
 ```
 
-### 2. Lấy danh sách Skills của Class
+### 2. Láº¥y danh sÃ¡ch Skills cá»§a Class
 ```bash
 GET http://localhost:5000/skills/class/65a1b2c3d4e5f6g7h8i9j0k2
 Authorization: Bearer <accessToken>
 ```
 
-### 3. Lấy Progress steps của Skill
+### 3. Láº¥y Progress steps cá»§a Skill
 ```bash
 GET http://localhost:5000/progress/skill/65a1b2c3d4e5f6g7h8i9j0k3
 Authorization: Bearer <accessToken>
 ```
 
-### 4. Lấy chi tiết Quiz (kèm 15 câu hỏi)
+### 4. Láº¥y chi tiáº¿t Quiz (kÃ¨m 15 cÃ¢u há»i)
 ```bash
 GET http://localhost:5000/quizzes/65a1b2c3d4e5f6g7h8i9j0k4
 Authorization: Bearer <accessToken>
 ```
 
-### 5. Lấy điểm thưởng
+### 5. Láº¥y Ä‘iá»ƒm thÆ°á»Ÿng
 ```bash
 GET http://localhost:5000/rewards
 Authorization: Bearer <accessToken>
@@ -136,70 +136,71 @@ Authorization: Bearer <accessToken>
 
 ---
 
-## 📝 Dữ liệu chi tiết
+## ðŸ“ Dá»¯ liá»‡u chi tiáº¿t
 
 ### Users
-| Username | Email | Password | Tên | Lớp |
+| Username | Email | Password | TÃªn | Lá»›p |
 |----------|-------|----------|-----|-----|
-| student1 | student1@example.com | user123 | Nguyễn Văn A | Lớp 1 |
-| student2 | student2@example.com | user456 | Trần Thị B | Lớp 1 |
+| student1 | student1@example.com | user123 | Nguyá»…n VÄƒn A | Lá»›p 1 |
+| student2 | student2@example.com | user456 | Tráº§n Thá»‹ B | Lá»›p 1 |
 
 ### Skill
-- **Tên:** Cộng trong phạm vi 100
-- **Mô tả:** Học các phép cộng từ 1 đến 100
-- **Thứ tự:** 1
+- **TÃªn:** Cá»™ng trong pháº¡m vi 100
+- **MÃ´ táº£:** Há»c cÃ¡c phÃ©p cá»™ng tá»« 1 Ä‘áº¿n 100
+- **Thá»© tá»±:** 1
 
 ### Videos
-1. "Giới thiệu về phép cộng" (5 phút)
-2. "Cộng các số từ 1-20" (8 phút)
+1. "Giá»›i thiá»‡u vá» phÃ©p cá»™ng" (5 phÃºt)
+2. "Cá»™ng cÃ¡c sá»‘ tá»« 1-20" (8 phÃºt)
 
-### Exercises
-1. "Bài tập cộng số 1" - Frontend ref: `addition_level_1` (10 điểm)
-2. "Bài tập cộng số 2" - Frontend ref: `addition_level_2` (15 điểm)
+### Quizzes
+1. "BÃ i táº­p cá»™ng sá»‘ 1" - Frontend ref: `addition_level_1` (10 Ä‘iá»ƒm)
+2. "BÃ i táº­p cá»™ng sá»‘ 2" - Frontend ref: `addition_level_2` (15 Ä‘iá»ƒm)
 
 ### Quiz
-- **Tên:** Kiểm tra kiến thức cộng
-- **Số câu hỏi:** 15
-- **Điểm thưởng:** 100 điểm (nếu làm đúng hết)
+- **TÃªn:** Kiá»ƒm tra kiáº¿n thá»©c cá»™ng
+- **Sá»‘ cÃ¢u há»i:** 15
+- **Äiá»ƒm thÆ°á»Ÿng:** 100 Ä‘iá»ƒm (náº¿u lÃ m Ä‘Ãºng háº¿t)
 
-### Quiz Questions (15 câu)
+### Quiz Questions (15 cÃ¢u)
 ```
-1. 5 + 3 = ? → 8
-2. 12 + 8 = ? → 20
-3. 25 + 15 = ? → 40
-4. 7 + 6 = ? → 13
-5. 18 + 22 = ? → 40
-6. 33 + 17 = ? → 50
-7. 9 + 4 = ? → 13
-8. 44 + 26 = ? → 70
-9. 11 + 9 = ? → 20
-10. 37 + 23 = ? → 60
-11. 16 + 14 = ? → 30
-12. 42 + 18 = ? → 60
-13. 8 + 7 = ? → 15
-14. 29 + 31 = ? → 60
-15. 21 + 19 = ? → 40
+1. 5 + 3 = ? â†’ 8
+2. 12 + 8 = ? â†’ 20
+3. 25 + 15 = ? â†’ 40
+4. 7 + 6 = ? â†’ 13
+5. 18 + 22 = ? â†’ 40
+6. 33 + 17 = ? â†’ 50
+7. 9 + 4 = ? â†’ 13
+8. 44 + 26 = ? â†’ 70
+9. 11 + 9 = ? â†’ 20
+10. 37 + 23 = ? â†’ 60
+11. 16 + 14 = ? â†’ 30
+12. 42 + 18 = ? â†’ 60
+13. 8 + 7 = ? â†’ 15
+14. 29 + 31 = ? â†’ 60
+15. 21 + 19 = ? â†’ 40
 ```
 
 ---
 
-## ⚠️ Lưu ý
+## âš ï¸ LÆ°u Ã½
 
-- **Chỉ chạy 1 lần:** Nếu chạy lại, dữ liệu cũ sẽ bị thêm vào (không xóa tự động)
-- **Nếu muốn xóa dữ liệu:** Xóa database hoặc chạy:
+- **Chá»‰ cháº¡y 1 láº§n:** Náº¿u cháº¡y láº¡i, dá»¯ liá»‡u cÅ© sáº½ bá»‹ thÃªm vÃ o (khÃ´ng xÃ³a tá»± Ä‘á»™ng)
+- **Náº¿u muá»‘n xÃ³a dá»¯ liá»‡u:** XÃ³a database hoáº·c cháº¡y:
   ```bash
   # Trong MongoDB shell
   use online_learning
   db.dropDatabase()
   ```
-- **Passwords đã hash:** Dùng bcrypt, không lưu plaintext
+- **Passwords Ä‘Ã£ hash:** DÃ¹ng bcrypt, khÃ´ng lÆ°u plaintext
 
 ---
 
-## 🎯 Sau khi seed xong
+## ðŸŽ¯ Sau khi seed xong
 
-Bạn có thể:
-1. ✅ Test API từ Swagger: `http://localhost:5000/api-docs`
-2. ✅ Dùng Postman/Insomnia test
-3. ✅ Xây dựng Frontend dựa trên dữ liệu này
-4. ✅ Tạo thêm skills, videos, exercises khác
+Báº¡n cÃ³ thá»ƒ:
+1. âœ… Test API tá»« Swagger: `http://localhost:5000/api-docs`
+2. âœ… DÃ¹ng Postman/Insomnia test
+3. âœ… XÃ¢y dá»±ng Frontend dá»±a trÃªn dá»¯ liá»‡u nÃ y
+4. âœ… Táº¡o thÃªm skills, videos, Quizzes khÃ¡c
+

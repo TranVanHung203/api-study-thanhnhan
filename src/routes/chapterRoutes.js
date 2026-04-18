@@ -270,7 +270,7 @@ const router = express.Router();
 //  *                 type: string
 //  *               contentType:
 //  *                 type: string
-//  *                 enum: [video, exercise, quiz]
+//  *                 enum: [video, quiz]
 //  *               contentId:
 //  *                 type: string
 //  *               afterStepNumber:

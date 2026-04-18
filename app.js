@@ -12,7 +12,6 @@ import Chapter from './src/models/chapter.schema.js';
 import Lesson from './src/models/lesson.schema.js';
 import Progress from './src/models/progress.schema.js';
 import Video from './src/models/video.schema.js';
-import Exercise from './src/models/exercise.schema.js';
 import Quiz from './src/models/quiz.schema.js';
 import Question from './src/models/question.schema.js';
 import UserActivity from './src/models/userActivity.schema.js';
@@ -27,7 +26,6 @@ import chapterRoutes from './src/routes/chapterRoutes.js';
 import lessonRoutes from './src/routes/lessonRoutes.js';
 import progressRoutes from './src/routes/progressRoutes.js';
 import videoRoutes from './src/routes/videoRoutes.js';
-import exerciseRoutes from './src/routes/exerciseRoutes.js';
 import quizNewRoutes from './src/routes/quizNewRoutes.js';
 import questionRoutes from './src/routes/questionRoutes.js';
 import quizAttemptRoutes from './src/routes/quizAttemptRoutes.js';
@@ -37,6 +35,7 @@ import characterRoutes from './src/routes/characterRoutes.js';
 import ratingRoutes from './src/routes/ratingRoutes.js';
 import userRoutes from './src/routes/userRoutes.js';
 import quizAssignmentRoutes from './src/routes/quizAssignmentRoutes.js';
+import chatbotRoutes from './src/chatbot/routes.js';
 
 // Import Swagger
 import swaggerUi from 'swagger-ui-express';
@@ -84,6 +83,7 @@ function getLocalIP() {
 
 // Import cleanup jobs
 import { startCleanupJob, startExpiredGuestCleanup } from './src/jobs/cleanupJob.js';
+import { startDailyDatabaseBackupOverwriteJob } from './src/jobs/databaseBackupJob.js';
 
 const app = express();
 const databaseConfig = new DatabaseConfig();
@@ -149,7 +149,6 @@ const swaggerOptions = {
     './src/routes/progressRoutes.js',
     './src/routes/quizAttemptRoutes.js',
     // './src/routes/videoRoutes.js',
-    // './src/routes/exerciseRoutes.js',
     './src/routes/quizNewRoutes.js',
     './src/routes/questionRoutes.js',
     './src/routes/characterRoutes.js',
@@ -197,7 +196,6 @@ app.use('/chapters', chapterRoutes);
 app.use('/lessons', lessonRoutes);
 app.use('/progress', progressRoutes);
 app.use('/videos', videoRoutes);
-app.use('/exercises', exerciseRoutes);
 app.use('/quizzes', quizNewRoutes);
 app.use('/questions', questionRoutes);
 app.use('/quiz-attempts', quizAttemptRoutes);
@@ -207,12 +205,15 @@ app.use('/characters', characterRoutes);
 app.use('/ratings', ratingRoutes);
 app.use('/users', userRoutes);
 app.use('/assignments', quizAssignmentRoutes);
+app.use('/chatbot', chatbotRoutes);
 
 app.use(errorHandler);
 
 // // Start cleanup jobs
 // startCleanupJob();        // Xóa dữ liệu orphan mỗi giờ
 // startExpiredGuestCleanup(); // Xóa guest hết hạn mỗi ngày lúc 3:00 AM
+
+startDailyDatabaseBackupOverwriteJob();
 
 app.listen(PORT, HOST, () => {
   console.log(`Server running on ${HOST}:${PORT}`);

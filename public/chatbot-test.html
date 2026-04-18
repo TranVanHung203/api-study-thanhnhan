@@ -1,0 +1,841 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chatbot Document Test</title>
+  <style>
+    :root {
+      --bg: #f2f6f9;
+      --card: #ffffff;
+      --line: #d3dde6;
+      --ink: #102a43;
+      --muted: #486581;
+      --accent: #0f766e;
+      --accent-ink: #ffffff;
+      --warn: #9a3412;
+      --ok: #14532d;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "IBM Plex Sans", "Trebuchet MS", "Tahoma", sans-serif;
+      background: radial-gradient(circle at top left, #e8f6f1 0%, #f2f6f9 45%, #fdf7ea 100%);
+      color: var(--ink);
+      min-height: 100vh;
+    }
+
+    .page {
+      width: min(1200px, 94vw);
+      margin: 24px auto 40px;
+      display: grid;
+      gap: 14px;
+      animation: fadeIn 340ms ease;
+    }
+
+    .banner {
+      background: linear-gradient(110deg, #0f766e 0%, #115e59 55%, #124e78 100%);
+      color: #e6fffa;
+      border-radius: 16px;
+      padding: 18px 20px;
+      box-shadow: 0 10px 24px rgba(17, 94, 89, 0.16);
+    }
+
+    .banner h1 {
+      margin: 0 0 8px;
+      font-size: 24px;
+      letter-spacing: 0.02em;
+    }
+
+    .banner p {
+      margin: 0;
+      color: #c6f6d5;
+      line-height: 1.5;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px;
+      box-shadow: 0 6px 14px rgba(16, 42, 67, 0.06);
+      animation: rise 280ms ease;
+    }
+
+    .panel h2 {
+      margin: 0 0 12px;
+      font-size: 17px;
+      letter-spacing: 0.01em;
+    }
+
+    .row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+
+    label {
+      font-weight: 600;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    input[type="text"],
+    input[type="url"],
+    textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px 12px;
+      background: #ffffff;
+      color: var(--ink);
+      font: inherit;
+      outline: none;
+    }
+
+    input:focus,
+    textarea:focus {
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.18);
+    }
+
+    textarea {
+      min-height: 80px;
+      resize: vertical;
+    }
+
+    button {
+      border: none;
+      border-radius: 10px;
+      padding: 9px 14px;
+      font-weight: 700;
+      font-size: 13px;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+      background: #dce6ef;
+      color: #17324d;
+      transition: transform 120ms ease, filter 120ms ease;
+    }
+
+    button:hover {
+      filter: brightness(0.98);
+      transform: translateY(-1px);
+    }
+
+    button.primary {
+      background: var(--accent);
+      color: var(--accent-ink);
+    }
+
+    button.warn {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .hint {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .status {
+      border-left: 4px solid #94a3b8;
+      background: #f8fafc;
+      padding: 10px 12px;
+      border-radius: 8px;
+      color: #334e68;
+      font-size: 13px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .status.ok {
+      border-left-color: #16a34a;
+      background: #f0fdf4;
+      color: var(--ok);
+    }
+
+    .status.error {
+      border-left-color: #dc2626;
+      background: #fff1f2;
+      color: var(--warn);
+    }
+
+    .list {
+      margin: 8px 0 0;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fcfdff;
+      max-height: 260px;
+      overflow: auto;
+    }
+
+    .item {
+      padding: 10px 12px;
+      border-bottom: 1px dashed #d8e2ea;
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 10px;
+      align-items: start;
+    }
+
+    .item:last-child {
+      border-bottom: none;
+    }
+
+    .item small {
+      color: #5b7086;
+      display: block;
+      line-height: 1.4;
+    }
+
+    .chip {
+      font-size: 11px;
+      font-weight: 700;
+      border-radius: 999px;
+      padding: 4px 8px;
+      border: 1px solid transparent;
+      white-space: nowrap;
+    }
+
+    .chip.ready {
+      background: #dcfce7;
+      color: #166534;
+      border-color: #86efac;
+    }
+
+    .chip.processing {
+      background: #dbeafe;
+      color: #1e40af;
+      border-color: #93c5fd;
+    }
+
+    .chip.failed {
+      background: #fee2e2;
+      color: #991b1b;
+      border-color: #fca5a5;
+    }
+
+    .chat-wrap {
+      display: grid;
+      grid-template-columns: 300px 1fr;
+      gap: 14px;
+    }
+
+    .messages {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #f8fafc;
+      min-height: 340px;
+      max-height: 460px;
+      overflow: auto;
+      padding: 12px;
+    }
+
+    .message {
+      margin-bottom: 10px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid #d2dde7;
+      background: #fff;
+      animation: messageIn 180ms ease;
+    }
+
+    .message.user {
+      border-color: #99f6e4;
+      background: #ecfeff;
+    }
+
+    .message.assistant {
+      border-color: #e2e8f0;
+      background: #ffffff;
+    }
+
+    .message .meta {
+      font-size: 11px;
+      color: #5b7086;
+      margin-bottom: 6px;
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .message .text {
+      white-space: pre-wrap;
+      word-break: break-word;
+      line-height: 1.45;
+    }
+
+    .sources {
+      margin-top: 8px;
+      font-size: 12px;
+      color: #334e68;
+      padding-top: 8px;
+      border-top: 1px dashed #d6e0ea;
+    }
+
+    .sources strong {
+      display: inline-block;
+      margin-bottom: 4px;
+    }
+
+    .no-data {
+      padding: 12px;
+      color: #627d98;
+      font-size: 13px;
+    }
+
+    @media (max-width: 980px) {
+      .grid,
+      .chat-wrap {
+        grid-template-columns: 1fr;
+      }
+
+      .messages {
+        min-height: 280px;
+      }
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes messageIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="banner">
+      <h1>Chatbot Document Tester</h1>
+      <p>Upload tài liệu, chọn tài liệu muốn dùng, rồi chat trực tiếp với API <code>/chatbot</code>.</p>
+    </section>
+
+    <section class="panel">
+      <h2>Cấu Hình</h2>
+      <div class="grid">
+        <div>
+          <label for="baseUrl">Base URL</label>
+          <input id="baseUrl" type="url" placeholder="http://localhost:5000">
+        </div>
+        <div>
+          <label for="userId">User ID test</label>
+          <input id="userId" type="text" placeholder="u_test_01">
+        </div>
+      </div>
+      <p class="hint">Nếu để trống, trang tự dùng <code>window.location.origin</code> và <code>anonymous</code>.</p>
+    </section>
+
+    <section class="grid">
+      <div class="panel">
+        <h2>Upload Tài Liệu</h2>
+        <div class="row">
+          <input id="filesInput" type="file" multiple accept=".txt,.md,.markdown,.csv,.json,.log,.pdf,.docx">
+          <button id="uploadBtn" class="primary">Upload + Index</button>
+        </div>
+        <p class="hint">Field upload là <code>files</code>. Tối đa 20 file mỗi lần.</p>
+        <div id="uploadStatus" class="status">Chưa upload.</div>
+      </div>
+
+      <div class="panel">
+        <h2>Tài Liệu</h2>
+        <div class="row">
+          <button id="refreshDocsBtn">Refresh</button>
+          <button id="selectReadyBtn">Chọn Tất Cả Ready</button>
+          <button id="clearDocsBtn" class="warn">Bỏ Chọn</button>
+        </div>
+        <div id="docsList" class="list">
+          <div class="no-data">Chưa có dữ liệu.</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel chat-wrap">
+      <div>
+        <h2>Hội Thoại</h2>
+        <div class="row">
+          <button id="refreshConversationsBtn">Refresh</button>
+          <button id="newConversationBtn" class="warn">Cuộc Hội Thoại Mới</button>
+        </div>
+        <div id="conversationsList" class="list">
+          <div class="no-data">Chưa có hội thoại.</div>
+        </div>
+      </div>
+
+      <div>
+        <h2>Chat</h2>
+        <div class="row">
+          <strong>Conversation:</strong>
+          <code id="conversationInfo">new</code>
+        </div>
+        <div id="messages" class="messages"></div>
+        <div class="row" style="margin-top: 10px;">
+          <textarea id="messageInput" placeholder="Nhập câu hỏi..."></textarea>
+        </div>
+        <div class="row">
+          <button id="sendBtn" class="primary">Gửi</button>
+        </div>
+        <div id="chatStatus" class="status">Sẵn sàng.</div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const state = {
+      documents: [],
+      conversations: [],
+      selectedDocumentIds: new Set(),
+      currentConversationId: null,
+      messages: []
+    };
+
+    const els = {
+      baseUrl: document.getElementById('baseUrl'),
+      userId: document.getElementById('userId'),
+      filesInput: document.getElementById('filesInput'),
+      uploadBtn: document.getElementById('uploadBtn'),
+      refreshDocsBtn: document.getElementById('refreshDocsBtn'),
+      selectReadyBtn: document.getElementById('selectReadyBtn'),
+      clearDocsBtn: document.getElementById('clearDocsBtn'),
+      docsList: document.getElementById('docsList'),
+      uploadStatus: document.getElementById('uploadStatus'),
+      refreshConversationsBtn: document.getElementById('refreshConversationsBtn'),
+      newConversationBtn: document.getElementById('newConversationBtn'),
+      conversationsList: document.getElementById('conversationsList'),
+      conversationInfo: document.getElementById('conversationInfo'),
+      messages: document.getElementById('messages'),
+      messageInput: document.getElementById('messageInput'),
+      sendBtn: document.getElementById('sendBtn'),
+      chatStatus: document.getElementById('chatStatus')
+    };
+
+    function nowAsString(dateLike) {
+      if (!dateLike) return '-';
+      const date = new Date(dateLike);
+      if (Number.isNaN(date.getTime())) return '-';
+      return date.toLocaleString();
+    }
+
+    function getBaseUrl() {
+      const value = (els.baseUrl.value || '').trim();
+      return (value || window.location.origin).replace(/\/+$/, '');
+    }
+
+    function getUserId() {
+      const value = (els.userId.value || '').trim();
+      return value || 'anonymous';
+    }
+
+    function setStatus(target, message, type) {
+      target.textContent = message;
+      target.classList.remove('ok', 'error');
+      if (type === 'ok') target.classList.add('ok');
+      if (type === 'error') target.classList.add('error');
+    }
+
+    async function callJson(url, options = {}, timeoutMs = 0) {
+      const controller = new AbortController();
+      let timeoutHandle = null;
+
+      if (timeoutMs > 0) {
+        timeoutHandle = setTimeout(() => {
+          controller.abort();
+        }, timeoutMs);
+      }
+
+      try {
+        const response = await fetch(url, {
+          ...options,
+          signal: controller.signal
+        });
+        let data = {};
+        try {
+          data = await response.json();
+        } catch (err) {
+          data = {};
+        }
+
+        if (!response.ok) {
+          const message = data.message || `HTTP ${response.status}`;
+          throw new Error(message);
+        }
+        return data;
+      } catch (error) {
+        if (error.name === 'AbortError') {
+          const second = Math.round(timeoutMs / 1000);
+          throw new Error(`Yeu cau timeout sau ${second}s. Dich vu model co the dang qua tai.`);
+        }
+        throw error;
+      } finally {
+        if (timeoutHandle) clearTimeout(timeoutHandle);
+      }
+    }
+
+    function renderDocuments() {
+      if (!state.documents.length) {
+        els.docsList.innerHTML = '<div class="no-data">Chưa có tài liệu.</div>';
+        return;
+      }
+
+      els.docsList.innerHTML = state.documents.map((doc) => {
+        const checked = state.selectedDocumentIds.has(doc.documentId) ? 'checked' : '';
+        const disabled = doc.status !== 'ready' ? 'disabled' : '';
+        const safeName = escapeHtml(doc.originalName || 'unnamed');
+        const error = doc.errorMessage ? `<small>Lỗi: ${escapeHtml(doc.errorMessage)}</small>` : '';
+
+        return `
+          <label class="item">
+            <input type="checkbox" data-doc-id="${doc.documentId}" ${checked} ${disabled}>
+            <div>
+              <strong>${safeName}</strong>
+              <small>ID: ${doc.documentId}</small>
+              <small>Entries: ${doc.entryCount || doc.chunkCount || 0} | Size: ${doc.size || 0} bytes</small>
+              <small>Created: ${nowAsString(doc.createdAt)}</small>
+              ${error}
+            </div>
+            <span class="chip ${doc.status}">${doc.status}</span>
+          </label>
+        `;
+      }).join('');
+
+      els.docsList.querySelectorAll('input[type="checkbox"][data-doc-id]').forEach((checkbox) => {
+        checkbox.addEventListener('change', (event) => {
+          const docId = event.target.getAttribute('data-doc-id');
+          if (event.target.checked) {
+            state.selectedDocumentIds.add(docId);
+          } else {
+            state.selectedDocumentIds.delete(docId);
+          }
+        });
+      });
+    }
+
+    function renderConversations() {
+      if (!state.conversations.length) {
+        els.conversationsList.innerHTML = '<div class="no-data">Chưa có hội thoại.</div>';
+        return;
+      }
+
+      els.conversationsList.innerHTML = state.conversations.map((conversation) => {
+        const active = conversation.conversationId === state.currentConversationId;
+        const activeStyle = active ? 'style="outline:2px solid #2dd4bf; outline-offset:-2px;"' : '';
+        const safeTitle = escapeHtml(conversation.title || '(không tiêu đề)');
+
+        return `
+          <button class="item" ${activeStyle} data-conversation-id="${conversation.conversationId}" style="text-align:left; width:100%; background:#fff;">
+            <div></div>
+            <div>
+              <strong>${safeTitle}</strong>
+              <small>ID: ${conversation.conversationId}</small>
+              <small>Last: ${nowAsString(conversation.lastMessageAt)}</small>
+            </div>
+            <span class="chip processing">${(conversation.selectedDocumentIds || []).length} docs</span>
+          </button>
+        `;
+      }).join('');
+
+      els.conversationsList.querySelectorAll('button[data-conversation-id]').forEach((button) => {
+        button.addEventListener('click', async () => {
+          const conversationId = button.getAttribute('data-conversation-id');
+          await loadConversationMessages(conversationId);
+        });
+      });
+    }
+
+    function renderMessages() {
+      els.conversationInfo.textContent = state.currentConversationId || 'new';
+
+      if (!state.messages.length) {
+        els.messages.innerHTML = '<div class="no-data">Chưa có tin nhắn.</div>';
+        return;
+      }
+
+      els.messages.innerHTML = state.messages.map((message) => {
+        const safeText = escapeHtml(message.content || '');
+        const role = escapeHtml(message.role || 'unknown');
+        const created = nowAsString(message.createdAt);
+
+        let sourcesHtml = '';
+        if (Array.isArray(message.sources) && message.sources.length) {
+          const sourceRows = message.sources.map((source) => {
+            const docName = escapeHtml(source.documentName || 'unknown');
+            const docId = escapeHtml(source.documentId || '-');
+            const key = escapeHtml(source.key || '-');
+            const topic = escapeHtml(source.topic || '-');
+            const matchedBy = escapeHtml(source.matchedBy || '-');
+            const intentType = escapeHtml(source.intentType || '-');
+            const entityType = escapeHtml(source.entityType || '-');
+            const score = source.score ?? '-';
+            return `<div>- ${docName} | key: ${key} | topic: ${topic} | intent: ${intentType} | entity: ${entityType} | by: ${matchedBy} | score: ${score} | ${docId}</div>`;
+          }).join('');
+          sourcesHtml = `<div class="sources"><strong>Sources:</strong>${sourceRows}</div>`;
+        }
+
+        return `
+          <div class="message ${role}">
+            <div class="meta">
+              <span>${role}</span>
+              <span>${created}</span>
+            </div>
+            <div class="text">${safeText}</div>
+            ${sourcesHtml}
+          </div>
+        `;
+      }).join('');
+
+      els.messages.scrollTop = els.messages.scrollHeight;
+    }
+
+    async function loadDocuments() {
+      const url = `${getBaseUrl()}/chatbot/documents?userId=${encodeURIComponent(getUserId())}`;
+      const data = await callJson(url);
+      state.documents = Array.isArray(data.documents) ? data.documents : [];
+
+      const readyDocIds = new Set(
+        state.documents
+          .filter((doc) => doc.status === 'ready')
+          .map((doc) => doc.documentId)
+      );
+
+      Array.from(state.selectedDocumentIds).forEach((docId) => {
+        if (!readyDocIds.has(docId)) {
+          state.selectedDocumentIds.delete(docId);
+        }
+      });
+
+      renderDocuments();
+    }
+
+    async function loadConversations() {
+      const url = `${getBaseUrl()}/chatbot/conversations?userId=${encodeURIComponent(getUserId())}`;
+      const data = await callJson(url);
+      state.conversations = Array.isArray(data.conversations) ? data.conversations : [];
+      renderConversations();
+    }
+
+    async function loadConversationMessages(conversationId) {
+      if (!conversationId) return;
+
+      const url = `${getBaseUrl()}/chatbot/conversations/${encodeURIComponent(conversationId)}/messages?userId=${encodeURIComponent(getUserId())}`;
+      const data = await callJson(url);
+
+      state.currentConversationId = conversationId;
+      state.messages = Array.isArray(data.messages) ? data.messages : [];
+      renderMessages();
+      renderConversations();
+
+      const activeConversation = state.conversations.find((item) => item.conversationId === conversationId);
+      if (activeConversation && Array.isArray(activeConversation.selectedDocumentIds) && activeConversation.selectedDocumentIds.length) {
+        state.selectedDocumentIds = new Set(activeConversation.selectedDocumentIds);
+        renderDocuments();
+      }
+    }
+
+    async function uploadFiles() {
+      const files = Array.from(els.filesInput.files || []);
+      if (!files.length) {
+        setStatus(els.uploadStatus, 'Hãy chọn ít nhất 1 file.', 'error');
+        return;
+      }
+
+      els.uploadBtn.disabled = true;
+      setStatus(els.uploadStatus, `Đang upload ${files.length} file...`, '');
+
+      try {
+        const formData = new FormData();
+        files.forEach((file) => formData.append('files', file));
+        formData.append('userId', getUserId());
+
+        const response = await fetch(`${getBaseUrl()}/chatbot/documents/upload`, {
+          method: 'POST',
+          body: formData
+        });
+
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(data.message || `Upload failed (${response.status})`);
+        }
+
+        const results = Array.isArray(data.results) ? data.results : [];
+        const ok = results.filter((item) => item.status === 'ready').length;
+        const failed = results.filter((item) => item.status === 'failed').length;
+        setStatus(els.uploadStatus, `Upload xong. Ready: ${ok}, Failed: ${failed}.`, failed ? 'error' : 'ok');
+
+        els.filesInput.value = '';
+        await loadDocuments();
+      } catch (error) {
+        setStatus(els.uploadStatus, error.message, 'error');
+      } finally {
+        els.uploadBtn.disabled = false;
+      }
+    }
+
+    async function sendMessage() {
+      const message = (els.messageInput.value || '').trim();
+      if (!message) {
+        setStatus(els.chatStatus, 'Nhập nội dung trước khi gửi.', 'error');
+        return;
+      }
+
+      const selectedDocumentIds = Array.from(state.selectedDocumentIds);
+      if (!selectedDocumentIds.length && !state.currentConversationId) {
+        setStatus(els.chatStatus, 'Bạn cần chọn ít nhất 1 tài liệu.', 'error');
+        return;
+      }
+
+      els.sendBtn.disabled = true;
+      setStatus(els.chatStatus, 'Đang gửi câu hỏi... (co the mat vai giay den vai chuc giay tuy tai he thong)', '');
+
+      try {
+        const payload = {
+          userId: getUserId(),
+          message
+        };
+
+        if (state.currentConversationId) {
+          payload.conversationId = state.currentConversationId;
+        }
+
+        if (selectedDocumentIds.length) {
+          payload.selectedDocumentIds = selectedDocumentIds;
+        }
+
+        const data = await callJson(`${getBaseUrl()}/chatbot/chat/send`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        }, 320000);
+
+        state.currentConversationId = data.conversationId;
+        els.messageInput.value = '';
+        const topDebug = Array.isArray(data.searchDebug?.top) ? data.searchDebug.top[0] : null;
+        if (topDebug) {
+          const by = topDebug.matchedBy || '-';
+          const score = topDebug.finalScore ?? '-';
+          setStatus(
+            els.chatStatus,
+            `Đã nhận trả lời. Entries used: ${data.usedEntryCount ?? data.usedContextCount ?? 0}. Top match: ${by} / score ${score}`,
+            'ok'
+          );
+        } else {
+          setStatus(els.chatStatus, `Đã nhận trả lời. Entries used: ${data.usedEntryCount ?? data.usedContextCount ?? 0}`, 'ok');
+        }
+
+        await loadConversations();
+        await loadConversationMessages(state.currentConversationId);
+      } catch (error) {
+        setStatus(els.chatStatus, error.message, 'error');
+      } finally {
+        els.sendBtn.disabled = false;
+      }
+    }
+
+    function resetConversation() {
+      state.currentConversationId = null;
+      state.messages = [];
+      renderMessages();
+      renderConversations();
+      setStatus(els.chatStatus, 'Đã chuyển sang cuộc hội thoại mới.', 'ok');
+    }
+
+    function escapeHtml(input) {
+      return String(input)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function attachEvents() {
+      els.uploadBtn.addEventListener('click', uploadFiles);
+      els.refreshDocsBtn.addEventListener('click', async () => {
+        try {
+          await loadDocuments();
+          setStatus(els.uploadStatus, 'Đã refresh tài liệu.', 'ok');
+        } catch (error) {
+          setStatus(els.uploadStatus, error.message, 'error');
+        }
+      });
+      els.selectReadyBtn.addEventListener('click', () => {
+        state.selectedDocumentIds = new Set(
+          state.documents
+            .filter((doc) => doc.status === 'ready')
+            .map((doc) => doc.documentId)
+        );
+        renderDocuments();
+      });
+      els.clearDocsBtn.addEventListener('click', () => {
+        state.selectedDocumentIds.clear();
+        renderDocuments();
+      });
+
+      els.refreshConversationsBtn.addEventListener('click', async () => {
+        try {
+          await loadConversations();
+          setStatus(els.chatStatus, 'Đã refresh hội thoại.', 'ok');
+        } catch (error) {
+          setStatus(els.chatStatus, error.message, 'error');
+        }
+      });
+
+      els.newConversationBtn.addEventListener('click', resetConversation);
+
+      els.sendBtn.addEventListener('click', sendMessage);
+      els.messageInput.addEventListener('keydown', (event) => {
+        if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+          sendMessage();
+        }
+      });
+    }
+
+    async function bootstrap() {
+      els.baseUrl.value = window.location.origin;
+      els.userId.value = 'u_test_01';
+
+      attachEvents();
+      renderMessages();
+
+      try {
+        await loadDocuments();
+        await loadConversations();
+        setStatus(els.uploadStatus, 'Sẵn sàng upload tài liệu.', 'ok');
+      } catch (error) {
+        setStatus(els.uploadStatus, error.message, 'error');
+        setStatus(els.chatStatus, error.message, 'error');
+      }
+    }
+
+    bootstrap();
+  </script>
+</body>
+</html>

@@ -3,6 +3,7 @@ import Lesson from '../models/lesson.schema.js';
 import Progress from '../models/progress.schema.js';
 import UserActivity from '../models/userActivity.schema.js';
 import Video from '../models/video.schema.js';
+import Quiz from '../models/quiz.schema.js';
 import LessonCompletion from '../models/lessonCompletion.schema.js';
 
 // Tạo chapter mới
@@ -261,18 +262,11 @@ export const insertProgressController = async (req, res, next) => {
       ContentModel = Video;
       detectedContentType = 'video';
     } else {
-      // Kiểm tra trong Exercise collection
-      content = await Exercise.findById(contentId);
+      // Kiểm tra trong Quiz collection
+      content = await Quiz.findById(contentId);
       if (content) {
-        ContentModel = Exercise;
-        detectedContentType = 'exercise';
-      } else {
-        // Kiểm tra trong Quiz collection
-        content = await Quiz.findById(contentId);
-        if (content) {
-          ContentModel = Quiz;
-          detectedContentType = 'quiz';
-        }
+        ContentModel = Quiz;
+        detectedContentType = 'quiz';
       }
     }
 

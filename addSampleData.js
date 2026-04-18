@@ -8,7 +8,6 @@ import User from './src/models/user.schema.js';
 import Lesson from './src/models/lesson.schema.js';
 import Progress from './src/models/progress.schema.js';
 import Video from './src/models/video.schema.js';
-import Exercise from './src/models/exercise.schema.js';
 import Quiz from './src/models/quiz.schema.js';
 import Question from './src/models/question.schema.js';
 import Reward from './src/models/reward.schema.js';
@@ -36,7 +35,6 @@ const clearAll = async () => {
     Lesson.deleteMany({}),
     Progress.deleteMany({}),
     Video.deleteMany({}),
-    Exercise.deleteMany({}),
     Quiz.deleteMany({}),
     Question.deleteMany({}),
     Reward.deleteMany({}),
@@ -75,19 +73,12 @@ const seed = async () => {
       { chapterId: chapters[1]._id, lessonName: 'Bài học 4', description: 'Mô tả 4', order: 2 }
     ]);
 
-    // Videos, Exercises, Quizzes
+    // Videos, Quizzes
     const videos = await Video.insertMany([
       { title: 'Video A', url: 'https://example.com/a', description: 'Video A' },
       { title: 'Video B', url: 'https://example.com/b', description: 'Video B' },
       { title: 'Video C', url: 'https://example.com/c', description: 'Video C' },
       { title: 'Video D', url: 'https://example.com/d', description: 'Video D' }
-    ]);
-
-    const exercises = await Exercise.insertMany([
-      { title: 'Exercise A', frontendRef: 'ex_a', description: 'Exercise A', bonusPoints: 5, exerciseType: 'drag_count', answer: 3 },
-      { title: 'Exercise B', frontendRef: 'ex_b', description: 'Exercise B', bonusPoints: 5, exerciseType: 'drag_count', answer: 2 },
-      { title: 'Exercise C', frontendRef: 'ex_c', description: 'Exercise C', bonusPoints: 10, exerciseType: 'drag_count', answer: 4 },
-      { title: 'Exercise D', frontendRef: 'ex_d', description: 'Exercise D', bonusPoints: 10, exerciseType: 'drag_count', answer: 1 }
     ]);
 
     const quizzes = await Quiz.insertMany([
@@ -145,31 +136,23 @@ const seed = async () => {
     // Create progresses and link content.progressId
     const p1 = await Progress.create({ lessonId: lessonsChapter1[0]._id, stepNumber: 1, contentType: 'video' });
     await Video.findByIdAndUpdate(videos[0]._id, { progressId: p1._id });
-    const p2 = await Progress.create({ lessonId: lessonsChapter1[0]._id, stepNumber: 2, contentType: 'exercise' });
-    await Exercise.findByIdAndUpdate(exercises[0]._id, { progressId: p2._id });
 
     const p3 = await Progress.create({ lessonId: lessonsChapter1[1]._id, stepNumber: 1, contentType: 'video' });
     await Video.findByIdAndUpdate(videos[1]._id, { progressId: p3._id });
-    const p4 = await Progress.create({ lessonId: lessonsChapter1[1]._id, stepNumber: 2, contentType: 'exercise' });
-    await Exercise.findByIdAndUpdate(exercises[1]._id, { progressId: p4._id });
-    const p5 = await Progress.create({ lessonId: lessonsChapter1[1]._id, stepNumber: 3, contentType: 'quiz' });
+    const p5 = await Progress.create({ lessonId: lessonsChapter1[1]._id, stepNumber: 2, contentType: 'quiz' });
     await Quiz.findByIdAndUpdate(quizzes[0]._id, { progressId: p5._id });
 
     const p6 = await Progress.create({ lessonId: lessonsChapter2[0]._id, stepNumber: 1, contentType: 'video' });
     await Video.findByIdAndUpdate(videos[2]._id, { progressId: p6._id });
-    const p7 = await Progress.create({ lessonId: lessonsChapter2[0]._id, stepNumber: 2, contentType: 'exercise' });
-    await Exercise.findByIdAndUpdate(exercises[2]._id, { progressId: p7._id });
 
     const p8 = await Progress.create({ lessonId: lessonsChapter2[1]._id, stepNumber: 1, contentType: 'video' });
     await Video.findByIdAndUpdate(videos[3]._id, { progressId: p8._id });
-    const p9 = await Progress.create({ lessonId: lessonsChapter2[1]._id, stepNumber: 2, contentType: 'exercise' });
-    await Exercise.findByIdAndUpdate(exercises[3]._id, { progressId: p9._id });
-    const p10 = await Progress.create({ lessonId: lessonsChapter2[1]._id, stepNumber: 3, contentType: 'quiz' });
+    const p10 = await Progress.create({ lessonId: lessonsChapter2[1]._id, stepNumber: 2, contentType: 'quiz' });
     await Quiz.findByIdAndUpdate(quizzes[1]._id, { progressId: p10._id });
 
     // Sample user activities
     await UserActivity.create({ userId: u1._id, progressId: p1._id, contentType: 'video', score: 0, isCompleted: true, bonusEarned: 0 });
-    await UserActivity.create({ userId: u1._id, progressId: p2._id, contentType: 'exercise', score: 100, isCompleted: true, bonusEarned: 5 });
+    await UserActivity.create({ userId: u1._id, progressId: p5._id, contentType: 'quiz', score: 100, isCompleted: true, bonusEarned: 15 });
 
     console.log('✅ Thêm dữ liệu mẫu thành công');
   } catch (err) {

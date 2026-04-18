@@ -2,7 +2,6 @@ import UserActivity from '../models/userActivity.schema.js';
 import Reward from '../models/reward.schema.js';
 import Progress from '../models/progress.schema.js';
 import Lesson from '../models/lesson.schema.js';
-import Exercise from '../models/exercise.schema.js';
 import Video from '../models/video.schema.js';
 import Quiz from '../models/quiz.schema.js';
 import Question from '../models/question.schema.js';
@@ -12,117 +11,15 @@ import BadRequestError from '../errors/badRequestError.js';
 import NotFoundError from '../errors/notFoundError.js';
 import UnauthorizedError from '../errors/unauthorizedError.js';
 
-/**
- * Validate đáp án exercise dựa theo exerciseType
- * 
- * @param {string} exerciseType - Loại bài tập
- * @param {number} correctAnswer - Đáp án đúng từ database
- * @param {array} userAnswer - Mảng items user gửi lên
- * @returns {object} { isCorrect: boolean, message: string }
- * 
- * Hiện tại hỗ trợ:
- * - drag_count: Đếm số item trong mảng, so sánh với answer
- * 
- * [TODO] Thêm các loại khác khi cần:
- * - drag_sort: Phân loại đúng vị trí
- * - matching: Nối đúng cặp
- * - fill_number: Điền đúng số
- * - ordering: Sắp đúng thứ tự
- * - multiple_choice: Chọn đúng đáp án
- */
-export const validateExerciseAnswer = (exerciseType, correctAnswer, userAnswer) => {
-  // ✅ Chặn tuyệt đối nếu thiếu dữ liệu
-  if (!exerciseType) {
-    return { isCorrect: false, message: 'Thiếu loại bài tập' };
-  }
 
-  if (correctAnswer === undefined || correctAnswer === null) {
-    return { isCorrect: false, message: 'Bài tập chưa có đáp án trong hệ thống' };
-  }
-
-  switch (exerciseType) {
-
-    // ================= DRAG COUNT =================
-    case 'drag_count': {
-      if (!Array.isArray(userAnswer)) {
-        return { isCorrect: false, message: 'Dữ liệu không hợp lệ' };
-      }
-
-      const userCount = userAnswer.length;
-      const isCorrect = userCount === correctAnswer;
-
-      return {
-        isCorrect,
-        message: isCorrect
-          ? `✅ Chính xác!`
-          : `❌ Chưa đúng!`
-      };
-    }
-
-    // ================= FILL NUMBER =================
-    // case 'fill_number': {
-    //   const isCorrect = Number(userAnswer) === Number(correctAnswer);
-    //   return {
-    //     isCorrect,
-    //     message: isCorrect ? '✅ Điền đúng!' : '❌ Điền sai!'
-    //   };
-    // }
-
-    // ================= MULTIPLE CHOICE =================
-    // case 'multiple_choice': {
-    //   const isCorrect = userAnswer === correctAnswer;
-    //   return {
-    //     isCorrect,
-    //     message: isCorrect ? '✅ Chọn đúng!' : '❌ Chọn sai!'
-    //   };
-    // }
-
-    // ================= MATCHING =================
-    // case 'matching': {
-    //   if (!Array.isArray(userAnswer) || !Array.isArray(correctAnswer)) {
-    //     return { isCorrect: false, message: 'Dữ liệu nối cặp không hợp lệ' };
-    //   }
-    //
-    //   const isCorrect =
-    //     JSON.stringify(userAnswer.sort()) === JSON.stringify(correctAnswer.sort());
-    //
-    //   return {
-    //     isCorrect,
-    //     message: isCorrect ? '✅ Nối đúng tất cả!' : '❌ Nối sai!'
-    //   };
-    // }
-
-    // ================= ORDERING =================
-    // case 'ordering': {
-    //   if (!Array.isArray(userAnswer)) {
-    //     return { isCorrect: false, message: 'Dữ liệu sắp xếp không hợp lệ' };
-    //   }
-    //
-    //   const isCorrect =
-    //     JSON.stringify(userAnswer) === JSON.stringify(correctAnswer);
-    //
-    //   return {
-    //     isCorrect,
-    //     message: isCorrect ? '✅ Sắp xếp đúng!' : '❌ Sắp xếp sai!'
-    //   };
-    // }
-
-    default:
-      return { isCorrect: false, message: 'Loại bài tập chưa được hỗ trợ' };
-  }
-};
-
-
-// Ghi nhận hoạt động của user (video, exercise, quiz)
+// Ghi nhận hoạt động của user (video)
 // Body cho VIDEO: { progressId, isCompleted: true }
-// Body cho EXERCISE: { progressId, exerciseType, userAnswer: ["item1", "item2", ...] }
-// Body cho QUIZ: { progressId, score, isCompleted }
 export const recordUserActivityController = async (req, res, next) => {
   try {
     const userId = req.user && (req.user.id || req.user._id);
     if (!userId) throw new UnauthorizedError('Unauthorized');
 
-    const { progressId, score, isCompleted, exerciseType, userAnswer } = req.body;
+    const { progressId, score, isCompleted } = req.body;
 
     // Tìm progress hiện tại
     const currentProgress = await Progress.findById(progressId);
@@ -189,7 +86,7 @@ export const recordUserActivityController = async (req, res, next) => {
     }
 
     // ========== XỬ LÝ THEO LOẠI CONTENT ==========
-    if (contentType !== 'video') throw new BadRequestError('Endpoint này chỉ dùng để ghi nhận video. Exercise và Quiz xử lý ở endpoints riêng.');
+    if (contentType !== 'video') throw new BadRequestError('Endpoint này chỉ dùng để ghi nhận video.');
 
     // VIDEO handling expects a `videoId` in body to mark a specific video as watched
     if (isCompleted !== true) throw new BadRequestError('Vui lòng gửi isCompleted: true để ghi nhận hoàn thành video');
