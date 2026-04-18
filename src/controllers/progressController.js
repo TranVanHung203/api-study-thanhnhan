@@ -1,7 +1,6 @@
 import Progress from '../models/progress.schema.js';
 import Lesson from '../models/lesson.schema.js';
 import Video from '../models/video.schema.js';
-import Exercise from '../models/exercise.schema.js';
 import Quiz from '../models/quiz.schema.js';
 import UserActivity from '../models/userActivity.schema.js';
 import LessonCompletion from '../models/lessonCompletion.schema.js';
@@ -127,7 +126,7 @@ export const getProgressByLessonController = async (req, res, next) => {
   }
 };
 
-// Tạo progress item (video, exercise, quiz)
+// Tạo progress item (video, quiz)
 export const createProgressController = async (req, res, next) => {
   try {
     const { lessonId, stepNumber, contentId } = req.body;
@@ -135,9 +134,8 @@ export const createProgressController = async (req, res, next) => {
     // Kiểm tra contentId tồn tại
     let content;
     const video = await Video.findById(contentId);
-    const exercise = await Exercise.findById(contentId);
     const quiz = await Quiz.findById(contentId);
-    content = video || exercise || quiz;
+    content = video || quiz;
 
     if (!content) {
       return res.status(404).json({ message: 'Nội dung không tìm thấy' });
@@ -180,14 +178,12 @@ export const updateProgressController = async (req, res, next) => {
       // unlink any existing content that referenced this progress
       const prevVideo = await Video.findOne({ progressId: progress._id });
       if (prevVideo) { prevVideo.progressId = undefined; await prevVideo.save(); }
-      const prevEx = await Exercise.findOne({ progressId: progress._id });
-      if (prevEx) { prevEx.progressId = undefined; await prevEx.save(); }
       const prevQ = await Quiz.findOne({ progressId: progress._id });
       if (prevQ) { prevQ.progressId = undefined; await prevQ.save(); }
 
       // link new content
       let newContent = null;
-      newContent = await Video.findById(contentId) || await Exercise.findById(contentId) || await Quiz.findById(contentId);
+      newContent = await Video.findById(contentId) || await Quiz.findById(contentId);
       if (!newContent) return res.status(404).json({ message: 'Nội dung mới không tìm thấy' });
       newContent.progressId = progress._id;
       await newContent.save();
@@ -198,7 +194,7 @@ export const updateProgressController = async (req, res, next) => {
     await progress.save();
 
     // attach contentId for compatibility
-    const content = await Video.findOne({ progressId: progress._id }) || await Exercise.findOne({ progressId: progress._id }) || await Quiz.findOne({ progressId: progress._id });
+    const content = await Video.findOne({ progressId: progress._id }) || await Quiz.findOne({ progressId: progress._id });
     const out = progress.toObject();
     out.contentId = content ? content._id : null;
 
@@ -216,8 +212,6 @@ export const deleteProgressController = async (req, res, next) => {
     // Unlink content documents that reference this progress
     const prevVideo = await Video.findOne({ progressId });
     if (prevVideo) { prevVideo.progressId = undefined; await prevVideo.save(); }
-    const prevEx = await Exercise.findOne({ progressId });
-    if (prevEx) { prevEx.progressId = undefined; await prevEx.save(); }
     const prevQ = await Quiz.findOne({ progressId });
     if (prevQ) { prevQ.progressId = undefined; await prevQ.save(); }
 
