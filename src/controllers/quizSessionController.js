@@ -63,6 +63,7 @@ export const startQuizSession = async (req, res, next) => {
     const { progressId } = req.params;
     const userId = req.user && (req.user.id || req.user._id);
     if (!userId) throw new UnauthorizedError('Unauthorized');
+    const FORCE_LAST_DETAIL_TYPE = 'tach_xong_roi_cong';
 
     const shuffleArray = (arr) => {
       const a = [...arr];
@@ -111,11 +112,19 @@ export const startQuizSession = async (req, res, next) => {
     const facets = {};
     for (const [type, count] of typeCounts.entries()) {
       // facet key phải là string an toàn (tránh '.' '$'); giả định detailType của bạn là kiểu "add/sub/mul" nên ok
-      facets[type] = [
-        { $match: { detailType: type } },
-        { $sample: { size: count } },
-        { $project: { _id: 1 } },
-      ];
+      if (type === FORCE_LAST_DETAIL_TYPE) {
+        facets[type] = [
+          { $match: { detailType: type } },
+          { $sample: { size: count } },
+          { $project: { _id: 1 } },
+        ];
+      } else {
+        facets[type] = [
+          { $match: { detailType: type } },
+          { $sample: { size: count } },
+          { $project: { _id: 1 } },
+        ];
+      }
     }
 
     const aggRes = await Question.aggregate([
@@ -127,6 +136,7 @@ export const startQuizSession = async (req, res, next) => {
 
     // 4) Validate đủ câu cho từng type + gom id
     const selectedIds = [];
+    const forceLastIds = [];
     for (const [type, count] of typeCounts.entries()) {
       const docs = buckets[type] || [];
       if (docs.length < count) {
@@ -134,11 +144,15 @@ export const startQuizSession = async (req, res, next) => {
           `Không đủ câu cho phần detailType='${type}' (cần ${count}, có ${docs.length})`
         );
       }
-      for (const d of docs) selectedIds.push(d._id);
+      if (type === FORCE_LAST_DETAIL_TYPE) {
+        for (const d of docs) forceLastIds.push(d._id);
+      } else {
+        for (const d of docs) selectedIds.push(d._id);
+      }
     }
 
-    // 5) Shuffle toàn bộ câu hỏi để ra A1,S2,A2,... (random order overall)
-    const mixedQuestionIds = shuffleArray(selectedIds);
+    // 5) Shuffle all non-forced questions, then append forced-last questions
+    const mixedQuestionIds = [...shuffleArray(selectedIds), ...forceLastIds];
 
     // 6) Create session (TTL 2 giờ)
     const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000);
