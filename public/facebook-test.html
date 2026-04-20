@@ -1,0 +1,458 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Facebook Login Backend Test</title>
+  <style>
+    :root {
+      --bg: #f3f6fb;
+      --card: #ffffff;
+      --text: #0f172a;
+      --muted: #64748b;
+      --border: #d8e1ec;
+      --brand: #1661d8;
+      --brand-2: #0f4fb3;
+      --ok: #0e9f6e;
+      --bad: #c81e1e;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--text);
+      font-family: "Segoe UI", Tahoma, Verdana, sans-serif;
+      background: radial-gradient(circle at top right, #e8f1ff 0%, var(--bg) 48%);
+    }
+
+    .wrap {
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 24px 16px 28px;
+      display: grid;
+      gap: 14px;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px;
+      box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+    }
+
+    h1, h2 {
+      margin: 0 0 10px;
+      line-height: 1.2;
+    }
+
+    h1 {
+      font-size: 24px;
+    }
+
+    h2 {
+      font-size: 18px;
+    }
+
+    .muted {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    .field {
+      display: grid;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+
+    label {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    input, textarea, button {
+      border-radius: 10px;
+      font-size: 14px;
+    }
+
+    input, textarea {
+      width: 100%;
+      border: 1px solid var(--border);
+      padding: 10px 12px;
+      background: #fff;
+    }
+
+    textarea {
+      min-height: 95px;
+      resize: vertical;
+      font-family: Consolas, "Courier New", monospace;
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 6px;
+    }
+
+    button {
+      border: none;
+      background: var(--brand);
+      color: #fff;
+      padding: 10px 14px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: var(--brand-2);
+    }
+
+    button.secondary {
+      background: #334155;
+    }
+
+    button.secondary:hover {
+      background: #1f2937;
+    }
+
+    .status {
+      margin-top: 10px;
+      font-weight: 600;
+      font-size: 13px;
+    }
+
+    .ok {
+      color: var(--ok);
+    }
+
+    .bad {
+      color: var(--bad);
+    }
+
+    pre {
+      margin: 0;
+      background: #0f172a;
+      color: #e2e8f0;
+      border-radius: 10px;
+      padding: 12px;
+      font-size: 12px;
+      max-height: 280px;
+      overflow: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      line-height: 1.45;
+    }
+
+    code {
+      font-family: Consolas, "Courier New", monospace;
+      background: #eef2ff;
+      border-radius: 4px;
+      padding: 1px 5px;
+    }
+
+    @media (max-width: 860px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>Facebook Login Backend Test</h1>
+      <p class="muted">
+        Use this page to test <code>POST /auth/facebook/token</code>.
+        You can login via Facebook SDK or paste a token manually.
+      </p>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h2>Config</h2>
+        <div class="field">
+          <label for="baseUrl">Backend Base URL</label>
+          <input id="baseUrl" />
+        </div>
+        <div class="field">
+          <label for="appId">Facebook App ID</label>
+          <input id="appId" placeholder="3957947531165067" />
+        </div>
+        <div class="field">
+          <label for="fullName">Optional fullName fallback</label>
+          <input id="fullName" placeholder="Thanh Nhan" />
+        </div>
+        <div class="btn-row">
+          <button id="saveConfigBtn" class="secondary">Save Config</button>
+          <button id="initSdkBtn">Init Facebook SDK</button>
+        </div>
+        <div id="sdkStatus" class="status">SDK not initialized</div>
+      </div>
+
+      <div class="card">
+        <h2>SDK Login Flow</h2>
+        <p class="muted">
+          Click login to get a Facebook user access token, then send it to backend.
+        </p>
+        <div class="btn-row">
+          <button id="fbLoginBtn">Login Facebook</button>
+          <button id="sendSdkTokenBtn">Send SDK Token</button>
+          <button id="fbLogoutBtn" class="secondary">Logout Facebook</button>
+        </div>
+        <div class="field" style="margin-top: 10px;">
+          <label for="sdkToken">Token from SDK</label>
+          <textarea id="sdkToken" placeholder="Token from FB.login will appear here"></textarea>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Manual Token Test</h2>
+      <div class="field">
+        <label for="manualToken">Facebook User Access Token</label>
+        <textarea id="manualToken" placeholder="Paste EAAB... token here"></textarea>
+      </div>
+      <div class="btn-row">
+        <button id="sendManualBtn">Send Manual Token</button>
+        <button id="clearBtn" class="secondary">Clear Result</button>
+      </div>
+      <div id="apiStatus" class="status">No request yet</div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h2>API Response</h2>
+        <pre id="responseBox">No response yet.</pre>
+      </div>
+      <div class="card">
+        <h2>Event Log</h2>
+        <pre id="logBox">Ready.</pre>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const state = {
+      sdkReady: false,
+      tokenFromSdk: ""
+    };
+
+    const $ = (id) => document.getElementById(id);
+
+    const ui = {
+      baseUrl: $("baseUrl"),
+      appId: $("appId"),
+      fullName: $("fullName"),
+      saveConfigBtn: $("saveConfigBtn"),
+      initSdkBtn: $("initSdkBtn"),
+      sdkStatus: $("sdkStatus"),
+      fbLoginBtn: $("fbLoginBtn"),
+      sendSdkTokenBtn: $("sendSdkTokenBtn"),
+      fbLogoutBtn: $("fbLogoutBtn"),
+      sdkToken: $("sdkToken"),
+      manualToken: $("manualToken"),
+      sendManualBtn: $("sendManualBtn"),
+      clearBtn: $("clearBtn"),
+      apiStatus: $("apiStatus"),
+      responseBox: $("responseBox"),
+      logBox: $("logBox")
+    };
+
+    function log(message, payload) {
+      const line = `[${new Date().toLocaleTimeString()}] ${message}`;
+      const body = payload === undefined ? "" : `\n${JSON.stringify(payload, null, 2)}`;
+      ui.logBox.textContent += `\n${line}${body}`;
+      ui.logBox.scrollTop = ui.logBox.scrollHeight;
+    }
+
+    function setStatus(el, text, ok) {
+      el.textContent = text;
+      el.className = `status ${ok ? "ok" : "bad"}`;
+    }
+
+    function getConfig() {
+      return {
+        baseUrl: (ui.baseUrl.value || "").trim().replace(/\/+$/, ""),
+        appId: (ui.appId.value || "").trim(),
+        fullName: (ui.fullName.value || "").trim()
+      };
+    }
+
+    function saveConfig() {
+      const cfg = getConfig();
+      localStorage.setItem("fbTest.baseUrl", cfg.baseUrl);
+      localStorage.setItem("fbTest.appId", cfg.appId);
+      localStorage.setItem("fbTest.fullName", cfg.fullName);
+      log("Config saved", cfg);
+    }
+
+    function loadConfig() {
+      ui.baseUrl.value = localStorage.getItem("fbTest.baseUrl") || `${location.protocol}//${location.host}`;
+      ui.appId.value = localStorage.getItem("fbTest.appId") || "3957947531165067";
+      ui.fullName.value = localStorage.getItem("fbTest.fullName") || "";
+      ui.manualToken.value = localStorage.getItem("fbTest.manualToken") || "";
+    }
+
+    function loadFacebookSdk() {
+      return new Promise((resolve, reject) => {
+        if (window.FB) {
+          resolve();
+          return;
+        }
+        const script = document.createElement("script");
+        script.src = "https://connect.facebook.net/en_US/sdk.js";
+        script.async = true;
+        script.defer = true;
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error("Cannot load Facebook SDK script"));
+        document.head.appendChild(script);
+      });
+    }
+
+    async function initSdk() {
+      const cfg = getConfig();
+      if (!cfg.appId) {
+        setStatus(ui.sdkStatus, "Missing Facebook App ID", false);
+        return;
+      }
+
+      try {
+        await loadFacebookSdk();
+        window.FB.init({
+          appId: cfg.appId,
+          cookie: true,
+          xfbml: false,
+          version: "v23.0"
+        });
+        state.sdkReady = true;
+        setStatus(ui.sdkStatus, "Facebook SDK initialized", true);
+        log("SDK initialized", { appId: cfg.appId });
+      } catch (error) {
+        state.sdkReady = false;
+        setStatus(ui.sdkStatus, `SDK init failed: ${error.message}`, false);
+        log("SDK init failed", { message: error.message });
+      }
+    }
+
+    async function sendTokenToBackend(token) {
+      const cfg = getConfig();
+      if (!cfg.baseUrl) {
+        setStatus(ui.apiStatus, "Missing backend base URL", false);
+        return;
+      }
+      if (!token) {
+        setStatus(ui.apiStatus, "Token is empty", false);
+        return;
+      }
+
+      const payload = { token };
+      if (cfg.fullName) payload.fullName = cfg.fullName;
+
+      try {
+        const res = await fetch(`${cfg.baseUrl}/auth/facebook/token`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json().catch(() => ({}));
+
+        ui.responseBox.textContent = JSON.stringify({
+          status: res.status,
+          ok: res.ok,
+          body: data
+        }, null, 2);
+
+        if (res.ok) {
+          setStatus(ui.apiStatus, "Backend accepted token (200)", true);
+        } else {
+          setStatus(ui.apiStatus, `Backend rejected token (${res.status})`, false);
+        }
+
+        log("POST /auth/facebook/token", {
+          url: `${cfg.baseUrl}/auth/facebook/token`,
+          status: res.status,
+          ok: res.ok
+        });
+      } catch (error) {
+        setStatus(ui.apiStatus, `Request failed: ${error.message}`, false);
+        ui.responseBox.textContent = JSON.stringify({ error: error.message }, null, 2);
+        log("Request failed", { message: error.message });
+      }
+    }
+
+    async function loginFacebook() {
+      if (!state.sdkReady) {
+        setStatus(ui.sdkStatus, "Init SDK first", false);
+        return;
+      }
+
+      window.FB.login((response) => {
+        if (!response || !response.authResponse) {
+          setStatus(ui.sdkStatus, "Login canceled or failed", false);
+          log("FB.login canceled/failed", response || null);
+          return;
+        }
+
+        state.tokenFromSdk = response.authResponse.accessToken || "";
+        ui.sdkToken.value = state.tokenFromSdk;
+        setStatus(ui.sdkStatus, "Login successful, token received", true);
+        log("FB.login success", {
+          userID: response.authResponse.userID,
+          expiresIn: response.authResponse.expiresIn
+        });
+      }, { scope: "public_profile,email" });
+    }
+
+    function logoutFacebook() {
+      if (!window.FB) return;
+      window.FB.logout((response) => {
+        state.tokenFromSdk = "";
+        ui.sdkToken.value = "";
+        setStatus(ui.sdkStatus, "Logged out from Facebook", true);
+        log("FB.logout", response || null);
+      });
+    }
+
+    function wireEvents() {
+      ui.saveConfigBtn.addEventListener("click", saveConfig);
+      ui.initSdkBtn.addEventListener("click", initSdk);
+
+      ui.fbLoginBtn.addEventListener("click", loginFacebook);
+      ui.fbLogoutBtn.addEventListener("click", logoutFacebook);
+      ui.sendSdkTokenBtn.addEventListener("click", () => {
+        const token = (ui.sdkToken.value || "").trim();
+        sendTokenToBackend(token);
+      });
+
+      ui.sendManualBtn.addEventListener("click", () => {
+        const token = (ui.manualToken.value || "").trim();
+        localStorage.setItem("fbTest.manualToken", token);
+        sendTokenToBackend(token);
+      });
+
+      ui.clearBtn.addEventListener("click", () => {
+        ui.responseBox.textContent = "No response yet.";
+        ui.apiStatus.textContent = "No request yet";
+        ui.apiStatus.className = "status";
+      });
+    }
+
+    loadConfig();
+    wireEvents();
+    log("Page ready");
+  </script>
+</body>
+</html>

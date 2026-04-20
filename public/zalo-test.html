@@ -1,0 +1,422 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Zalo Login Backend Test</title>
+  <style>
+    :root {
+      --bg: #f4f7fc;
+      --card: #ffffff;
+      --text: #0f172a;
+      --muted: #64748b;
+      --border: #d7e0ec;
+      --brand: #0d74ff;
+      --brand-dark: #0b5ecf;
+      --ok: #0e9f6e;
+      --bad: #cc1f1a;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: radial-gradient(circle at top left, #e7f0ff 0%, var(--bg) 45%);
+      color: var(--text);
+      font-family: "Segoe UI", Tahoma, Verdana, sans-serif;
+    }
+
+    .wrap {
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 22px 14px 30px;
+      display: grid;
+      gap: 14px;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px;
+      box-shadow: 0 10px 22px rgba(15, 23, 42, 0.06);
+    }
+
+    h1, h2 { margin: 0 0 10px; }
+    h1 { font-size: 24px; }
+    h2 { font-size: 18px; }
+
+    .muted { color: var(--muted); font-size: 13px; }
+
+    .field {
+      display: grid;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+
+    label {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    input, textarea, button {
+      border-radius: 10px;
+      font-size: 14px;
+    }
+
+    input, textarea {
+      width: 100%;
+      border: 1px solid var(--border);
+      padding: 10px 12px;
+    }
+
+    textarea {
+      min-height: 105px;
+      resize: vertical;
+      font-family: Consolas, "Courier New", monospace;
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 4px;
+    }
+
+    button {
+      border: none;
+      padding: 10px 14px;
+      cursor: pointer;
+      background: var(--brand);
+      color: #fff;
+      font-weight: 600;
+    }
+
+    button:hover { background: var(--brand-dark); }
+    button.secondary { background: #334155; }
+    button.secondary:hover { background: #1f2937; }
+
+    .status {
+      margin-top: 10px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .ok { color: var(--ok); }
+    .bad { color: var(--bad); }
+
+    pre {
+      margin: 0;
+      background: #0f172a;
+      color: #e2e8f0;
+      border-radius: 10px;
+      padding: 12px;
+      max-height: 340px;
+      overflow: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    @media (max-width: 900px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>Zalo Login Backend Test</h1>
+      <p class="muted">
+        OAuth URL: <code>https://oauth.zaloapp.com/v4/permission</code>. This page supports both redirect-code flow and manual token test.
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>Config</h2>
+      <div class="field">
+        <label for="baseUrl">Backend Base URL</label>
+        <input id="baseUrl" />
+      </div>
+      <div class="field">
+        <label for="appId">Zalo App ID</label>
+        <input id="appId" placeholder="3546032307102129192" />
+      </div>
+      <div class="field">
+        <label for="redirectUri">Redirect URI (must match Zalo app config)</label>
+        <input id="redirectUri" />
+      </div>
+      <div class="field">
+        <label for="fullName">Optional fullName fallback</label>
+        <input id="fullName" placeholder="Your display name" />
+      </div>
+      <div class="btn-row">
+        <button id="loginBtn">Login with Zalo (OAuth)</button>
+        <button id="exchangeCodeBtn">Exchange Code -> Login</button>
+        <button id="saveBtn" class="secondary">Save Config</button>
+      </div>
+      <div id="status" class="status">No request sent yet.</div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h2>OAuth Code Flow</h2>
+        <div class="field">
+          <label for="authCode">Authorization Code</label>
+          <input id="authCode" placeholder="Code from callback URL" />
+        </div>
+        <p class="muted">
+          Endpoint used: <code>POST /auth/zalo/code</code>
+        </p>
+      </div>
+
+      <div class="card">
+        <h2>Manual Token Flow</h2>
+        <div class="field">
+          <label for="token">Zalo User Access Token</label>
+          <textarea id="token" placeholder="Paste token here to call /auth/zalo/token"></textarea>
+        </div>
+        <div class="btn-row">
+          <button id="sendTokenBtn">Send /auth/zalo/token</button>
+          <button id="clearBtn" class="secondary">Clear Output</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Response</h2>
+      <pre id="responseBox">No response yet.</pre>
+    </div>
+
+    <div class="card">
+      <h2>Log</h2>
+      <pre id="logBox">Ready.</pre>
+    </div>
+  </div>
+
+  <script>
+    const OAUTH_URL = "https://oauth.zaloapp.com/v4/permission";
+
+    const $ = (id) => document.getElementById(id);
+
+    const ui = {
+      baseUrl: $("baseUrl"),
+      appId: $("appId"),
+      redirectUri: $("redirectUri"),
+      fullName: $("fullName"),
+      authCode: $("authCode"),
+      token: $("token"),
+      loginBtn: $("loginBtn"),
+      exchangeCodeBtn: $("exchangeCodeBtn"),
+      sendTokenBtn: $("sendTokenBtn"),
+      saveBtn: $("saveBtn"),
+      clearBtn: $("clearBtn"),
+      status: $("status"),
+      responseBox: $("responseBox"),
+      logBox: $("logBox")
+    };
+
+    function log(message, payload) {
+      const line = `[${new Date().toLocaleTimeString()}] ${message}`;
+      const body = payload === undefined ? "" : `\n${JSON.stringify(payload, null, 2)}`;
+      ui.logBox.textContent += `\n${line}${body}`;
+      ui.logBox.scrollTop = ui.logBox.scrollHeight;
+    }
+
+    function setStatus(text, ok) {
+      ui.status.textContent = text;
+      ui.status.className = `status ${ok ? "ok" : "bad"}`;
+    }
+
+    function getConfig() {
+      return {
+        baseUrl: (ui.baseUrl.value || "").trim().replace(/\/+$/, ""),
+        appId: (ui.appId.value || "").trim(),
+        redirectUri: (ui.redirectUri.value || "").trim(),
+        fullName: (ui.fullName.value || "").trim()
+      };
+    }
+
+    function loadConfig() {
+      ui.baseUrl.value = localStorage.getItem("zaloTest.baseUrl") || `${location.protocol}//${location.host}`;
+      ui.appId.value = localStorage.getItem("zaloTest.appId") || "3546032307102129192";
+      ui.redirectUri.value = localStorage.getItem("zaloTest.redirectUri") || `${location.origin}${location.pathname}`;
+      ui.fullName.value = localStorage.getItem("zaloTest.fullName") || "";
+      ui.token.value = localStorage.getItem("zaloTest.token") || "";
+      ui.authCode.value = "";
+    }
+
+    function saveConfig() {
+      const cfg = getConfig();
+      localStorage.setItem("zaloTest.baseUrl", cfg.baseUrl);
+      localStorage.setItem("zaloTest.appId", cfg.appId);
+      localStorage.setItem("zaloTest.redirectUri", cfg.redirectUri);
+      localStorage.setItem("zaloTest.fullName", cfg.fullName);
+      localStorage.setItem("zaloTest.token", (ui.token.value || "").trim());
+      log("Config saved", cfg);
+    }
+
+    function buildOauthLoginUrl() {
+      const cfg = getConfig();
+      if (!cfg.appId) throw new Error("Missing appId");
+      if (!cfg.redirectUri) throw new Error("Missing redirectUri");
+
+      const state = `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+      localStorage.setItem("zaloTest.oauthState", state);
+
+      const url = new URL(OAUTH_URL);
+      url.searchParams.set("app_id", cfg.appId);
+      url.searchParams.set("redirect_uri", cfg.redirectUri);
+      url.searchParams.set("state", state);
+      return url.toString();
+    }
+
+    async function callApi(path, payload) {
+      const cfg = getConfig();
+      if (!cfg.baseUrl) {
+        setStatus("Missing backend base URL", false);
+        return;
+      }
+
+      try {
+        const res = await fetch(`${cfg.baseUrl}${path}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json().catch(() => ({}));
+        ui.responseBox.textContent = JSON.stringify({
+          status: res.status,
+          ok: res.ok,
+          body: data
+        }, null, 2);
+
+        if (res.ok) {
+          setStatus(`Success ${path}`, true);
+        } else {
+          setStatus(`Failed ${path} with status ${res.status}`, false);
+        }
+
+        log(`POST ${path}`, { status: res.status, ok: res.ok, payloadKeys: Object.keys(payload || {}) });
+      } catch (error) {
+        setStatus(`Request error: ${error.message}`, false);
+        ui.responseBox.textContent = JSON.stringify({ error: error.message }, null, 2);
+        log("Request error", { message: error.message, path });
+      }
+    }
+
+    async function exchangeCodeAndLogin() {
+      const cfg = getConfig();
+      const code = (ui.authCode.value || "").trim();
+      if (!code) {
+        setStatus("Missing authorization code", false);
+        return;
+      }
+
+      const payload = { code };
+      if (cfg.redirectUri) payload.redirectUri = cfg.redirectUri;
+      if (cfg.fullName) payload.fullName = cfg.fullName;
+      await callApi("/auth/zalo/code", payload);
+    }
+
+    async function sendToken() {
+      const cfg = getConfig();
+      const token = (ui.token.value || "").trim();
+      if (!token) {
+        setStatus("Missing Zalo token", false);
+        return;
+      }
+
+      const payload = { token };
+      if (cfg.fullName) payload.fullName = cfg.fullName;
+      localStorage.setItem("zaloTest.token", token);
+      await callApi("/auth/zalo/token", payload);
+    }
+
+    async function processCallbackParams() {
+      const query = new URLSearchParams(location.search);
+      const code = query.get("code");
+      const state = query.get("state");
+      const error = query.get("error") || query.get("error_reason");
+      const errorDescription = query.get("error_description") || query.get("message");
+
+      const hash = new URLSearchParams((location.hash || "").replace(/^#/, ""));
+      const accessTokenFromHash = hash.get("access_token");
+
+      if (error) {
+        setStatus(`OAuth error: ${error}`, false);
+        log("OAuth callback error", { error, errorDescription });
+      }
+
+      if (code) {
+        ui.authCode.value = code;
+        log("OAuth callback received code", { codeLength: code.length, state });
+
+        const expectedState = localStorage.getItem("zaloTest.oauthState");
+        if (expectedState && state && expectedState !== state) {
+          setStatus("Warning: OAuth state mismatch", false);
+          log("OAuth state mismatch", { expectedState, state });
+        }
+
+        await exchangeCodeAndLogin();
+
+        const cleanUrl = `${location.origin}${location.pathname}`;
+        window.history.replaceState({}, document.title, cleanUrl);
+      }
+
+      if (accessTokenFromHash) {
+        ui.token.value = accessTokenFromHash;
+        log("OAuth callback received access_token in hash", { tokenLength: accessTokenFromHash.length });
+        await sendToken();
+
+        const cleanUrl = `${location.origin}${location.pathname}`;
+        window.history.replaceState({}, document.title, cleanUrl);
+      }
+    }
+
+    ui.loginBtn.addEventListener("click", () => {
+      try {
+        saveConfig();
+        const loginUrl = buildOauthLoginUrl();
+        log("Redirect to Zalo OAuth", { loginUrl });
+        window.location.href = loginUrl;
+      } catch (error) {
+        setStatus(error.message, false);
+      }
+    });
+
+    ui.exchangeCodeBtn.addEventListener("click", async () => {
+      saveConfig();
+      await exchangeCodeAndLogin();
+    });
+
+    ui.sendTokenBtn.addEventListener("click", async () => {
+      saveConfig();
+      await sendToken();
+    });
+
+    ui.saveBtn.addEventListener("click", saveConfig);
+
+    ui.clearBtn.addEventListener("click", () => {
+      ui.responseBox.textContent = "No response yet.";
+      ui.logBox.textContent = "Ready.";
+      ui.status.textContent = "No request sent yet.";
+      ui.status.className = "status";
+    });
+
+    loadConfig();
+    processCallbackParams();
+  </script>
+</body>
+</html>

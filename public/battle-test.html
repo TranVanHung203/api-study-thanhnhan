@@ -1,0 +1,546 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Realtime Battle Test</title>
+  <style>
+    :root {
+      --bg: #f4f5f7;
+      --card: #ffffff;
+      --text: #1e293b;
+      --muted: #64748b;
+      --primary: #0f766e;
+      --primary-2: #14b8a6;
+      --danger: #dc2626;
+      --ok: #15803d;
+      --border: #dbe2ea;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      color: var(--text);
+      background: radial-gradient(circle at top left, #ecfeff 0%, var(--bg) 50%);
+      min-height: 100vh;
+    }
+
+    .wrap {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 20px;
+      display: grid;
+      gap: 16px;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
+    }
+
+    .title {
+      margin: 0 0 10px;
+      font-size: 20px;
+    }
+
+    .muted {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    .field {
+      display: grid;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+
+    label {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    input, button, textarea {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 14px;
+    }
+
+    textarea {
+      min-height: 90px;
+      resize: vertical;
+      font-family: Consolas, "Courier New", monospace;
+    }
+
+    button {
+      cursor: pointer;
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      font-weight: 600;
+    }
+
+    button.secondary {
+      background: #334155;
+    }
+
+    button.warn {
+      background: var(--danger);
+    }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .btn-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .score-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .score-item {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px;
+      background: #f8fafc;
+    }
+
+    .question {
+      display: grid;
+      gap: 8px;
+    }
+
+    .choice-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .choice-btn {
+      text-align: left;
+      background: #f1f5f9;
+      color: #0f172a;
+      border: 1px solid #cbd5e1;
+    }
+
+    .choice-btn.selected {
+      border-color: var(--primary-2);
+      background: #ccfbf1;
+    }
+
+    .choice-btn.opponent-selected {
+      border-color: #f59e0b;
+      background: #fef3c7;
+    }
+
+    .choice-badge {
+      margin-left: 8px;
+      font-size: 12px;
+      color: #b45309;
+      font-weight: 700;
+    }
+
+    .status-ok {
+      color: var(--ok);
+      font-weight: 600;
+    }
+
+    .status-bad {
+      color: var(--danger);
+      font-weight: 600;
+    }
+
+    .logs {
+      white-space: pre-wrap;
+      font-family: Consolas, "Courier New", monospace;
+      background: #0f172a;
+      color: #e2e8f0;
+      border-radius: 10px;
+      padding: 12px;
+      max-height: 280px;
+      overflow: auto;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    @media (max-width: 920px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1 class="title">Realtime Battle Test</h1>
+      <p class="muted">Mở 2 tab trình duyệt, dán 2 token khác nhau, bấm Connect + Join Queue để test ghép cặp.</p>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h2 class="title">Kết Nối</h2>
+        <div class="field">
+          <label>Base URL</label>
+          <input id="baseUrl" value="http://localhost:5000" />
+        </div>
+        <div class="field">
+          <label>JWT Token (Bearer token)</label>
+          <textarea id="token"></textarea>
+        </div>
+        <div class="btn-row">
+          <button id="connectBtn">Connect Socket</button>
+          <button class="secondary" id="disconnectBtn">Disconnect</button>
+          <button id="joinBtn">Join Queue</button>
+          <button class="secondary" id="leaveBtn">Leave Queue</button>
+          <button class="warn" id="forfeitBtn">Forfeit</button>
+        </div>
+        <p id="connectionStatus" class="muted">Chưa kết nối</p>
+      </div>
+
+      <div class="card">
+        <h2 class="title">Trận Đấu</h2>
+        <div id="battleInfo" class="muted">Chưa có trận đấu</div>
+        <div style="height:10px"></div>
+        <div id="scoreBoard" class="score-list"></div>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h2 class="title">Câu Hỏi Hiện Tại</h2>
+        <div id="questionPanel" class="question muted">Đang chờ ghép cặp...</div>
+      </div>
+
+      <div class="card">
+        <h2 class="title">Realtime Trạng Thái</h2>
+        <div id="realtimePanel" class="muted">Chưa có dữ liệu realtime.</div>
+        <div class="btn-row" style="margin-top: 10px;">
+          <button class="secondary" id="resultBtn">Lấy Kết Quả Theo battleId</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 class="title">Logs</h2>
+      <div id="logs" class="logs"></div>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    let socket = null;
+    let battleId = null;
+    let currentQuestionIndex = 0;
+    let questions = [];
+    let selectedAnswer = null;
+    let opponentSelectedAnswer = null;
+    let userId = null;
+
+    const $ = (id) => document.getElementById(id);
+
+    const ui = {
+      baseUrl: $('baseUrl'),
+      token: $('token'),
+      connectBtn: $('connectBtn'),
+      disconnectBtn: $('disconnectBtn'),
+      joinBtn: $('joinBtn'),
+      leaveBtn: $('leaveBtn'),
+      forfeitBtn: $('forfeitBtn'),
+      resultBtn: $('resultBtn'),
+      connectionStatus: $('connectionStatus'),
+      battleInfo: $('battleInfo'),
+      scoreBoard: $('scoreBoard'),
+      questionPanel: $('questionPanel'),
+      realtimePanel: $('realtimePanel'),
+      logs: $('logs')
+    };
+
+    const log = (label, payload) => {
+      const line = `[${new Date().toLocaleTimeString()}] ${label}${payload !== undefined ? `: ${JSON.stringify(payload)}` : ''}`;
+      ui.logs.textContent += `${line}\n`;
+      ui.logs.scrollTop = ui.logs.scrollHeight;
+    };
+
+    const setConnectionStatus = (text, isOk = false) => {
+      ui.connectionStatus.textContent = text;
+      ui.connectionStatus.className = isOk ? 'status-ok' : 'muted';
+    };
+
+    const renderScores = (scores = []) => {
+      if (!scores.length) {
+        ui.scoreBoard.innerHTML = '<div class="muted">Chưa có bảng điểm</div>';
+        return;
+      }
+
+      ui.scoreBoard.innerHTML = scores.map((item) => {
+        const who = item.userId === userId ? '(Bạn)' : '(Đối thủ)';
+        return `
+          <div class="score-item">
+            <div><strong>${item.fullName || item.username || item.userId}</strong> ${who}</div>
+            <div class="muted">Điểm: ${item.totalScore} | Đúng: ${item.correctCount} | Tổng ms đúng: ${item.totalCorrectTimeMs}</div>
+          </div>
+        `;
+      }).join('');
+    };
+
+    const emitSelecting = () => {
+      if (!socket || !battleId) return;
+      const q = questions[currentQuestionIndex];
+      if (!q) return;
+
+      socket.emit('battle:selecting', {
+        battleId,
+        questionId: q._id,
+        selectedAnswer
+      });
+    };
+
+    const submitAnswer = () => {
+      if (!socket || !battleId) return;
+      const q = questions[currentQuestionIndex];
+      if (!q) return;
+
+      socket.emit('battle:submitAnswer', {
+        battleId,
+        questionId: q._id,
+        answer: selectedAnswer
+      });
+      log('battle:submitAnswer', { battleId, questionId: q._id, answer: selectedAnswer });
+    };
+
+    const renderQuestion = () => {
+      const q = questions[currentQuestionIndex];
+      if (!q) {
+        ui.questionPanel.innerHTML = '<div class="muted">Không có câu hỏi hiện tại.</div>';
+        return;
+      }
+
+      const choices = Array.isArray(q.choices) ? q.choices : [];
+      ui.questionPanel.innerHTML = `
+        <div><strong>Câu ${currentQuestionIndex + 1}/${questions.length}</strong></div>
+        <div>${q.questionText || '(questionText rỗng, kiểm tra rawQuestion)'}</div>
+        <div class="muted">Đối thủ đang chọn: ${opponentSelectedAnswer == null ? 'chưa chọn' : `đáp án [${opponentSelectedAnswer}]`}</div>
+        <div class="choice-list" id="choiceList"></div>
+        <div class="btn-row">
+          <button id="submitAnswerBtn">Nộp đáp án</button>
+        </div>
+      `;
+
+      const choiceList = document.getElementById('choiceList');
+      if (!choices.length) {
+        choiceList.innerHTML = '<div class="muted">Câu hỏi không có choices dạng mảng string.</div>';
+      } else {
+        choiceList.innerHTML = choices.map((choice, idx) => {
+          const classNames = ['choice-btn'];
+          if (selectedAnswer === idx) classNames.push('selected');
+          if (opponentSelectedAnswer === idx) classNames.push('opponent-selected');
+          const badge = opponentSelectedAnswer === idx ? '<span class="choice-badge">Doi thu dang chon</span>' : '';
+          return `<button class="${classNames.join(' ')}" data-idx="${idx}">[${idx}] ${choice}${badge}</button>`;
+        }).join('');
+
+        choiceList.querySelectorAll('button').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            selectedAnswer = Number(btn.getAttribute('data-idx'));
+            emitSelecting();
+            renderQuestion();
+          });
+        });
+      }
+
+      const submitBtn = document.getElementById('submitAnswerBtn');
+      submitBtn.addEventListener('click', submitAnswer);
+    };
+
+    const connectSocket = () => {
+      if (socket && socket.connected) {
+        log('info', 'Socket đã kết nối trước đó');
+        return;
+      }
+
+      const baseUrl = ui.baseUrl.value.trim() || 'http://localhost:5000';
+      const token = ui.token.value.trim();
+      if (!token) {
+        alert('Vui lòng nhập token');
+        return;
+      }
+
+      socket = io(`${baseUrl}/battle`, {
+        transports: ['websocket'],
+        auth: {
+          token
+        }
+      });
+
+      socket.on('connect', () => {
+        setConnectionStatus(`Đã kết nối: ${socket.id}`, true);
+        log('socket:connect', { socketId: socket.id });
+      });
+
+      socket.on('connect_error', (error) => {
+        setConnectionStatus('Lỗi kết nối socket');
+        log('socket:connect_error', { message: error.message });
+      });
+
+      socket.on('disconnect', (reason) => {
+        setConnectionStatus(`Đã ngắt kết nối (${reason})`);
+        log('socket:disconnect', { reason });
+      });
+
+      socket.on('battle:connected', (payload) => {
+        userId = payload?.user?.id || null;
+        log('battle:connected', payload);
+      });
+
+      socket.on('battle:queueJoined', (payload) => {
+        log('battle:queueJoined', payload);
+      });
+
+      socket.on('battle:queueSize', (payload) => {
+        ui.battleInfo.textContent = `Queue hiện tại: ${payload.queueSize}`;
+      });
+
+      socket.on('battle:matched', (payload) => {
+        battleId = payload.battleId;
+        questions = payload.questions || [];
+        currentQuestionIndex = payload.currentQuestionIndex || 0;
+        selectedAnswer = null;
+        opponentSelectedAnswer = null;
+
+        ui.battleInfo.innerHTML = `
+          <div><strong>battleId:</strong> ${battleId}</div>
+          <div><strong>Đối thủ:</strong> ${payload.opponent?.fullName || payload.opponent?.username || payload.opponent?.userId || 'N/A'}</div>
+        `;
+        ui.realtimePanel.textContent = 'Đã ghép trận. Bắt đầu trả lời câu hỏi.';
+        renderQuestion();
+        renderScores([]);
+        log('battle:matched', payload);
+      });
+
+      socket.on('battle:opponentSelecting', (payload) => {
+        const q = questions[currentQuestionIndex];
+        if (q && String(payload.questionId) === String(q._id)) {
+          opponentSelectedAnswer = payload.selectedAnswer;
+          renderQuestion();
+        }
+        ui.realtimePanel.textContent = `Đối thủ đang chọn: ${JSON.stringify(payload.selectedAnswer)} ở questionId ${payload.questionId}`;
+        log('battle:opponentSelecting', payload);
+      });
+
+      socket.on('battle:answerResult', (payload) => {
+        const statusText = payload.isCorrect ? 'ĐÚNG' : 'SAI';
+        const css = payload.isCorrect ? 'status-ok' : 'status-bad';
+        ui.realtimePanel.innerHTML = `<span class="${css}">Kết quả: ${statusText}</span> | +${payload.scoreAwarded} điểm | ${payload.elapsedMs}ms`;
+        log('battle:answerResult', payload);
+      });
+
+      socket.on('battle:scoreUpdate', (payload) => {
+        renderScores(payload.scores || []);
+        log('battle:scoreUpdate', payload);
+      });
+
+      socket.on('battle:questionChanged', (payload) => {
+        currentQuestionIndex = payload.currentQuestionIndex;
+        selectedAnswer = null;
+        opponentSelectedAnswer = null;
+        renderQuestion();
+        ui.realtimePanel.textContent = `Đã chuyển sang câu ${currentQuestionIndex + 1}`;
+        log('battle:questionChanged', payload);
+      });
+
+      socket.on('battle:ended', (payload) => {
+        renderScores(payload.players || []);
+
+        const winnerText = payload.winnerUserId
+          ? (payload.winnerUserId === userId ? 'Bạn thắng' : 'Bạn thua')
+          : 'Hòa';
+
+        ui.realtimePanel.innerHTML = `<strong>Kết thúc trận:</strong> ${winnerText}. reason=${payload.reason}`;
+        log('battle:ended', payload);
+      });
+
+      socket.on('battle:error', (payload) => {
+        log('battle:error', payload);
+      });
+    };
+
+    ui.connectBtn.addEventListener('click', connectSocket);
+
+    ui.disconnectBtn.addEventListener('click', () => {
+      if (!socket) return;
+      socket.disconnect();
+      socket = null;
+      battleId = null;
+      questions = [];
+      opponentSelectedAnswer = null;
+      renderQuestion();
+      renderScores([]);
+      ui.realtimePanel.textContent = 'Đã disconnect.';
+      setConnectionStatus('Chưa kết nối');
+    });
+
+    ui.joinBtn.addEventListener('click', () => {
+      if (!socket || !socket.connected) return alert('Socket chưa kết nối');
+      socket.emit('battle:joinQueue');
+      log('emit', 'battle:joinQueue');
+    });
+
+    ui.leaveBtn.addEventListener('click', () => {
+      if (!socket || !socket.connected) return;
+      socket.emit('battle:leaveQueue');
+      log('emit', 'battle:leaveQueue');
+    });
+
+    ui.forfeitBtn.addEventListener('click', () => {
+      if (!socket || !socket.connected || !battleId) return;
+      socket.emit('battle:forfeit', { battleId });
+      log('emit', { event: 'battle:forfeit', battleId });
+    });
+
+    ui.resultBtn.addEventListener('click', async () => {
+      if (!battleId) {
+        alert('Chưa có battleId');
+        return;
+      }
+
+      const baseUrl = ui.baseUrl.value.trim() || 'http://localhost:5000';
+      const token = ui.token.value.trim();
+
+      try {
+        const resp = await fetch(`${baseUrl}/battle/${battleId}/result`, {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
+
+        const data = await resp.json();
+        log('GET /battle/:battleId/result', data);
+        if (!resp.ok) {
+          alert(data.message || 'Không lấy được kết quả');
+        }
+      } catch (error) {
+        log('result:error', { message: error.message });
+      }
+    });
+  </script>
+</body>
+</html>

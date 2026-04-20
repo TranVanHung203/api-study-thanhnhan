@@ -12,6 +12,9 @@ import {
   sendOTPForConvertController,
   verifyOTPAndConvertController
   , googleTokenController
+  , facebookTokenController
+  , zaloTokenController
+  , zaloCodeController
   , changeFullNameController
   , changeFullNameAndAttachCharacterController
   , sendOTPForRegisterController
@@ -517,6 +520,134 @@ router.post('/guest', guestLoginController);
  *         description: Invalid or expired Google token
  */
 router.post('/google/token', googleTokenController);
+
+/**
+ * @swagger
+ * /auth/facebook/token:
+ *   post:
+ *     summary: Sign in with Facebook access token (Web/Android)
+ *     tags: [Auth]
+ *     description: >-
+ *       Exchange a Facebook access token for the application's `accessToken` and `refreshToken`.
+ *       Use this endpoint for both Web Facebook Login and Android Facebook SDK Login.
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - token
+ *             properties:
+ *               token:
+ *                 type: string
+ *                 description: Facebook User Access Token
+ *               fullName:
+ *                 type: string
+ *                 description: Optional fallback fullName when Facebook payload omits name
+ *           examples:
+ *             webExample:
+ *               summary: Web request
+ *               value:
+ *                 token: "EAABsbCS1iHgBO..."
+ *             androidExample:
+ *               summary: Android request
+ *               value:
+ *                 token: "EAAaYpo6N7f8BO..."
+ *     responses:
+ *       200:
+ *         description: Sign-in successful, returns application tokens and user info
+ *       400:
+ *         description: Missing token
+ *       401:
+ *         description: Invalid or expired Facebook token
+ */
+router.post('/facebook/token', facebookTokenController);
+
+/**
+ * @swagger
+ * /auth/zalo/token:
+ *   post:
+ *     summary: Sign in with Zalo access token (Web/Android/Flutter)
+ *     tags: [Auth]
+ *     description: >-
+ *       Exchange a Zalo user access token for the application's `accessToken` and `refreshToken`.
+ *       Use this endpoint for Web/Android/Flutter Zalo Login after the client obtains Zalo access token.
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - token
+ *             properties:
+ *               token:
+ *                 type: string
+ *                 description: Zalo User Access Token
+ *               fullName:
+ *                 type: string
+ *                 description: Optional fallback fullName when Zalo payload omits name
+ *           examples:
+ *             mobileExample:
+ *               summary: Android / Flutter request
+ *               value:
+ *                 token: "M3x2f...zalo_access_token..."
+ *     responses:
+ *       200:
+ *         description: Sign-in successful, returns application tokens and user info
+ *       400:
+ *         description: Missing token
+ *       401:
+ *         description: Invalid or expired Zalo token
+ */
+router.post('/zalo/token', zaloTokenController);
+
+/**
+ * @swagger
+ * /auth/zalo/code:
+ *   post:
+ *     summary: Sign in with Zalo OAuth code (Web redirect flow)
+ *     tags: [Auth]
+ *     description: >-
+ *       Exchange Zalo OAuth authorization code to Zalo access token, then issue application tokens.
+ *       This endpoint is recommended for Web redirect flow.
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - code
+ *             properties:
+ *               code:
+ *                 type: string
+ *                 description: OAuth authorization code from Zalo redirect callback
+ *               redirectUri:
+ *                 type: string
+ *                 description: Redirect URI used in OAuth request (optional but recommended)
+ *               fullName:
+ *                 type: string
+ *                 description: Optional fallback fullName if Zalo profile omits name
+ *           examples:
+ *             webExample:
+ *               summary: Web callback exchange
+ *               value:
+ *                 code: "2vQf3..."
+ *                 redirectUri: "https://your-domain.com/zalo-test"
+ *     responses:
+ *       200:
+ *         description: Sign-in successful, returns application tokens and user info
+ *       400:
+ *         description: Missing code or server Zalo config
+ *       401:
+ *         description: Invalid or expired Zalo OAuth code
+ */
+router.post('/zalo/code', zaloCodeController);
 
 // // Firebase route removed - using Google ID token verification (Google-only flow)
 
