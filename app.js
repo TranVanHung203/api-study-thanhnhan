@@ -1,7 +1,9 @@
 import express from 'express';
+import http from 'http';
 import cors from 'cors';
 import cookieParser from "cookie-parser";
 import jwt from "jsonwebtoken";
+import { Server } from 'socket.io';
 import DatabaseConfig from './src/config/databaseConfig.js';
 import { errorHandler } from './src/errors/errorHandler.js';
 //tranvanhung-demo.taochimuc
@@ -18,6 +20,7 @@ import UserActivity from './src/models/userActivity.schema.js';
 import Reward from './src/models/reward.schema.js';
 import RefreshToken from './src/models/refreshToken.schema.js';
 import Character from './src/models/character.schema.js';
+import RealtimeBattle from './src/models/realtimeBattle.schema.js';
 
 // Import routes mới
 import authRoutes from './src/routes/authRoutes.js';
@@ -36,6 +39,8 @@ import ratingRoutes from './src/routes/ratingRoutes.js';
 import userRoutes from './src/routes/userRoutes.js';
 import quizAssignmentRoutes from './src/routes/quizAssignmentRoutes.js';
 import chatbotRoutes from './src/chatbot/routes.js';
+import realtimeBattleRoutes from './src/routes/realtimeBattleRoutes.js';
+import { initBattleSocket } from './src/ws/battleSocket.js';
 
 // Import Swagger
 import swaggerUi from 'swagger-ui-express';
@@ -155,7 +160,8 @@ const swaggerOptions = {
       //'./src/routes/activityRoutes.js',
       './src/routes/ratingRoutes.js',
     // './src/routes/rewardRoutes.js',
-    './src/routes/quizAssignmentRoutes.js'
+    './src/routes/quizAssignmentRoutes.js',
+    './src/routes/realtimeBattleRoutes.js'
   ],
 };
 
@@ -172,6 +178,15 @@ const swaggerUiOptions = {
 // Serve static files (for swagger custom script)
 app.use('/public', express.static(path.join(process.cwd(), 'public')));
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+app.get('/battle-test', (req, res) => {
+  res.sendFile(path.join(process.cwd(), 'public', 'battle-test.html'));
+});
+app.get('/facebook-test', (req, res) => {
+  res.sendFile(path.join(process.cwd(), 'public', 'facebook-test.html'));
+});
+app.get('/zalo-test', (req, res) => {
+  res.sendFile(path.join(process.cwd(), 'public', 'zalo-test.html'));
+});
 
 // Inject custom JS into Swagger UI to auto-attach access token
 const swaggerUiOptionsWithCustom = Object.assign({}, swaggerUiOptions, {
@@ -206,6 +221,7 @@ app.use('/ratings', ratingRoutes);
 app.use('/users', userRoutes);
 app.use('/assignments', quizAssignmentRoutes);
 app.use('/chatbot', chatbotRoutes);
+app.use('/battle', realtimeBattleRoutes);
 
 app.use(errorHandler);
 
@@ -215,10 +231,22 @@ app.use(errorHandler);
 
 startDailyDatabaseBackupOverwriteJob();
 
-app.listen(PORT, HOST, () => {
+const server = http.createServer(app);
+
+const io = new Server(server, {
+  cors: {
+    origin: '*',
+    methods: ['GET', 'POST']
+  }
+});
+
+initBattleSocket(io);
+
+server.listen(PORT, HOST, () => {
   console.log(`Server running on ${HOST}:${PORT}`);
   console.log(`  Local (same machine) : http://127.0.0.1:${PORT}`);
   console.log(`  LDPlayer / Emulator  : http://10.0.2.2:${PORT}`);
   console.log(`  LAN (other devices)  : http://${LOCAL_IP}:${PORT}`);
   console.log(`  Swagger              : http://localhost:${PORT}/api-docs`);
+  console.log(`  Battle Socket        : ws://localhost:${PORT}/battle`);
 });

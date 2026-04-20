@@ -4,7 +4,8 @@
   "type": "module",
   "main": "app.js",
   "scripts": {
-    "start": "nodemon ./src/server.js"
+    "start": "nodemon ./src/server.js",
+    "backup:ocean-math": "node ./scripts/backupLearningAppToOceanMath.js"
   },
   "author": "",
   "license": "ISC",
@@ -27,6 +28,7 @@
     "nodemailer": "^6.9.16",
     "pdf-parse": "^2.4.5",
     "resend": "^6.9.1",
+    "socket.io": "^4.8.3",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1"
   },

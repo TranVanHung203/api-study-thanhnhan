@@ -1,33 +1,49 @@
 import mongoose from 'mongoose';
 
 const UserSchema = new mongoose.Schema({
-  username: { 
-    type: String, 
-    required: function() { return !this.isGuest; }, // Không bắt buộc cho guest
+  username: {
+    type: String,
+    required: function () { return !this.isGuest; },
     unique: true,
-    sparse: true // Cho phép nhiều null (guest không có username)
+    sparse: true
   },
-  passwordHash: { 
-    type: String, 
-    required: function() { return !this.isGuest; } // Không bắt buộc cho guest
+  passwordHash: {
+    type: String,
+    required: function () { return !this.isGuest; }
   },
-  fullName: { 
-    type: String, 
-    required: true 
+  fullName: {
+    type: String,
+    required: true
   },
   email: {
     type: String,
-    required: function() { return !this.isGuest; }, // Không bắt buộc cho guest
+    // Social providers may not return email; require it only for local accounts.
+    required: function () {
+      if (this.isGuest) return false;
+      return (this.provider || 'local') === 'local';
+    },
     unique: true,
-    sparse: true // Cho phép nhiều null (guest không có email)
+    sparse: true
   },
-  classId: { 
-    type: mongoose.Schema.Types.ObjectId, 
+  classId: {
+    type: mongoose.Schema.Types.ObjectId,
     ref: 'Class',
     required: false
   },
-  // OAuth fields (Google)
+  // OAuth fields
   googleId: {
+    type: String,
+    required: false,
+    index: true,
+    sparse: true
+  },
+  facebookId: {
+    type: String,
+    required: false,
+    index: true,
+    sparse: true
+  },
+  zaloId: {
     type: String,
     required: false,
     index: true,
@@ -36,7 +52,7 @@ const UserSchema = new mongoose.Schema({
   provider: {
     type: String,
     required: false,
-    enum: ['local', 'google', 'guest'],
+    enum: ['local', 'google', 'facebook', 'zalo', 'guest'],
     default: 'local'
   },
   avatar: {
@@ -64,9 +80,9 @@ const UserSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
-  createdAt: { 
-    type: Date, 
-    default: Date.now 
+  createdAt: {
+    type: Date,
+    default: Date.now
   }
 });
 
