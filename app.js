@@ -109,6 +109,91 @@ databaseConfig.connect();
 const PORT = process.env.PORT || 5000;
 const HOST = process.env.HOST || '0.0.0.0';
 const LOCAL_IP = getLocalIP();
+const ZALO_CALLBACK_SCHEME = (process.env.ZALO_CALLBACK_SCHEME || 'easymathzalo').trim();
+const ZALO_CALLBACK_PATH = (process.env.ZALO_CALLBACK_PATH || 'zalo-callback').trim().replace(/^\/+/, '');
+const ZALO_MOBILE_DEEP_LINK =
+  (process.env.ZALO_MOBILE_DEEP_LINK || '').trim() ||
+  `${ZALO_CALLBACK_SCHEME}://${ZALO_CALLBACK_PATH}`;
+const ZALO_WEB_REDIRECT_URL = (process.env.ZALO_WEB_REDIRECT_URL || '').trim();
+const ZALO_CALLBACK_DEFAULT_TARGET = (process.env.ZALO_CALLBACK_DEFAULT_TARGET || 'auto').trim();
+
+const normalizeZaloCallbackTarget = (value) => {
+  if (typeof value !== 'string') return '';
+  const normalized = value.trim().toLowerCase();
+  if (!normalized || normalized === 'auto') return '';
+
+  if (['web', 'browser', 'desktop', 'flutter-web'].includes(normalized)) {
+    return 'web';
+  }
+  if (['mobile', 'android', 'app', 'native', 'flutter-android'].includes(normalized)) {
+    return 'mobile';
+  }
+  return '';
+};
+
+const extractZaloCallbackTargetFromState = (stateValue) => {
+  if (typeof stateValue !== 'string') return '';
+  const state = stateValue.trim();
+  if (!state) return '';
+
+  const lowered = state.toLowerCase();
+  const prefixToTarget = [
+    ['web_', 'web'],
+    ['web-', 'web'],
+    ['web:', 'web'],
+    ['mobile_', 'mobile'],
+    ['mobile-', 'mobile'],
+    ['mobile:', 'mobile'],
+    ['android_', 'mobile'],
+    ['android-', 'mobile'],
+    ['android:', 'mobile']
+  ];
+  for (const [prefix, target] of prefixToTarget) {
+    if (lowered.startsWith(prefix)) return target;
+  }
+
+  const fromParams = (text) => {
+    const params = new URLSearchParams(text);
+    return normalizeZaloCallbackTarget(
+      params.get('platform') || params.get('target') || params.get('client') || ''
+    );
+  };
+
+  if (state.includes('=')) {
+    const stateTarget = fromParams(state);
+    if (stateTarget) return stateTarget;
+  }
+
+  try {
+    const decoded = Buffer.from(state, 'base64url').toString('utf8');
+    if (decoded && decoded !== state) {
+      const decodedTarget = fromParams(decoded);
+      if (decodedTarget) return decodedTarget;
+    }
+  } catch (err) {
+    // Ignore invalid base64url state.
+  }
+
+  return '';
+};
+
+const isMobileUserAgent = (userAgentValue) => {
+  const userAgent = typeof userAgentValue === 'string' ? userAgentValue : '';
+  return /android|iphone|ipad|ipod|mobile|iemobile|opera mini/i.test(userAgent);
+};
+
+const appendQueryToUrl = (baseUrl, query) => {
+  if (!baseUrl) return '';
+  try {
+    const nextUrl = new URL(baseUrl);
+    for (const [key, value] of query.entries()) {
+      nextUrl.searchParams.set(key, value);
+    }
+    return nextUrl.toString();
+  } catch (error) {
+    return '';
+  }
+};
 
 // Swagger configuration
 // Không khai báo servers cố định — Swagger UI tự dùng host hiện tại
@@ -186,6 +271,84 @@ app.get('/facebook-test', (req, res) => {
 });
 app.get('/zalo-test', (req, res) => {
   res.sendFile(path.join(process.cwd(), 'public', 'zalo-test.html'));
+});
+app.get('/zalo-callback', (req, res) => {
+  const code = typeof req.query.code === 'string' ? req.query.code : '';
+  const state = typeof req.query.state === 'string' ? req.query.state : '';
+  const error = typeof req.query.error === 'string' ? req.query.error : '';
+  const errorDescription =
+    typeof req.query.error_description === 'string'
+      ? req.query.error_description
+      : (typeof req.query.message === 'string' ? req.query.message : '');
+
+  const callbackQuery = new URLSearchParams();
+  if (code) callbackQuery.set('code', code);
+  if (state) callbackQuery.set('state', state);
+  if (error) callbackQuery.set('error', error);
+  if (errorDescription) callbackQuery.set('error_description', errorDescription);
+
+  const queryTarget = normalizeZaloCallbackTarget(
+    (typeof req.query.platform === 'string' && req.query.platform) ||
+    (typeof req.query.target === 'string' && req.query.target) ||
+    (typeof req.query.client === 'string' && req.query.client) ||
+    ''
+  );
+  const stateTarget = extractZaloCallbackTargetFromState(state);
+  const defaultTarget = normalizeZaloCallbackTarget(ZALO_CALLBACK_DEFAULT_TARGET);
+  const callbackTarget =
+    queryTarget ||
+    stateTarget ||
+    defaultTarget ||
+    (isMobileUserAgent(req.headers['user-agent']) ? 'mobile' : 'web');
+
+  const fallbackWebRedirect = `${req.protocol}://${req.get('host')}/zalo-test`;
+  const webRedirectBase = ZALO_WEB_REDIRECT_URL || fallbackWebRedirect;
+  const webRedirect = appendQueryToUrl(webRedirectBase, callbackQuery);
+  const deepLink = appendQueryToUrl(ZALO_MOBILE_DEEP_LINK, callbackQuery);
+
+  res.set('Cache-Control', 'no-store');
+  if (callbackTarget === 'web' && webRedirect) {
+    return res.redirect(302, webRedirect);
+  }
+  if (!deepLink) {
+    return res.status(500).json({ message: 'Invalid Zalo callback redirect configuration' });
+  }
+
+  res.type('html').send(`<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Zalo Callback</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 24px; background: #f6f9ff; color: #0f172a; }
+    .card { max-width: 560px; margin: 24px auto; background: #fff; border: 1px solid #dbe4f2; border-radius: 12px; padding: 20px; }
+    h1 { margin: 0 0 12px; font-size: 20px; }
+    p { margin: 8px 0; line-height: 1.45; }
+    .btn { display: inline-block; margin-top: 14px; padding: 10px 14px; border-radius: 8px; background: #0d74ff; color: #fff; text-decoration: none; }
+    .hint { color: #475569; font-size: 13px; }
+    code { word-break: break-all; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Returning to mobile app...</h1>
+    <p>If your app does not open automatically, click the button below.</p>
+    <a id="openAppLink" class="btn" href="${deepLink}">Open app</a>
+    <p class="hint">Deep link: <code id="deepLinkText"></code></p>
+  </div>
+  <script>
+    (function () {
+      const deepLink = ${JSON.stringify(deepLink)};
+      const link = document.getElementById('openAppLink');
+      const label = document.getElementById('deepLinkText');
+      if (label) label.textContent = deepLink;
+      if (link) link.href = deepLink;
+      window.location.replace(deepLink);
+    })();
+  </script>
+</body>
+</html>`);
 });
 
 // Inject custom JS into Swagger UI to auto-attach access token

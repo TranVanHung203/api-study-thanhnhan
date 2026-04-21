@@ -367,12 +367,23 @@ router.get('/:progressId/quiz-sessions/:sessionId/questions', getSessionQuestion
  *         application/json:
  *           schema:
  *             type: object
+ *             required:
+ *               - answers
+ *               - totalTimeSpentSeconds
  *             properties:
+ *               totalTimeSpentSeconds:
+ *                 type: number
+ *                 minimum: 0
+ *                 description: Tong thoi gian lam bai (giay)
  *               answers:
  *                 type: array
- *                 description: Danh sách đáp án do học sinh gửi. Mỗi phần tử chứa `questionId` và `userAnswer`.
+ *                 description: Danh sach dap an do hoc sinh gui. Moi phan tu chua questionId, userAnswer va questionTimeSpentSeconds.
  *                 items:
  *                   type: object
+ *                   required:
+ *                     - questionId
+ *                     - userAnswer
+ *                     - questionTimeSpentSeconds
  *                   properties:
  *                     questionId:
  *                       type: string
@@ -381,6 +392,10 @@ router.get('/:progressId/quiz-sessions/:sessionId/questions', getSessionQuestion
  *                         - type: integer
  *                         - type: string
  *                         - type: object
+ *                     questionTimeSpentSeconds:
+ *                       type: number
+ *                       minimum: 0
+ *                       description: Thoi gian tra loi cau nay (giay)
  *     security:
  *       - bearerAuth: []
  *     responses:
@@ -393,6 +408,8 @@ router.get('/:progressId/quiz-sessions/:sessionId/questions', getSessionQuestion
  *               properties:
  *                 totalQuestions:
  *                   type: integer
+ *                 totalTimeSpentSeconds:
+ *                   type: number
  *                 attempted:
  *                   type: integer
  *                 correct:

@@ -153,7 +153,7 @@
         <input id="appId" placeholder="3546032307102129192" />
       </div>
       <div class="field">
-        <label for="redirectUri">Redirect URI (must match Zalo app config)</label>
+        <label for="redirectUri">Redirect URI (must match Zalo app config, recommended: /zalo-callback)</label>
         <input id="redirectUri" />
       </div>
       <div class="field">
@@ -250,7 +250,7 @@
     function loadConfig() {
       ui.baseUrl.value = localStorage.getItem("zaloTest.baseUrl") || `${location.protocol}//${location.host}`;
       ui.appId.value = localStorage.getItem("zaloTest.appId") || "3546032307102129192";
-      ui.redirectUri.value = localStorage.getItem("zaloTest.redirectUri") || `${location.origin}${location.pathname}`;
+      ui.redirectUri.value = localStorage.getItem("zaloTest.redirectUri") || `${location.origin}/zalo-callback`;
       ui.fullName.value = localStorage.getItem("zaloTest.fullName") || "";
       ui.token.value = localStorage.getItem("zaloTest.token") || "";
       ui.authCode.value = "";
@@ -271,7 +271,7 @@
       if (!cfg.appId) throw new Error("Missing appId");
       if (!cfg.redirectUri) throw new Error("Missing redirectUri");
 
-      const state = `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+      const state = `web_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
       localStorage.setItem("zaloTest.oauthState", state);
 
       const url = new URL(OAUTH_URL);

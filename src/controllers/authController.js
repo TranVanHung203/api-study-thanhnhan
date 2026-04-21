@@ -24,6 +24,7 @@ const FACEBOOK_APP_ID = process.env.FACEBOOK_APP_ID || '';
 const FACEBOOK_APP_SECRET = process.env.FACEBOOK_APP_SECRET || '';
 const ZALO_APP_ID = process.env.ZALO_APP_ID || '';
 const ZALO_APP_SECRET = process.env.ZALO_APP_SECRET || '';
+const ZALO_REDIRECT_URI = process.env.ZALO_REDIRECT_URI || '';
 const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -922,8 +923,11 @@ export const zaloCodeController = async (req, res, next) => {
     body.set('app_id', ZALO_APP_ID);
     body.set('code', code);
     body.set('grant_type', 'authorization_code');
-    if (redirectUri && typeof redirectUri === 'string') {
-      body.set('redirect_uri', redirectUri);
+
+    const resolvedRedirectUri =
+      (typeof redirectUri === 'string' ? redirectUri.trim() : '') || ZALO_REDIRECT_URI;
+    if (resolvedRedirectUri) {
+      body.set('redirect_uri', resolvedRedirectUri);
     }
 
     let tokenPayload;

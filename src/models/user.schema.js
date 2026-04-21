@@ -15,6 +15,11 @@ const UserSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  gender: {
+    type: Number,
+    enum: [0, 1],
+    required: false
+  },
   email: {
     type: String,
     // Social providers may not return email; require it only for local accounts.

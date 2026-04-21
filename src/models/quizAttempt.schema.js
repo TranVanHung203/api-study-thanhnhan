@@ -6,10 +6,12 @@ const QuizAttemptSchema = new mongoose.Schema({
   sessionId: { type: mongoose.Schema.Types.ObjectId, ref: 'QuizSession' },
   score: { type: Number, default: 0 },
   isCompleted: { type: Boolean, default: false },
+  totalTimeSpentSeconds: { type: Number, default: 0, min: 0 },
   details: [
     {
       questionId: { type: mongoose.Schema.Types.ObjectId, ref: 'Question' },
       userAnswer: { type: mongoose.Schema.Types.Mixed },
+      questionTimeSpentSeconds: { type: Number, default: 0, min: 0 },
       isCorrect: { type: Boolean, default: false },
       correctAnswer: { type: mongoose.Schema.Types.Mixed }
     }

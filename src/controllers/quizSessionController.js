@@ -203,10 +203,18 @@ export const getSessionQuestions = async (req, res, next) => {
 export const submitQuizSession = async (req, res, next) => {
   try {
     const { progressId, sessionId } = req.params;
-    const { answers } = req.body; // answers: [{ questionId, userAnswer }]
+    const { answers } = req.body || {}; // answers: [{ questionId, userAnswer, questionTimeSpentSeconds }]
     const userId = req.user && (req.user.id || req.user._id);
 
     if (!userId) throw new UnauthorizedError('Unauthorized');
+    const totalTimeSpentRaw =
+      req.body?.totalTimeSpentSeconds !== undefined
+        ? req.body.totalTimeSpentSeconds
+        : req.body?.timeSpentSeconds;
+    const totalTimeSpentSeconds = Number(totalTimeSpentRaw);
+    if (!Number.isFinite(totalTimeSpentSeconds) || totalTimeSpentSeconds < 0) {
+      throw new BadRequestError('Thiáº¿u hoáº·c sai `totalTimeSpentSeconds` (>= 0)');
+    }
 
     // ===================== 1) Load Progress + Lesson =====================
     const currentProgress = await Progress.findById(progressId);
@@ -299,6 +307,7 @@ export const submitQuizSession = async (req, res, next) => {
       return res.status(200).json({
         message: 'Session cleared',
         totalQuestions: session.questionIds.length,
+        totalTimeSpentSeconds,
         isCheckRating,
       });
     }
@@ -307,7 +316,20 @@ export const submitQuizSession = async (req, res, next) => {
     const answerMap = new Map();
     for (const a of answers) {
       if (!a || !a.questionId) continue;
-      answerMap.set(String(a.questionId), a.userAnswer);
+      const questionTimeSpentRaw =
+        a.questionTimeSpentSeconds !== undefined
+          ? a.questionTimeSpentSeconds
+          : a.timeSpentSeconds;
+      const questionTimeSpentSeconds = Number(questionTimeSpentRaw);
+      if (!Number.isFinite(questionTimeSpentSeconds) || questionTimeSpentSeconds < 0) {
+        throw new BadRequestError(
+          `Thiáº¿u hoáº·c sai questionTimeSpentSeconds cho questionId=${a.questionId}`
+        );
+      }
+      answerMap.set(String(a.questionId), {
+        userAnswer: a.userAnswer,
+        questionTimeSpentSeconds,
+      });
     }
 
     const sessionQuestionIds = session.questionIds.map((q) => String(q));
@@ -365,7 +387,8 @@ export const submitQuizSession = async (req, res, next) => {
     let correctCount = 0;
     for (const qid of sessionQuestionIds) {
       const q = questionById.get(qid);
-      const userAnswer = answerMap.get(qid);
+      const answerPayload = answerMap.get(qid);
+      const userAnswer = answerPayload ? answerPayload.userAnswer : undefined;
       if (!q) continue;
       if (evaluateAnswer(q, userAnswer).isCorrect) correctCount += 1;
     }
@@ -379,16 +402,25 @@ export const submitQuizSession = async (req, res, next) => {
     const details = [];
     for (const qid of sessionQuestionIds) {
       const q = questionById.get(qid);
-      const userAnswer = answerMap.get(qid);
+      const answerPayload = answerMap.get(qid);
+      const userAnswer = answerPayload ? answerPayload.userAnswer : undefined;
+      const questionTimeSpentSeconds = answerPayload ? answerPayload.questionTimeSpentSeconds : 0;
 
       if (!q) {
-        details.push({ questionId: qid, userAnswer, isCorrect: false, correctAnswer: null });
+        details.push({
+          questionId: qid,
+          userAnswer,
+          questionTimeSpentSeconds,
+          isCorrect: false,
+          correctAnswer: null
+        });
         continue;
       }
       const evalRes = evaluateAnswer(q, userAnswer);
       details.push({
         questionId: q._id,
         userAnswer,
+        questionTimeSpentSeconds,
         isCorrect: !!evalRes.isCorrect,
         correctAnswer: evalRes.correctAnswer,
       });
@@ -400,6 +432,7 @@ export const submitQuizSession = async (req, res, next) => {
       sessionId: session._id,
       score,
       isCompleted: isPassed,
+      totalTimeSpentSeconds,
       details,
     }).save();
 
@@ -445,6 +478,7 @@ export const submitQuizSession = async (req, res, next) => {
         correctCount,
         totalQuestions,
         percentCorrect,
+        totalTimeSpentSeconds,
         isCheck: isCheckFlag,
         isCheckRating,
       });
@@ -466,6 +500,7 @@ export const submitQuizSession = async (req, res, next) => {
         correctCount,
         totalQuestions,
         percentCorrect,
+        totalTimeSpentSeconds,
         isCheck: true,
         isCheckRating,
       });
@@ -504,6 +539,7 @@ export const submitQuizSession = async (req, res, next) => {
       correctCount,
       totalQuestions,
       percentCorrect,
+      totalTimeSpentSeconds,
       isCheck: true,
       isCheckRating,
     });
