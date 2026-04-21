@@ -13,6 +13,8 @@ import UnauthorizedError from '../errors/unauthorizedError.js';
 import ForbiddenError from '../errors/forbiddenError.js';
 import { OAuth2Client } from 'google-auth-library';
 import Character from '../models/character.schema.js';
+import Topic from '../models/topic.schema.js';
+import PreferenceQuestion from '../models/preferenceQuestion.schema.js';
 import { generateOTP, sendOTPEmail, sendPasswordResetOTPEmail } from '../config/emailConfig.js';
 
 const SECRET_KEY = process.env.SECRET_KEY || 'your-secret-key';
@@ -25,14 +27,318 @@ const FACEBOOK_APP_SECRET = process.env.FACEBOOK_APP_SECRET || '';
 const ZALO_APP_ID = process.env.ZALO_APP_ID || '';
 const ZALO_APP_SECRET = process.env.ZALO_APP_SECRET || '';
 const ZALO_REDIRECT_URI = process.env.ZALO_REDIRECT_URI || '';
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
+const GEMINI_TOPIC_MODEL = process.env.GEMINI_TOPIC_MODEL || process.env.GEMINI_TEXT_MODEL || 'gemini-2.5-flash';
 const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const normalizeTopicSlug = (value) => {
+  return String(value || '').trim().toLowerCase();
+};
+
+const normalizeOptionTopicScores = (topicScores) => {
+  if (!Array.isArray(topicScores)) return [];
+
+  const normalizedScores = [];
+  for (const scoreItem of topicScores) {
+    const topicSlug = normalizeTopicSlug(scoreItem?.topicSlug);
+    const score = Number(scoreItem?.score);
+    if (!topicSlug || !Number.isFinite(score)) {
+      continue;
+    }
+
+    normalizedScores.push({
+      topicSlug,
+      score
+    });
+  }
+
+  return normalizedScores;
+};
+
+const buildQuestionOptionMap = (question) => {
+  const optionMap = new Map();
+  const options = Array.isArray(question?.options) ? question.options : [];
+
+  for (const option of options) {
+    const value = typeof option?.value === 'string' ? option.value.trim() : '';
+    if (!value) continue;
+
+    optionMap.set(value, {
+      label: typeof option?.label === 'string' && option.label.trim()
+        ? option.label.trim()
+        : value,
+      topicScores: normalizeOptionTopicScores(option?.topicScores)
+    });
+  }
+
+  return optionMap;
+};
+
+const sanitizeQuestionForClient = (question) => {
+  return {
+    _id: question._id,
+    code: question.code,
+    questionText: question.questionText,
+    questionType: question.questionType,
+    order: question.order,
+    options: Array.isArray(question.options)
+      ? question.options.map((option) => ({
+        value: option.value,
+        label: option.label
+      }))
+      : []
+  };
+};
+
+const extractGeminiText = (geminiPayload) => {
+  const parts = geminiPayload?.candidates?.[0]?.content?.parts;
+  if (!Array.isArray(parts)) return '';
+  return parts.map((part) => part?.text || '').join('\n').trim();
+};
+
+const extractFirstJsonObject = (text) => {
+  if (!text || typeof text !== 'string') return null;
+  const startIndex = text.indexOf('{');
+  const endIndex = text.lastIndexOf('}');
+  if (startIndex < 0 || endIndex <= startIndex) return null;
+  try {
+    return JSON.parse(text.slice(startIndex, endIndex + 1));
+  } catch (error) {
+    return null;
+  }
+};
+
+const inferTopicByRules = (answersPayload, topics) => {
+  if (!Array.isArray(topics) || topics.length === 0) return null;
+
+  const scoreBySlug = new Map(
+    topics.map((topic) => [normalizeTopicSlug(topic.slug), 0])
+  );
+
+  for (const answerItem of answersPayload) {
+    const values = Array.isArray(answerItem.answerValues) ? answerItem.answerValues : [];
+    const labels = Array.isArray(answerItem.answerLabels) ? answerItem.answerLabels : [];
+    const freeText = typeof answerItem.freeText === 'string' ? answerItem.freeText : '';
+    const combinedText = `${values.join(' ')} ${labels.join(' ')} ${freeText}`.toLowerCase();
+    const topicScores = Array.isArray(answerItem.topicScores) ? answerItem.topicScores : [];
+
+    for (const scoreItem of topicScores) {
+      const topicSlug = normalizeTopicSlug(scoreItem?.topicSlug);
+      const score = Number(scoreItem?.score);
+      if (topicSlug && Number.isFinite(score) && scoreBySlug.has(topicSlug)) {
+        scoreBySlug.set(topicSlug, scoreBySlug.get(topicSlug) + score);
+      }
+    }
+
+    for (const topic of topics) {
+      const keywords = Array.isArray(topic.keywords) ? topic.keywords : [];
+      const topicSlug = normalizeTopicSlug(topic.slug);
+      if (!topicSlug || !scoreBySlug.has(topicSlug)) {
+        continue;
+      }
+
+      for (const keyword of keywords) {
+        if (combinedText.includes(String(keyword).toLowerCase())) {
+          scoreBySlug.set(topicSlug, scoreBySlug.get(topicSlug) + 1);
+        }
+      }
+    }
+  }
+
+  const rankedTopics = topics
+    .map((topic) => ({
+      topic,
+      score: scoreBySlug.get(normalizeTopicSlug(topic.slug)) || 0
+    }))
+    .sort((left, right) => right.score - left.score);
+
+  const best = rankedTopics[0];
+  const second = rankedTopics[1] || null;
+
+  return {
+    topic: best?.topic || null,
+    bestScore: best?.score || 0,
+    secondScore: second?.score ?? -1,
+    scoreGap: best ? best.score - (second?.score ?? -1) : 0,
+    rankedTopics
+  };
+};
+
+const buildRuleReason = (ruleResult) => {
+  const best = ruleResult?.rankedTopics?.[0];
+  const second = ruleResult?.rankedTopics?.[1];
+  if (!best) return 'Rule-based scoring did not produce a result';
+  if (!second) {
+    return `Rule score ${best.topic.slug}:${best.score}`;
+  }
+  return `Rule score ${best.topic.slug}:${best.score}, ${second.topic.slug}:${second.score}`;
+};
+
+const shouldUseGeminiAssist = (ruleResult, answersPayload) => {
+  if (!GEMINI_API_KEY) return false;
+  if (!ruleResult?.topic) return false;
+
+  const hasMeaningfulFreeText = answersPayload.some(
+    (answerItem) =>
+      typeof answerItem?.freeText === 'string' &&
+      answerItem.freeText.trim().length >= 10
+  );
+
+  if (ruleResult.bestScore <= 0) return true;
+  if (ruleResult.scoreGap <= 1) return true;
+  if (ruleResult.scoreGap <= 2 && hasMeaningfulFreeText) return true;
+
+  return false;
+};
+
+const inferTopicByGeminiAssist = async (answersPayload, ruleResult) => {
+  if (!ruleResult?.topic || !GEMINI_API_KEY) return null;
+
+  const candidates = ruleResult.rankedTopics.slice(0, 2).map((entry) => ({
+    slug: entry.topic.slug,
+    name: entry.topic.name,
+    description: entry.topic.description,
+    score: entry.score,
+    keywords: entry.topic.keywords || []
+  }));
+
+  if (candidates.length === 0) return null;
+
+  const promptPayload = {
+    candidates,
+    ruleSummary: buildRuleReason(ruleResult),
+    answers: answersPayload
+  };
+
+  const prompt = [
+    'You are an assistant for topic tie-breaking.',
+    'The backend already scored topics using deterministic rules.',
+    'Only pick one slug from candidates.',
+    'Return JSON only in this shape:',
+    '{"topicSlug":"...","reason":"...","confidence":0.0}',
+    'topicSlug must be one candidate slug.',
+    'Reason should be concise (max 30 words).',
+    `Input: ${JSON.stringify(promptPayload)}`
+  ].join('\n');
+
+  try {
+    const geminiResponse = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(GEMINI_TOPIC_MODEL)}:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [
+            {
+              role: 'user',
+              parts: [{ text: prompt }]
+            }
+          ],
+          generationConfig: {
+            temperature: 0,
+            responseMimeType: 'application/json'
+          }
+        })
+      }
+    );
+
+    const geminiPayload = await geminiResponse.json();
+    if (!geminiResponse.ok) {
+      throw new Error(geminiPayload?.error?.message || `Gemini HTTP ${geminiResponse.status}`);
+    }
+
+    const geminiText = extractGeminiText(geminiPayload);
+    const parsedResponse = extractFirstJsonObject(geminiText);
+    const topicSlug = normalizeTopicSlug(
+      parsedResponse?.topicSlug ||
+      parsedResponse?.slug ||
+      parsedResponse?.topic ||
+      ''
+    );
+
+    const matchedTopic = candidates.find((topic) => normalizeTopicSlug(topic.slug) === topicSlug);
+    if (!matchedTopic) {
+      throw new Error('Gemini response does not contain a valid topicSlug');
+    }
+
+    const confidenceRaw = Number(parsedResponse?.confidence);
+    const confidence = Number.isFinite(confidenceRaw)
+      ? Math.max(0, Math.min(1, confidenceRaw))
+      : null;
+
+    return {
+      topic: matchedTopic,
+      source: 'gemini',
+      reason: parsedResponse?.reason || 'Tie-break selected by Gemini',
+      confidence
+    };
+  } catch (error) {
+    console.error('Gemini assist failed:', error?.message || error);
+    return null;
+  }
+};
+
+const inferPreferredTopic = async (answersPayload, topics) => {
+  const ruleResult = inferTopicByRules(answersPayload, topics);
+  if (!ruleResult?.topic) {
+    throw new BadRequestError('Không tìm thấy topic để gợi ý');
+  }
+
+  const reasonFromRule = buildRuleReason(ruleResult);
+
+  if (!shouldUseGeminiAssist(ruleResult, answersPayload)) {
+    return {
+      topic: ruleResult.topic,
+      source: 'rule_based',
+      reason: reasonFromRule,
+      confidence: ruleResult.bestScore > 0 ? 0.85 : 0.55
+    };
+  }
+
+  const geminiResult = await inferTopicByGeminiAssist(answersPayload, ruleResult);
+  if (!geminiResult) {
+    return {
+      topic: ruleResult.topic,
+      source: 'rule_based',
+      reason: `${reasonFromRule}. Gemini assist unavailable`,
+      confidence: ruleResult.bestScore > 0 ? 0.8 : 0.5
+    };
+  }
+
+  const geminiSlug = normalizeTopicSlug(geminiResult.topic.slug);
+  const matchedTopic = topics.find((topic) => normalizeTopicSlug(topic.slug) === geminiSlug);
+  if (!matchedTopic) {
+    return {
+      topic: ruleResult.topic,
+      source: 'rule_based',
+      reason: `${reasonFromRule}. Gemini slug invalid, ignore`,
+      confidence: ruleResult.bestScore > 0 ? 0.8 : 0.5
+    };
+  }
+
+  if (normalizeTopicSlug(matchedTopic.slug) === normalizeTopicSlug(ruleResult.topic.slug)) {
+    return {
+      topic: ruleResult.topic,
+      source: 'rule_based+gemini',
+      reason: `${reasonFromRule}. Gemini confirmed`,
+      confidence: geminiResult.confidence ?? 0.88
+    };
+  }
+
+  return {
+    topic: matchedTopic,
+    source: 'rule_based+gemini',
+    reason: `${reasonFromRule}. Gemini tie-break changed choice`,
+    confidence: geminiResult.confidence ?? 0.66
+  };
+};
 
 const escapeRegex = (value) => {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 };
 
-// Táº¡o Access Token
+// Tạo Access Token
 const createAccessToken = (user) => {
   return jwt.sign(
     { id: user._id, username: user.username, email: user.email },
@@ -41,7 +347,7 @@ const createAccessToken = (user) => {
   );
 };
 
-// Táº¡o Refresh Token vÃ  lÆ°u vÃ o database
+// Tạo Refresh Token và lưu vào database
 const createRefreshToken = async (user, deviceInfo = null) => {
   const token = jwt.sign(
     { id: user._id, username: user.username },
@@ -49,11 +355,11 @@ const createRefreshToken = async (user, deviceInfo = null) => {
     { expiresIn: `${REFRESH_TOKEN_EXPIRY_DAYS}d` }
   );
 
-  // TÃ­nh thá»i gian háº¿t háº¡n
+  // Tính thời gian hết hạn
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + REFRESH_TOKEN_EXPIRY_DAYS);
 
-  // LÆ°u vÃ o database
+  // Lưu vào database
   const refreshTokenDoc = new RefreshToken({
     userId: user._id,
     token,
@@ -66,30 +372,30 @@ const createRefreshToken = async (user, deviceInfo = null) => {
   return token;
 };
 
-// ÄÄƒng nháº­p
+// Đăng nhập
 export const loginController = async (req, res, next) => {
   try {
     const { username, password } = req.body;
     const deviceInfo = req.headers['user-agent'] || null;
 
-    // TÃ¬m user
+    // Tìm user
     const user = await User.findOne({ username }).populate('classId');
     if (!user) {
-      throw new UnauthorizedError('KhÃ´ng tÃ¬m tháº¥y tÃªn Ä‘Äƒng nháº­p!');
+      throw new UnauthorizedError('Không tìm thấy tên đăng nhập!');
     }
 
-    // Kiá»ƒm tra password
+    // Kiểm tra password
     const isValidPassword = await bcrypt.compare(password, user.passwordHash);
     if (!isValidPassword) {
-      throw new UnauthorizedError('Máº­t kháº©u khÃ´ng Ä‘Ãºng! Vui lÃ²ng thá»­ láº¡i.');
+      throw new UnauthorizedError('Mật khẩu không đúng! Vui lòng thử lại.');
     }
 
-    // Táº¡o tokens
+    // Tạo tokens
     const accessToken = createAccessToken(user);
     const refreshToken = await createRefreshToken(user, deviceInfo);
 
     return res.status(200).json({
-      message: 'ÄÄƒng nháº­p thÃ nh cÃ´ng',
+      message: 'Đăng nhập thành công',
       accessToken,
       refreshToken
     });
@@ -105,56 +411,56 @@ export const refreshTokenController = async (req, res, next) => {
     const deviceInfo = req.headers['user-agent'] || null;
 
     if (!refreshToken) {
-      throw new UnauthorizedError('Refresh token khÃ´ng há»£p lá»‡');
+      throw new UnauthorizedError('Refresh token không hợp lệ');
     }
 
-    // Kiá»ƒm tra refresh token cÃ³ trong database khÃ´ng
+    // Kiểm tra refresh token có trong database không
     const storedToken = await RefreshToken.findOne({ token: refreshToken });
 
     if (!storedToken) {
-      throw new UnauthorizedError('Refresh token khÃ´ng há»£p lá»‡');
+      throw new UnauthorizedError('Refresh token không hợp lệ');
     }
 
-    // Kiá»ƒm tra token Ä‘Ã£ bá»‹ revoke chÆ°a
+    // Kiểm tra token đã bị revoke chưa
     if (storedToken.isRevoked) {
-      throw new UnauthorizedError('Refresh token Ä‘Ã£ bá»‹ thu há»“i');
+      throw new UnauthorizedError('Refresh token đã bị thu hồi');
     }
 
-    // Kiá»ƒm tra token Ä‘Ã£ háº¿t háº¡n chÆ°a (theo database)
+    // Kiểm tra token đã hết hạn chưa (theo database)
     if (storedToken.expiresAt < new Date()) {
-      // XÃ³a token háº¿t háº¡n
+      // Xóa token hết hạn
       await RefreshToken.deleteOne({ _id: storedToken._id });
-      throw new UnauthorizedError('Refresh token Ä‘Ã£ háº¿t háº¡n');
+      throw new UnauthorizedError('Refresh token đã hết hạn');
     }
 
-    // Verify refresh token vá»›i JWT
+    // Verify refresh token với JWT
     let decoded;
     try {
       decoded = jwt.verify(refreshToken, SECRET_KEY);
     } catch (jwtError) {
-      // Revoke token náº¿u JWT verification fail
+      // Revoke token nếu JWT verification fail
       await RefreshToken.updateOne({ _id: storedToken._id }, { isRevoked: true });
       if (jwtError.name === 'TokenExpiredError') {
-        throw new UnauthorizedError('Refresh token Ä‘Ã£ háº¿t háº¡n');
+        throw new UnauthorizedError('Refresh token đã hết hạn');
       }
-      throw new UnauthorizedError('Refresh token khÃ´ng há»£p lá»‡');
+      throw new UnauthorizedError('Refresh token không hợp lệ');
     }
 
     const user = await User.findById(decoded.id);
 
     if (!user) {
-      throw new NotFoundError('User khÃ´ng tÃ¬m tháº¥y');
+      throw new NotFoundError('User không tìm thấy');
     }
 
-    // Revoke token cÅ© trong database
+    // Revoke token cũ trong database
     await RefreshToken.updateOne({ _id: storedToken._id }, { isRevoked: true });
 
-    // Táº¡o cáº£ access token vÃ  refresh token má»›i
+    // Tạo cả access token và refresh token mới
     const newAccessToken = createAccessToken(user);
     const newRefreshToken = await createRefreshToken(user, deviceInfo);
 
     return res.status(200).json({
-      message: 'Refresh token thÃ nh cÃ´ng',
+      message: 'Refresh token thành công',
       accessToken: newAccessToken,
       refreshToken: newRefreshToken
     });
@@ -163,14 +469,14 @@ export const refreshTokenController = async (req, res, next) => {
   }
 };
 
-// Láº¥y thÃ´ng tin user
+// Lấy thông tin user
 export const getUserController = async (req, res, next) => {
   try {
     const userId = req.user.id;
     const user = await User.findById(userId)
-      .select('_id fullName email classId characterId isGuest roles isShowCaseView');
+      .select('_id fullName email classId characterId preferredTopicId isGuest roles isShowCaseView');
 
-    if (!user) throw new NotFoundError('User khÃ´ng tÃ¬m tháº¥y');
+    if (!user) throw new NotFoundError('User không tìm thấy');
 
     return res.status(200).json({
       _id: user._id,
@@ -178,6 +484,7 @@ export const getUserController = async (req, res, next) => {
       email: user.email,
       classId: user.classId || null,
       characterId: user.characterId || null,
+      preferredTopicId: user.preferredTopicId || null,
       isGuest: user.isGuest ?? false,
       roles: user.roles || [],
       isShowCaseView: user.isShowCaseView ?? false
@@ -187,43 +494,64 @@ export const getUserController = async (req, res, next) => {
   }
 };
 
-// Äá»•i máº­t kháº©u
+export const getByPreferredTopicIdController = async (req, res, next) => {
+  try {
+    const { preferredTopicId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(preferredTopicId)) {
+      throw new BadRequestError('preferredTopicId không hợp lệ');
+    }
+
+    const topic = await Topic.findById(preferredTopicId).select('slug');
+    if (!topic) {
+      throw new NotFoundError('Topic không tìm thấy');
+    }
+
+    return res.status(200).json({
+      slugTopic: topic.slug
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Đổi mật khẩu
 export const changePasswordController = async (req, res, next) => {
   try {
     const userId = req.user.id;
     const { oldPassword, newPassword, confirmPassword } = req.body;
 
-    // Kiá»ƒm tra cÃ¡c field báº¯t buá»™c
+    // Kiểm tra các field bắt buộc
     if (!oldPassword || !newPassword || !confirmPassword) {
-      throw new BadRequestError('Vui lÃ²ng nháº­p Ä‘áº§y Ä‘á»§ thÃ´ng tin');
+      throw new BadRequestError('Vui lòng nhập đầy đủ thông tin');
     }
 
-    // Kiá»ƒm tra máº­t kháº©u má»›i vÃ  xÃ¡c nháº­n khá»›p nhau
+    // Kiểm tra mật khẩu mới và xác nhận khớp nhau
     if (newPassword !== confirmPassword) {
-      throw new BadRequestError('Máº­t kháº©u má»›i khÃ´ng khá»›p');
+      throw new BadRequestError('Mật khẩu mới không khớp');
     }
 
-    // Kiá»ƒm tra máº­t kháº©u má»›i cÃ³ khÃ¡c máº­t kháº©u cÅ©
+    // Kiểm tra mật khẩu mới có khác mật khẩu cũ
     if (oldPassword === newPassword) {
-      throw new BadRequestError('Máº­t kháº©u má»›i pháº£i khÃ¡c máº­t kháº©u cÅ©');
+      throw new BadRequestError('Mật khẩu mới phải khác mật khẩu cũ');
     }
 
-    // TÃ¬m user
+    // Tìm user
     const user = await User.findById(userId);
     if (!user) {
-      throw new NotFoundError('User khÃ´ng tÃ¬m tháº¥y');
+      throw new NotFoundError('User không tìm thấy');
     }
 
-    // Kiá»ƒm tra máº­t kháº©u cÅ©
+    // Kiểm tra mật khẩu cũ
     const isValidPassword = await bcrypt.compare(oldPassword, user.passwordHash);
     if (!isValidPassword) {
-      throw new UnauthorizedError('Máº­t kháº©u cÅ© khÃ´ng Ä‘Ãºng');
+      throw new UnauthorizedError('Mật khẩu cũ không đúng');
     }
 
-    // Hash máº­t kháº©u má»›i
+    // Hash mật khẩu mới
     const newPasswordHash = await bcrypt.hash(newPassword, 10);
 
-    // Cáº­p nháº­t user
+    // Cập nhật user
     await User.findByIdAndUpdate(
       userId,
       { passwordHash: newPasswordHash },
@@ -231,29 +559,29 @@ export const changePasswordController = async (req, res, next) => {
     );
 
     return res.status(200).json({
-      message: 'Äá»•i máº­t kháº©u thÃ nh cÃ´ng'
+      message: 'Đổi mật khẩu thành công'
     });
   } catch (error) {
     next(error);
   }
 };
 
-// Gui OTP quen mat khau
+// Gửi OTP quên mật khẩu
 export const forgotPasswordController = async (req, res, next) => {
   try {
     const { email } = req.body;
 
     if (!email || typeof email !== 'string') {
-      throw new BadRequestError('Vui lÃ²ng cung cáº¥p email');
+      throw new BadRequestError('Vui lòng cung cấp email');
     }
 
     const normalizedEmail = email.trim().toLowerCase();
     if (!EMAIL_REGEX.test(normalizedEmail)) {
-      throw new BadRequestError('Email khÃ´ng há»£p lá»‡');
+      throw new BadRequestError('Email không hợp lệ');
     }
 
     const safeResponse = {
-      message: 'Náº¿u email tá»“n táº¡i, mÃ£ OTP Ä‘áº·t láº¡i máº­t kháº©u Ä‘Ã£ Ä‘Æ°á»£c gá»­i.',
+      message: 'Nếu email tồn tại, mã OTP đặt lại mật khẩu đã được gửi.',
       email: normalizedEmail
     };
 
@@ -263,7 +591,7 @@ export const forgotPasswordController = async (req, res, next) => {
     });
 
     if (!user || user.isGuest) {
-      throw new NotFoundError('KhÃ´ng tÃ¬m tháº¥y tÃ i khoáº£n');
+      throw new NotFoundError('Không tìm thấy tài khoản');
     }
 
     const otp = generateOTP();
@@ -281,26 +609,26 @@ export const forgotPasswordController = async (req, res, next) => {
   }
 };
 
-// Dat lai mat khau bang OTP
+// Đặt lại mật khẩu bằng OTP
 export const resetPasswordController = async (req, res, next) => {
   try {
     const { email, otp, newPassword, confirmPassword } = req.body;
 
     if (!email || !otp || !newPassword || !confirmPassword) {
-      throw new BadRequestError('Vui lÃ²ng cung cáº¥p Ä‘áº§y Ä‘á»§: email, otp, newPassword, confirmPassword');
+      throw new BadRequestError('Vui lòng cung cấp đầy đủ: email, otp, newPassword, confirmPassword');
     }
 
     const normalizedEmail = email.trim().toLowerCase();
     if (!EMAIL_REGEX.test(normalizedEmail)) {
-      throw new BadRequestError('Email khÃ´ng há»£p lá»‡');
+      throw new BadRequestError('Email không hợp lệ');
     }
 
     if (newPassword.length < 8) {
-      throw new BadRequestError('Máº­t kháº©u má»›i pháº£i cÃ³ Ã­t nháº¥t 8 kÃ½ tá»±');
+      throw new BadRequestError('Mật khẩu mới phải có ít nhất 8 ký tự');
     }
 
     if (newPassword !== confirmPassword) {
-      throw new BadRequestError('Máº­t kháº©u má»›i khÃ´ng khá»›p');
+      throw new BadRequestError('Mật khẩu mới không khớp');
     }
 
     const otpRecord = await PasswordResetOTP.findOne({
@@ -309,7 +637,7 @@ export const resetPasswordController = async (req, res, next) => {
     });
 
     if (!otpRecord) {
-      throw new BadRequestError('MÃ£ OTP khÃ´ng há»£p lá»‡ hoáº·c Ä‘Ã£ háº¿t háº¡n');
+      throw new BadRequestError('Mã OTP không hợp lệ hoặc đã hết hạn');
     }
 
     const escapedEmail = escapeRegex(normalizedEmail);
@@ -319,13 +647,13 @@ export const resetPasswordController = async (req, res, next) => {
 
     if (!user || user.isGuest) {
       await PasswordResetOTP.deleteOne({ _id: otpRecord._id });
-      throw new NotFoundError('User khÃ´ng tÃ¬m tháº¥y');
+      throw new NotFoundError('User không tìm thấy');
     }
 
     if (user.passwordHash) {
       const isSamePassword = await bcrypt.compare(newPassword, user.passwordHash);
       if (isSamePassword) {
-        throw new BadRequestError('Máº­t kháº©u má»›i pháº£i khÃ¡c máº­t kháº©u cÅ©');
+        throw new BadRequestError('Mật khẩu mới phải khác mật khẩu cũ');
       }
     }
 
@@ -336,7 +664,7 @@ export const resetPasswordController = async (req, res, next) => {
     await RefreshToken.updateMany({ userId: user._id }, { isRevoked: true });
 
     return res.status(200).json({
-      message: 'Äáº·t láº¡i máº­t kháº©u thÃ nh cÃ´ng. Vui lÃ²ng Ä‘Äƒng nháº­p láº¡i.'
+      message: 'Đặt lại mật khẩu thành công. Vui lòng đăng nhập lại.'
     });
   } catch (error) {
     next(error);
@@ -357,38 +685,38 @@ export const logoutController = async (req, res, next) => {
       );
     }
 
-    // Náº¿u cÃ³ userId, xÃ³a táº¥t cáº£ refresh tokens cá»§a user (optional - logout khá»i táº¥t cáº£ thiáº¿t bá»‹)
+    // Nếu có userId, xóa tất cả refresh tokens của user (optional - logout khỏi tất cả thiết bị)
     await RefreshToken.updateMany({ userId }, { isRevoked: true });
 
-    // // Náº¿u lÃ  guest, xÃ³a táº¥t cáº£ dá»¯ liá»‡u liÃªn quan
+    // // Nếu là guest, xóa tất cả dữ liệu liên quan
     // if (userId) {
     //   const user = await User.findById(userId);
     //   if (user && user.isGuest) {
-    //     // XÃ³a táº¥t cáº£ refresh tokens cá»§a guest
+    //     // Xóa tất cả refresh tokens của guest
     //     await RefreshToken.deleteMany({ userId });
     //     await deleteGuestData(userId);
     //   }
     // }
 
-    return res.status(200).json({ message: 'ÄÄƒng xuáº¥t thÃ nh cÃ´ng' });
+    return res.status(200).json({ message: 'Đăng xuất thành công' });
   } catch (error) {
     next(error);
   }
 };
 
-// ÄÄƒng nháº­p khÃ¡ch (Guest Login)
+// Đăng nhập khách (Guest Login)
 export const guestLoginController = async (req, res, next) => {
   try {
-    const { fullName = 'NgÆ°á»i dÃ¹ng' } = req.body;
+    const { fullName = 'Người dùng' } = req.body;
 
-    // Táº¡o thá»i gian háº¿t háº¡n (7 ngÃ y tá»« bÃ¢y giá»)
+    // Tạo thời gian hết hạn (7 ngày từ bây giờ)
     const guestExpiresAt = new Date();
     guestExpiresAt.setDate(guestExpiresAt.getDate() + parseInt(GUEST_EXPIRY_DAYS));
 
-    // Táº¡o unique ID cho guest Ä‘á»ƒ trÃ¡nh trÃ¹ng láº·p
+    // Tạo unique ID cho guest để tránh trùng lặp
     const guestId = `guest_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
 
-    // Táº¡o guest user vá»›i username vÃ  email unique
+    // Tạo guest user với username và email unique
     const guestUser = new User({
       fullName,
       isGuest: true,
@@ -400,18 +728,18 @@ export const guestLoginController = async (req, res, next) => {
 
     await guestUser.save();
 
-    // Táº¡o reward record cho guest
+    // Tạo reward record cho guest
     const reward = new Reward({ userId: guestUser._id });
     await reward.save();
 
     const deviceInfo = req.headers['user-agent'] || null;
 
-    // Táº¡o tokens
+    // Tạo tokens
     const accessToken = createAccessToken(guestUser);
     const refreshToken = await createRefreshToken(guestUser, deviceInfo);
 
     return res.status(201).json({
-      message: 'ÄÄƒng nháº­p khÃ¡ch thÃ nh cÃ´ng',
+      message: 'Đăng nhập khách thành công',
       accessToken,
       refreshToken,
       user: {
@@ -426,7 +754,7 @@ export const guestLoginController = async (req, res, next) => {
   }
 };
 
-// Verify Google ID token (Android / Flutter client) hoáº·c accessToken (Web)
+// Verify Google ID token (Android / Flutter client) hoặc accessToken (Web)
 export const googleTokenController = async (req, res, next) => {
   try {
     const { token } = req.body;
@@ -451,7 +779,7 @@ export const googleTokenController = async (req, res, next) => {
       }
       payload = ticket.getPayload();
     } else {
-      // Sá»­ dá»¥ng accessToken Ä‘á»ƒ láº¥y thÃ´ng tin user tá»« Google API (Web)
+      // Sử dụng accessToken để lấy thông tin user từ Google API (Web)
       try {
         const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
           headers: {
@@ -464,7 +792,7 @@ export const googleTokenController = async (req, res, next) => {
         }
 
         const userInfo = await response.json();
-        // Map userinfo response to payload format tÆ°Æ¡ng tá»± idToken
+        // Map userinfo response to payload format tương tự idToken
         payload = {
           sub: userInfo.sub,
           email: userInfo.email,
@@ -962,16 +1290,16 @@ export const zaloCodeController = async (req, res, next) => {
     next(error);
   }
 };
-// XÃ³a táº¥t cáº£ dá»¯ liá»‡u liÃªn quan Ä‘áº¿n guest
+// Xóa tất cả dữ liệu liên quan đến guest
 const deleteGuestData = async (userId) => {
   try {
-    // XÃ³a UserActivity - lá»‹ch sá»­ hoáº¡t Ä‘á»™ng cá»§a user
+    // Xóa UserActivity - lịch sử hoạt động của user
     const deletedActivities = await UserActivity.deleteMany({ userId });
 
-    // XÃ³a Reward - Ä‘iá»ƒm thÆ°á»Ÿng cá»§a user
+    // Xóa Reward - điểm thưởng của user
     const deletedRewards = await Reward.deleteMany({ userId });
 
-    // XÃ³a User
+    // Xóa User
     await User.findByIdAndDelete(userId);
 
     console.log(`Deleted guest user ${userId}:`, {
@@ -992,64 +1320,64 @@ const deleteGuestData = async (userId) => {
   }
 };
 
-// API Ä‘á»ƒ xÃ³a guest thá»§ cÃ´ng (khi user xÃ³a app hoáº·c muá»‘n xÃ³a tÃ i khoáº£n khÃ¡ch)
+// API để xóa guest thủ công (khi user xóa app hoặc muốn xóa tài khoản khách)
 export const deleteGuestController = async (req, res, next) => {
   try {
     const userId = req.user.id;
 
     const user = await User.findById(userId);
     if (!user) {
-      throw new NotFoundError('User khÃ´ng tÃ¬m tháº¥y');
+      throw new NotFoundError('User không tìm thấy');
     }
 
     if (!user.isGuest) {
-      throw new BadRequestError('Chá»‰ cÃ³ thá»ƒ xÃ³a tÃ i khoáº£n khÃ¡ch');
+      throw new BadRequestError('Chỉ có thể xóa tài khoản khách');
     }
 
     await deleteGuestData(userId);
 
-    return res.status(200).json({ message: 'XÃ³a tÃ i khoáº£n khÃ¡ch thÃ nh cÃ´ng' });
+    return res.status(200).json({ message: 'Xóa tài khoản khách thành công' });
   } catch (error) {
     next(error);
   }
 };
 
-// BÆ°á»›c 1: Gá»­i OTP Ä‘á»ƒ chuyá»ƒn guest sang user thÆ°á»ng
+// Bước 1: Gửi OTP để chuyển guest sang user thường
 export const sendOTPForConvertController = async (req, res, next) => {
   try {
     const userId = req.user.id;
     const { username, email, password, fullName } = req.body;
 
     if (!username || !email || !password || !fullName) {
-      throw new BadRequestError('Vui lÃ²ng Ä‘iá»n Ä‘áº§y Ä‘á»§: username, email, password, fullName');
+      throw new BadRequestError('Vui lòng điền đầy đủ: username, email, password, fullName');
     }
 
     if (password.length < 8) {
-      throw new BadRequestError('Máº­t kháº©u pháº£i cÃ³ Ã­t nháº¥t 8 kÃ½ tá»±');
+      throw new BadRequestError('Mật khẩu phải có ít nhất 8 ký tự');
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
-      throw new BadRequestError('Email khÃ´ng há»£p lá»‡');
+      throw new BadRequestError('Email không hợp lệ');
     }
 
     const user = await User.findById(userId);
-    if (!user) throw new NotFoundError('User khÃ´ng tÃ¬m tháº¥y');
-    if (!user.isGuest) throw new BadRequestError('TÃ i khoáº£n nÃ y Ä‘Ã£ lÃ  user thÆ°á»ng');
+    if (!user) throw new NotFoundError('User không tìm thấy');
+    if (!user.isGuest) throw new BadRequestError('Tài khoản này đã là user thường');
 
-    // Kiá»ƒm tra username/email Ä‘Ã£ tá»“n táº¡i á»Ÿ user khÃ¡c
+    // Kiểm tra username/email đã tồn tại ở user khác
     const existingUser = await User.findOne({
       $or: [{ username }, { email }],
       _id: { $ne: userId }
     });
     if (existingUser) {
-      throw new BadRequestError('Username hoáº·c email Ä‘Ã£ tá»“n táº¡i');
+      throw new BadRequestError('Username hoặc email đã tồn tại');
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
     const otp = generateOTP();
 
-    // XÃ³a OTP cÅ© cá»§a email nÃ y (náº¿u cÃ³)
+    // Xóa OTP cũ của email này (nếu có)
     await OTPVerification.deleteMany({ email });
 
     const otpVerification = new OTPVerification({
@@ -1067,7 +1395,7 @@ export const sendOTPForConvertController = async (req, res, next) => {
     });
 
     return res.status(200).json({
-      message: 'OTP Ä‘Ã£ Ä‘Æ°á»£c gá»­i Ä‘áº¿n email cá»§a báº¡n. Vui lÃ²ng kiá»ƒm tra vÃ  nháº­p mÃ£ OTP.',
+      message: 'OTP đã được gửi đến email của bạn. Vui lòng kiểm tra và nhập mã OTP.',
       email
     });
   } catch (error) {
@@ -1075,47 +1403,47 @@ export const sendOTPForConvertController = async (req, res, next) => {
   }
 };
 
-// BÆ°á»›c 2: XÃ¡c thá»±c OTP vÃ  hoÃ n táº¥t chuyá»ƒn Ä‘á»•i guest sang user thÆ°á»ng
+// Bước 2: Xác thực OTP và hoàn tất chuyển đổi guest sang user thường
 export const verifyOTPAndConvertController = async (req, res, next) => {
   try {
     const { email, otp } = req.body;
 
     if (!email || !otp) {
-      throw new BadRequestError('Vui lÃ²ng cung cáº¥p email vÃ  mÃ£ OTP');
+      throw new BadRequestError('Vui lòng cung cấp email và mã OTP');
     }
 
     const otpRecord = await OTPVerification.findOne({ email, otp });
     if (!otpRecord) {
-      throw new BadRequestError('MÃ£ OTP khÃ´ng há»£p lá»‡ hoáº·c Ä‘Ã£ háº¿t háº¡n');
+      throw new BadRequestError('Mã OTP không hợp lệ hoặc đã hết hạn');
     }
 
     if (!otpRecord.guestUserId) {
       await OTPVerification.deleteOne({ _id: otpRecord._id });
-      throw new BadRequestError('OTP nÃ y khÃ´ng dÃ¹ng Ä‘á»ƒ chuyá»ƒn Ä‘á»•i tÃ i khoáº£n');
+      throw new BadRequestError('OTP này không dùng để chuyển đổi tài khoản');
     }
 
     const user = await User.findById(otpRecord.guestUserId);
     if (!user) {
       await OTPVerification.deleteOne({ _id: otpRecord._id });
-      throw new NotFoundError('User khÃ´ng tÃ¬m tháº¥y');
+      throw new NotFoundError('User không tìm thấy');
     }
 
     if (!user.isGuest) {
       await OTPVerification.deleteOne({ _id: otpRecord._id });
-      throw new BadRequestError('TÃ i khoáº£n nÃ y Ä‘Ã£ lÃ  user thÆ°á»ng');
+      throw new BadRequestError('Tài khoản này đã là user thường');
     }
 
-    // Kiá»ƒm tra láº¡i username/email chÆ°a bá»‹ chiáº¿m
+    // Kiểm tra lại username/email chưa bị chiếm
     const existingUser = await User.findOne({
       $or: [{ username: otpRecord.username }, { email: otpRecord.email }],
       _id: { $ne: user._id }
     });
     if (existingUser) {
       await OTPVerification.deleteOne({ _id: otpRecord._id });
-      throw new BadRequestError('Username hoáº·c email Ä‘Ã£ tá»“n táº¡i');
+      throw new BadRequestError('Username hoặc email đã tồn tại');
     }
 
-    // Cáº­p nháº­t guest thÃ nh user thÆ°á»ng, giá»¯ nguyÃªn toÃ n bá»™ dá»¯ liá»‡u há»c táº­p
+    // Cập nhật guest thành user thường, giữ nguyên toàn bộ dữ liệu học tập
     await User.findByIdAndUpdate(user._id, {
       username: otpRecord.username,
       email: otpRecord.email,
@@ -1129,43 +1457,224 @@ export const verifyOTPAndConvertController = async (req, res, next) => {
     await OTPVerification.deleteOne({ _id: otpRecord._id });
 
     return res.status(200).json({
-      message: 'Chuyá»ƒn Ä‘á»•i tÃ i khoáº£n thÃ nh cÃ´ng! Dá»¯ liá»‡u há»c táº­p Ä‘Æ°á»£c giá»¯ nguyÃªn.'
+      message: 'Chuyển đổi tài khoản thành công! Dữ liệu học tập được giữ nguyên.'
     });
   } catch (error) {
     next(error);
   }
 };
 
-// Báº­t isShowCaseView (táº¡o náº¿u chÆ°a cÃ³, cáº­p nháº­t náº¿u Ä‘Ã£ cÃ³)
-export const setShowCaseViewController = async (req, res, next) => {
+// Lấy bộ câu hỏi sở thích để client hiển thị onboarding
+export const getPreferenceQuestionsController = async (req, res, next) => {
   try {
     const userId = req.user.id;
-    await User.findByIdAndUpdate(userId, { $set: { isShowCaseView: true } }, { upsert: false });
-    return res.status(200).json({ message: 'Cáº­p nháº­t isShowCaseView thÃ nh cÃ´ng', isShowCaseView: true });
+    const [questions, user] = await Promise.all([
+      PreferenceQuestion.find({ isActive: true })
+        .sort({ order: 1 })
+        .select('_id code questionText questionType options order')
+        .lean(),
+      User.findById(userId)
+        .select('_id')
+        .lean()
+    ]);
+
+    if (!user) {
+      throw new NotFoundError('User không tìm thấy');
+    }
+
+    const safeQuestions = questions.map(sanitizeQuestionForClient);
+
+    return res.status(200).json({
+      questions: safeQuestions
+    });
   } catch (error) {
     next(error);
   }
 };
 
-// Äá»•i tÃªn Ä‘áº§y Ä‘á»§ (fullName) cá»§a user
+export const submitPreferenceAnswersController = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const { answers } = req.body || {};
+
+    if (!Array.isArray(answers) || answers.length === 0) {
+      throw new BadRequestError('answers phải là mảng và không được rỗng');
+    }
+
+    const answerByCode = new Map();
+    for (const answerItem of answers) {
+      const questionCode =
+        typeof answerItem?.questionCode === 'string'
+          ? answerItem.questionCode.trim()
+          : '';
+      if (!questionCode) continue;
+      answerByCode.set(questionCode, answerItem.answer);
+    }
+
+    if (answerByCode.size === 0) {
+      throw new BadRequestError('Không có questionCode hợp lệ trong answers');
+    }
+
+    const questionCodes = Array.from(answerByCode.keys());
+
+    const questions = await PreferenceQuestion.find({
+      code: { $in: questionCodes },
+      isActive: true
+    }).lean();
+
+    const questionByCode = new Map(questions.map((question) => [question.code, question]));
+    const normalizedAnswers = [];
+
+    for (const questionCode of questionCodes) {
+      const question = questionByCode.get(questionCode);
+      if (!question) {
+        throw new BadRequestError(`questionCode không hợp lệ: ${questionCode}`);
+      }
+
+      const rawAnswer = answerByCode.get(questionCode);
+      const optionMap = buildQuestionOptionMap(question);
+      const allowedValues = new Set(optionMap.keys());
+
+      if (question.questionType === 'single') {
+        const value = typeof rawAnswer === 'string' ? rawAnswer.trim() : '';
+        if (!value) {
+          throw new BadRequestError(`Câu hỏi ${questionCode} cần một giá trị string`);
+        }
+        if (allowedValues.size > 0 && !allowedValues.has(value)) {
+          throw new BadRequestError(`Giá trị không hợp lệ cho câu hỏi ${questionCode}`);
+        }
+
+        const optionMeta = optionMap.get(value) || null;
+        normalizedAnswers.push({
+          questionCode,
+          questionText: question.questionText,
+          answerValues: [value],
+          answerLabels: [optionMeta?.label || value],
+          freeText: '',
+          topicScores: optionMeta?.topicScores || []
+        });
+        continue;
+      }
+
+      if (question.questionType === 'multiple') {
+        if (!Array.isArray(rawAnswer) || rawAnswer.length === 0) {
+          throw new BadRequestError(`Câu hỏi ${questionCode} cần một mảng giá trị`);
+        }
+
+        const uniqueValues = Array.from(
+          new Set(
+            rawAnswer
+              .map((value) => (typeof value === 'string' ? value.trim() : ''))
+              .filter(Boolean)
+          )
+        );
+
+        if (uniqueValues.length === 0) {
+          throw new BadRequestError(`Câu hỏi ${questionCode} cần ít nhất 1 giá trị`);
+        }
+
+        if (allowedValues.size > 0) {
+          const invalidValue = uniqueValues.find((value) => !allowedValues.has(value));
+          if (invalidValue) {
+            throw new BadRequestError(`Giá trị "${invalidValue}" không hợp lệ cho ${questionCode}`);
+          }
+        }
+
+        const mergedTopicScores = [];
+        for (const value of uniqueValues) {
+          const optionMeta = optionMap.get(value);
+          if (optionMeta?.topicScores?.length) {
+            mergedTopicScores.push(...optionMeta.topicScores);
+          }
+        }
+
+        normalizedAnswers.push({
+          questionCode,
+          questionText: question.questionText,
+          answerValues: uniqueValues,
+          answerLabels: uniqueValues.map((value) => optionMap.get(value)?.label || value),
+          freeText: '',
+          topicScores: mergedTopicScores
+        });
+        continue;
+      }
+
+      const textAnswer = typeof rawAnswer === 'string' ? rawAnswer.trim() : '';
+      if (!textAnswer) {
+        continue;
+      }
+
+      normalizedAnswers.push({
+        questionCode,
+        questionText: question.questionText,
+        answerValues: [],
+        answerLabels: [],
+        freeText: textAnswer,
+        topicScores: []
+      });
+    }
+
+    if (normalizedAnswers.length === 0) {
+      throw new BadRequestError('Không có câu trả lời hợp lệ để suy ra topic');
+    }
+
+    const topics = await Topic.find({ isActive: true }).lean();
+    if (topics.length === 0) {
+      throw new BadRequestError('Danh sách topic đang rỗng');
+    }
+
+    const inferredResult = await inferPreferredTopic(normalizedAnswers, topics);
+
+    const user = await User.findById(userId);
+    if (!user) {
+      throw new NotFoundError('User không tìm thấy');
+    }
+
+    user.preferredTopicId = inferredResult.topic._id;
+    await user.save();
+
+    return res.status(200).json({
+      message: 'Cập nhật topic yêu thích thành công',
+      slugTopic: inferredResult.topic.slug,
+      source: inferredResult.source,
+      confidence: inferredResult.confidence,
+      reason: inferredResult.reason
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Bật isShowCaseView (tạo nếu chưa có, cập nhật nếu đã có)
+export const setShowCaseViewController = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    await User.findByIdAndUpdate(userId, { $set: { isShowCaseView: true } }, { upsert: false });
+    return res.status(200).json({ message: 'Cập nhật isShowCaseView thành công', isShowCaseView: true });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Đổi tên đầy đủ (fullName) của user
 export const changeFullNameController = async (req, res, next) => {
   try {
     const userId = req.user.id;
     const { fullName } = req.body;
 
     if (!fullName || typeof fullName !== 'string' || fullName.trim().length === 0) {
-      throw new BadRequestError('fullName khÃ´ng Ä‘Æ°á»£c Ä‘á»ƒ trá»‘ng');
+      throw new BadRequestError('fullName không được để trống');
     }
 
     const user = await User.findById(userId);
     if (!user) {
-      throw new NotFoundError('User khÃ´ng tÃ¬m tháº¥y');
+      throw new NotFoundError('User không tìm thấy');
     }
 
     user.fullName = fullName.trim();
     await user.save();
 
-    return res.status(200).json({ message: 'Cáº­p nháº­t tÃªn thÃ nh cÃ´ng', fullName: user.fullName });
+    return res.status(200).json({ message: 'Cập nhật tên thành công', fullName: user.fullName });
   } catch (error) {
     next(error);
   }
@@ -1178,18 +1687,18 @@ export const changeFullNameAndAttachCharacterController = async (req, res, next)
     const { fullName, characterId, gender } = req.body || {};
 
     if (!fullName || typeof fullName !== 'string' || fullName.trim().length === 0) {
-      throw new BadRequestError('fullName khÃ´ng Ä‘Æ°á»£c Ä‘á»ƒ trá»‘ng');
+      throw new BadRequestError('fullName không được để trống');
     }
 
     if (!characterId) {
-      throw new BadRequestError('characterId lÃ  báº¯t buá»™c');
+      throw new BadRequestError('characterId là bắt buộc');
     }
 
     const user = await User.findById(userId);
-    if (!user) throw new NotFoundError('User khÃ´ng tÃ¬m tháº¥y');
+    if (!user) throw new NotFoundError('User không tìm thấy');
 
     const character = await Character.findById(characterId);
-    if (!character) throw new NotFoundError('Character khÃ´ng tÃ¬m tháº¥y');
+    if (!character) throw new NotFoundError('Character không tìm thấy');
 
     // Apply updates: store reference to character id
     user.fullName = fullName.trim();
@@ -1197,14 +1706,14 @@ export const changeFullNameAndAttachCharacterController = async (req, res, next)
     if (gender !== undefined && gender !== null) {
       const normalizedGender = Number(gender);
       if (!Number.isInteger(normalizedGender) || ![0, 1].includes(normalizedGender)) {
-        throw new BadRequestError('gender phai la 0 hoac 1');
+        throw new BadRequestError('gender phải là 0 hoặc 1');
       }
       user.gender = normalizedGender;
     }
     await user.save();
 
     return res.status(200).json({
-      message: 'Cáº­p nháº­t tÃªn vÃ  gÃ¡n character thÃ nh cÃ´ng',
+      message: 'Cập nhật tên và gán character thành công',
       fullName: user.fullName,
       characterId: user.characterId,
       gender: user.gender
@@ -1214,43 +1723,43 @@ export const changeFullNameAndAttachCharacterController = async (req, res, next)
   }
 };
 
-// Gá»­i OTP Ä‘á»ƒ Ä‘Äƒng kÃ½
+// Gửi OTP để đăng ký
 export const sendOTPForRegisterController = async (req, res, next) => {
   try {
     const { username, email, password, fullName } = req.body;
 
     // Validation
     if (!username || !email || !password || !fullName) {
-      throw new BadRequestError('Vui lÃ²ng Ä‘iá»n Ä‘áº§y Ä‘á»§ thÃ´ng tin: username, email, password, fullName');
+      throw new BadRequestError('Vui lòng điền đầy đủ thông tin: username, email, password, fullName');
     }
 
     // Validate password length
     if (password.length < 8) {
-      throw new BadRequestError('Máº­t kháº©u pháº£i cÃ³ Ã­t nháº¥t 8 kÃ½ tá»±');
+      throw new BadRequestError('Mật khẩu phải có ít nhất 8 ký tự');
     }
 
     // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
-      throw new BadRequestError('Email khÃ´ng há»£p lá»‡');
+      throw new BadRequestError('Email không hợp lệ');
     }
 
-    // Kiá»ƒm tra user Ä‘Ã£ tá»“n táº¡i
+    // Kiểm tra user đã tồn tại
     const existingUser = await User.findOne({ $or: [{ username }, { email }] });
     if (existingUser) {
-      throw new BadRequestError('Username hoáº·c email Ä‘Ã£ tá»“n táº¡i');
+      throw new BadRequestError('Username hoặc email đã tồn tại');
     }
 
     // Hash password
     const passwordHash = await bcrypt.hash(password, 10);
 
-    // Táº¡o OTP
+    // Tạo OTP
     const otp = generateOTP();
 
-    // XÃ³a OTP cÅ© cá»§a email nÃ y (náº¿u cÃ³)
+    // Xóa OTP cũ của email này (nếu có)
     await OTPVerification.deleteMany({ email });
 
-    // LÆ°u thÃ´ng tin táº¡m thá»i cÃ¹ng OTP
+    // Lưu thông tin tạm thời cùng OTP
     const otpVerification = new OTPVerification({
       email,
       otp,
@@ -1261,13 +1770,13 @@ export const sendOTPForRegisterController = async (req, res, next) => {
 
     await otpVerification.save();
 
-    // Gá»­i OTP qua email (asynchronous - khÃ´ng chá» gá»­i xong)
+    // Gửi OTP qua email (asynchronous - không chờ gửi xong)
     sendOTPEmail(email, otp, fullName).catch((error) => {
       console.error(`Failed to send OTP email to ${email}:`, error);
     });
 
     return res.status(200).json({
-      message: 'OTP Ä‘Ã£ Ä‘Æ°á»£c gá»­i Ä‘áº¿n email cá»§a báº¡n. Vui lÃ²ng kiá»ƒm tra vÃ  nháº­p mÃ£ OTP.',
+      message: 'OTP đã được gửi đến email của bạn. Vui lòng kiểm tra và nhập mã OTP.',
       email: email
     });
   } catch (error) {
@@ -1275,35 +1784,35 @@ export const sendOTPForRegisterController = async (req, res, next) => {
   }
 };
 
-// XÃ¡c thá»±c OTP vÃ  hoÃ n táº¥t Ä‘Äƒng kÃ½
+// Xác thực OTP và hoàn tất đăng ký
 export const verifyOTPAndRegisterController = async (req, res, next) => {
   try {
     const { email, otp } = req.body;
 
     // Validation
     if (!email || !otp) {
-      throw new BadRequestError('Vui lÃ²ng cung cáº¥p email vÃ  mÃ£ OTP');
+      throw new BadRequestError('Vui lòng cung cấp email và mã OTP');
     }
 
-    // TÃ¬m OTP verification record
+    // Tìm OTP verification record
     const otpRecord = await OTPVerification.findOne({ email, otp });
 
     if (!otpRecord) {
-      throw new BadRequestError('MÃ£ OTP khÃ´ng há»£p lá»‡ hoáº·c Ä‘Ã£ háº¿t háº¡n');
+      throw new BadRequestError('Mã OTP không hợp lệ hoặc đã hết hạn');
     }
 
-    // Kiá»ƒm tra láº¡i user cÃ³ tá»“n táº¡i khÃ´ng (double check)
+    // Kiểm tra lại user có tồn tại không (double check)
     const existingUser = await User.findOne({
       $or: [{ username: otpRecord.username }, { email: otpRecord.email }]
     });
 
     if (existingUser) {
-      // XÃ³a OTP record
+      // Xóa OTP record
       await OTPVerification.deleteOne({ _id: otpRecord._id });
-      throw new BadRequestError('Username hoáº·c email Ä‘Ã£ tá»“n táº¡i');
+      throw new BadRequestError('Username hoặc email đã tồn tại');
     }
 
-    // Táº¡o user má»›i tá»« thÃ´ng tin Ä‘Ã£ lÆ°u
+    // Tạo user mới từ thông tin đã lưu
     const newUser = new User({
       username: otpRecord.username,
       email: otpRecord.email,
@@ -1322,19 +1831,19 @@ export const verifyOTPAndRegisterController = async (req, res, next) => {
 
     await newUser.save();
 
-    // Táº¡o reward record
+    // Tạo reward record
     const reward = new Reward({ userId: newUser._id });
     await reward.save();
 
-    // XÃ³a OTP record sau khi Ä‘Äƒng kÃ½ thÃ nh cÃ´ng
+    // Xóa OTP record sau khi đăng ký thành công
     await OTPVerification.deleteOne({ _id: otpRecord._id });
 
-    // Táº¡o tokens
+    // Tạo tokens
     const accessToken = createAccessToken(newUser);
     const refreshToken = await createRefreshToken(newUser);
 
     return res.status(201).json({
-      message: 'ÄÄƒng kÃ½ thÃ nh cÃ´ng',
+      message: 'Đăng ký thành công',
       accessToken,
       refreshToken,
       user: {
@@ -1349,4 +1858,3 @@ export const verifyOTPAndRegisterController = async (req, res, next) => {
     next(error);
   }
 };
-

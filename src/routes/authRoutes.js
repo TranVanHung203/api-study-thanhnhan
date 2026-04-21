@@ -1,4 +1,4 @@
-import express from 'express';
+﻿import express from 'express';
 import {
   loginController,
   refreshTokenController,
@@ -20,6 +20,9 @@ import {
   , sendOTPForRegisterController
   , verifyOTPAndRegisterController
   , setShowCaseViewController
+  , getPreferenceQuestionsController
+  , submitPreferenceAnswersController
+  , getByPreferredTopicIdController
 } from '../controllers/authController.js';
 import { authToken, requireGuest } from '../middlewares/authMiddleware.js';
 
@@ -279,10 +282,73 @@ router.post('/reset-password', resetPasswordController);
  *     responses:
  *       200:
  *         description: Thông tin user
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 _id:
+ *                   type: string
+ *                 fullName:
+ *                   type: string
+ *                 email:
+ *                   type: string
+ *                   nullable: true
+ *                 classId:
+ *                   type: string
+ *                   nullable: true
+ *                 characterId:
+ *                   type: string
+ *                   nullable: true
+ *                 preferredTopicId:
+ *                   type: string
+ *                   nullable: true
+ *                 isGuest:
+ *                   type: boolean
+ *                 roles:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *                 isShowCaseView:
+ *                   type: boolean
  *       401:
  *         description: Không có token hoặc token không hợp lệ
  */
 router.get('/me', authToken, getUserController);
+
+/**
+ * @swagger
+ * /auth/by-preferred-topic/{preferredTopicId}:
+ *   get:
+ *     summary: Lấy slug của topic theo preferredTopicId
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: preferredTopicId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Topic ID cần lọc
+ *     responses:
+ *       200:
+ *         description: Trả về slug của topic
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 slug:
+ *                   type: string
+ *       400:
+ *         description: preferredTopicId không hợp lệ
+ *       404:
+ *         description: Topic không tìm thấy
+ *       401:
+ *         description: Chưa xác thực
+ */
+router.get('/by-preferred-topic/:preferredTopicId', authToken, getByPreferredTopicIdController);
 
 /**
  * @swagger
@@ -398,6 +464,65 @@ router.get('/logout', authToken, logoutController);
  *         description: Cập nhật tên và gán character thành công
  */
 router.post('/change-fullname-and-attach', authToken, changeFullNameAndAttachCharacterController);
+
+/**
+ * @swagger
+ * /auth/preference/questions:
+ *   get:
+ *     summary: Lấy bộ câu hỏi sở thích onboarding
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Lấy dữ liệu preference thành công
+ *       401:
+ *         description: Chưa xác thực hoặc token không hợp lệ
+ */
+router.get('/preference/questions', authToken, getPreferenceQuestionsController);
+
+/**
+ * @swagger
+ * /auth/preference/submit:
+ *   post:
+ *     summary: Gửi câu trả lời preference để cập nhật topic yêu thích
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - answers
+ *             properties:
+ *               answers:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   required:
+ *                     - questionCode
+ *                     - answer
+ *                   properties:
+ *                     questionCode:
+ *                       type: string
+ *                     answer:
+ *                       oneOf:
+ *                         - type: string
+ *                         - type: array
+ *                           items:
+ *                             type: string
+ *     responses:
+ *       200:
+ *         description: Cập nhật topic yêu thích thành công
+ *       400:
+ *         description: answers không hợp lệ hoặc không suy ra được topic
+ *       401:
+ *         description: Chưa xác thực hoặc token không hợp lệ
+ */
+router.post('/preference/submit', authToken, submitPreferenceAnswersController);
 
 /**
  * @swagger
@@ -776,3 +901,4 @@ router.post('/guest/convert/verify', authToken, requireGuest, verifyOTPAndConver
 router.post('/set-showcase-view', authToken, setShowCaseViewController);
 
 export default router;
+

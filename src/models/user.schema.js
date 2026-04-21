@@ -70,6 +70,11 @@ const UserSchema = new mongoose.Schema({
     ref: 'Character',
     default: null
   },
+  preferredTopicId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Topic',
+    default: null
+  },
   // Roles in system: 'student', 'teacher', 'researchobject'
   roles: {
     type: [String],

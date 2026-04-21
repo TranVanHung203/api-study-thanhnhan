@@ -5,7 +5,8 @@
   "main": "app.js",
   "scripts": {
     "start": "nodemon ./src/server.js",
-    "backup:ocean-math": "node ./scripts/backupLearningAppToOceanMath.js"
+    "backup:ocean-math": "node ./scripts/backupLearningAppToOceanMath.js",
+    "seed:onboarding": "node ./scripts/seedOnboardingConfig.js"
   },
   "author": "",
   "license": "ISC",

@@ -1,0 +1,105 @@
+{
+  "topics": [
+    {
+      "slug": "ocean",
+      "name": "Đại dương",
+      "description": "Người học thích không gian biển, sóng, đảo và trải nghiệm trên nước.",
+      "keywords": ["đại dương", "dai duong", "biển", "bien", "sóng", "song", "đảo", "dao", "nước", "nuoc", "ocean", "sea", "beach", "wave", "water", "island"],
+      "isActive": true
+    },
+    {
+      "slug": "desert",
+      "name": "Sa mạc",
+      "description": "Người học thích không gian sa mạc, đồi cát, nắng nóng và hành trình khô hạn.",
+      "keywords": ["sa mạc", "sa mac", "cát", "cat", "đồi cát", "doi cat", "nắng", "nang", "nóng", "nong", "desert", "sand", "dune", "sun", "heat", "dry"],
+      "isActive": true
+    }
+  ],
+  "questions": [
+    {
+      "code": "scene_preference",
+      "questionText": "Bạn thích khung cảnh nào hơn?",
+      "questionType": "single",
+      "order": 1,
+      "isActive": true,
+      "options": [
+        {
+          "value": "blue_ocean",
+          "label": "Biển xanh, gió mát, sóng nhẹ",
+          "topicScores": [{ "topicSlug": "ocean", "score": 5 }]
+        },
+        {
+          "value": "golden_dunes",
+          "label": "Đồi cát vàng, nắng nóng, không khí khô",
+          "topicScores": [{ "topicSlug": "desert", "score": 5 }]
+        }
+      ]
+    },
+    {
+      "code": "weekend_activity",
+      "questionText": "Nếu đi chơi cuối tuần, bạn chọn hoạt động nào?",
+      "questionType": "single",
+      "order": 2,
+      "isActive": true,
+      "options": [
+        {
+          "value": "snorkeling",
+          "label": "Lặn ngắm khám phá sinh vật biển",
+          "topicScores": [{ "topicSlug": "ocean", "score": 4 }]
+        },
+        {
+          "value": "sailing",
+          "label": "Đi thuyền ngắm mặt trời lặn",
+          "topicScores": [{ "topicSlug": "ocean", "score": 4 }]
+        },
+        {
+          "value": "camel_ride",
+          "label": "Cưỡi lạc đà băng qua đồi cát",
+          "topicScores": [{ "topicSlug": "desert", "score": 4 }]
+        },
+        {
+          "value": "dune_buggy",
+          "label": "Lái xe vượt đồi cát tốc độ cao",
+          "topicScores": [{ "topicSlug": "desert", "score": 4 }]
+        }
+      ]
+    },
+    {
+      "code": "travel_items",
+      "questionText": "Bạn ưu tiên mang theo gì?",
+      "questionType": "multiple",
+      "order": 3,
+      "isActive": true,
+      "options": [
+        {
+          "value": "swim_goggles",
+          "label": "Kính bơi/lặn",
+          "topicScores": [{ "topicSlug": "ocean", "score": 3 }]
+        },
+        {
+          "value": "waterproof_bag",
+          "label": "Túi chống nước",
+          "topicScores": [{ "topicSlug": "ocean", "score": 3 }]
+        },
+        {
+          "value": "sand_boots",
+          "label": "Giày đi cát/chống nóng",
+          "topicScores": [{ "topicSlug": "desert", "score": 3 }]
+        },
+        {
+          "value": "sun_hat",
+          "label": "Mũ rộng vành",
+          "topicScores": [{ "topicSlug": "desert", "score": 2 }, { "topicSlug": "ocean", "score": 1 }]
+        }
+      ]
+    },
+    {
+      "code": "extra_note",
+      "questionText": "Mô tả ngắn gọn về loại khung cảnh bạn thấy thú vị nhất",
+      "questionType": "text",
+      "order": 4,
+      "isActive": true,
+      "options": []
+    }
+  ]
+}
