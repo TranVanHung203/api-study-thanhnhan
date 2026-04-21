@@ -1175,7 +1175,7 @@ export const changeFullNameController = async (req, res, next) => {
 export const changeFullNameAndAttachCharacterController = async (req, res, next) => {
   try {
     const userId = req.user.id;
-    const { fullName, characterId } = req.body;
+    const { fullName, characterId, gender } = req.body || {};
 
     if (!fullName || typeof fullName !== 'string' || fullName.trim().length === 0) {
       throw new BadRequestError('fullName khÃ´ng Ä‘Æ°á»£c Ä‘á»ƒ trá»‘ng');
@@ -1194,12 +1194,20 @@ export const changeFullNameAndAttachCharacterController = async (req, res, next)
     // Apply updates: store reference to character id
     user.fullName = fullName.trim();
     user.characterId = character._id;
+    if (gender !== undefined && gender !== null) {
+      const normalizedGender = Number(gender);
+      if (!Number.isInteger(normalizedGender) || ![0, 1].includes(normalizedGender)) {
+        throw new BadRequestError('gender phai la 0 hoac 1');
+      }
+      user.gender = normalizedGender;
+    }
     await user.save();
 
     return res.status(200).json({
       message: 'Cáº­p nháº­t tÃªn vÃ  gÃ¡n character thÃ nh cÃ´ng',
       fullName: user.fullName,
-      characterId: user.characterId
+      characterId: user.characterId,
+      gender: user.gender
     });
   } catch (error) {
     next(error);

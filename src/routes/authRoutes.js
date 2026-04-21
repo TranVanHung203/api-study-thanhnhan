@@ -389,6 +389,10 @@ router.get('/logout', authToken, logoutController);
  *                 type: string
  *               characterId:
  *                 type: string
+ *               gender:
+ *                 type: integer
+ *                 enum: [0, 1]
+ *                 description: Gioi tinh (0 hoặc 1), khong bat buoc
  *     responses:
  *       200:
  *         description: Cập nhật tên và gán character thành công
