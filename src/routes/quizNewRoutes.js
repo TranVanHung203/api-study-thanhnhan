@@ -12,16 +12,46 @@ const router = express.Router();
 
 router.all('*', authToken);
 
+
 /**
  * @swagger
  * /quizzes:
- * 
  *   get:
  *     summary: Lấy danh sách bài quiz
  *     tags: [Quizzes]
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Trang hiện tại (bắt đầu từ 1)
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *         description: Số lượng quiz mỗi trang (tối đa 100)
  *     responses:
  *       200:
- *         description: Danh sách bài quiz
+ *         description: Danh sách bài quiz (có phân trang)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 page:
+ *                   type: integer
+ *                 limit:
+ *                   type: integer
+ *                 total:
+ *                   type: integer
+ *                 totalPages:
+ *                   type: integer
+ *                 quizzes:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Quiz'
  */
 router.get('/', getQuizzesController);
 

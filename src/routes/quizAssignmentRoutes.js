@@ -8,6 +8,7 @@ import {
   getAssignmentResultsController,
   getStudentAttemptsController,
   getMyAssignmentsController,
+  getMyGlobalAssignmentsController,
   getAssignmentQuestionsController,
   submitAssignmentController,
   getMyAttemptController
@@ -22,13 +23,20 @@ router.all('*', authToken);
  * @swagger
  * /assignments:
  *   get:
- *     summary: Lấy danh sách assignment của giáo viên
+ *     summary: Lay danh sach assignment cua giao vien
  *     tags: [Assignments]
  *     security:
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: schoolClassId
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Loc theo schoolClassId. Truyen "null" de loc assignment global
  *     responses:
  *       200:
- *         description: Danh sách assignment
+ *         description: Danh sach assignment
  */
 router.get('/', getAssignmentsController);
 
@@ -36,7 +44,7 @@ router.get('/', getAssignmentsController);
  * @swagger
  * /assignments:
  *   post:
- *     summary: Tạo assignment mới
+ *     summary: Tao assignment moi
  *     tags: [Assignments]
  *     security:
  *       - bearerAuth: []
@@ -51,6 +59,10 @@ router.get('/', getAssignmentsController);
  *             properties:
  *               quizId:
  *                 type: string
+ *               schoolClassId:
+ *                 type: string
+ *                 nullable: true
+ *                 description: Lop duoc giao bai. Neu null thi assignment global, tat ca user deu thay
  *               startAt:
  *                 type: string
  *                 format: date-time
@@ -62,11 +74,11 @@ router.get('/', getAssignmentsController);
  *                 enum: [draft, open, closed]
  *     responses:
  *       201:
- *         description: Tạo thành công (classId lấy tự động từ lớp của giáo viên)
+ *         description: Tao thanh cong
  *       400:
- *         description: Giáo viên chưa được gán lớp
+ *         description: Body khong hop le hoac giao vien khong duoc gan schoolClass
  *       404:
- *         description: Quiz không tìm thấy hoặc không có quyền
+ *         description: Quiz khong tim thay hoac khong co quyen
  */
 router.post('/', createAssignmentController);
 
@@ -74,7 +86,7 @@ router.post('/', createAssignmentController);
  * @swagger
  * /assignments/{assignmentId}:
  *   patch:
- *     summary: Cập nhật assignment
+ *     summary: Cap nhat assignment
  *     tags: [Assignments]
  *     security:
  *       - bearerAuth: []
@@ -90,6 +102,10 @@ router.post('/', createAssignmentController);
  *           schema:
  *             type: object
  *             properties:
+ *               schoolClassId:
+ *                 type: string
+ *                 nullable: true
+ *                 description: Doi assignment sang schoolClass khac. Neu null thi thanh assignment global
  *               startAt:
  *                 type: string
  *                 format: date-time
@@ -101,9 +117,9 @@ router.post('/', createAssignmentController);
  *                 enum: [draft, open, closed]
  *     responses:
  *       200:
- *         description: Cập nhật thành công
+ *         description: Cap nhat thanh cong
  *       404:
- *         description: Assignment không tìm thấy hoặc không có quyền
+ *         description: Assignment khong tim thay hoac khong co quyen
  */
 router.patch('/:assignmentId', updateAssignmentController);
 
@@ -111,7 +127,7 @@ router.patch('/:assignmentId', updateAssignmentController);
  * @swagger
  * /assignments/{assignmentId}:
  *   delete:
- *     summary: Xóa assignment (chỉ khi chưa có học sinh làm bài)
+ *     summary: Xoa assignment (chi khi chua co hoc sinh lam bai)
  *     tags: [Assignments]
  *     security:
  *       - bearerAuth: []
@@ -123,11 +139,11 @@ router.patch('/:assignmentId', updateAssignmentController);
  *           type: string
  *     responses:
  *       200:
- *         description: Xóa thành công
+ *         description: Xoa thanh cong
  *       400:
- *         description: Đã có học sinh làm bài
+ *         description: Da co hoc sinh lam bai
  *       404:
- *         description: Assignment không tìm thấy hoặc không có quyền
+ *         description: Assignment khong tim thay hoac khong co quyen
  */
 router.delete('/:assignmentId', deleteAssignmentController);
 
@@ -135,7 +151,7 @@ router.delete('/:assignmentId', deleteAssignmentController);
  * @swagger
  * /assignments/{assignmentId}/status:
  *   patch:
- *     summary: Giáo viên thay đổi trạng thái assignment
+ *     summary: Giao vien thay doi trang thai assignment
  *     tags: [Assignments]
  *     security:
  *       - bearerAuth: []
@@ -159,11 +175,11 @@ router.delete('/:assignmentId', deleteAssignmentController);
  *                 enum: [draft, open, closed]
  *     responses:
  *       200:
- *         description: Cập nhật trạng thái thành công
+ *         description: Cap nhat trang thai thanh cong
  *       400:
- *         description: Trạng thái không hợp lệ
+ *         description: Trang thai khong hop le
  *       404:
- *         description: Assignment không tìm thấy hoặc không có quyền
+ *         description: Assignment khong tim thay hoac khong co quyen
  */
 router.patch('/:assignmentId/status', updateAssignmentStatusController);
 
@@ -171,7 +187,7 @@ router.patch('/:assignmentId/status', updateAssignmentStatusController);
  * @swagger
  * /assignments/{assignmentId}/results:
  *   get:
- *     summary: Lấy kết quả làm bài của học sinh theo assignment
+ *     summary: Lay ket qua lam bai cua hoc sinh theo assignment
  *     tags: [Assignments]
  *     security:
  *       - bearerAuth: []
@@ -183,9 +199,9 @@ router.patch('/:assignmentId/status', updateAssignmentStatusController);
  *           type: string
  *     responses:
  *       200:
- *         description: Danh sách kết quả làm bài
+ *         description: Danh sach ket qua lam bai
  *       404:
- *         description: Assignment không tìm thấy hoặc không có quyền
+ *         description: Assignment khong tim thay hoac khong co quyen
  */
 router.get('/:assignmentId/results', getAssignmentResultsController);
 
@@ -193,7 +209,7 @@ router.get('/:assignmentId/results', getAssignmentResultsController);
  * @swagger
  * /assignments/{assignmentId}/students/{studentId}/attempts:
  *   get:
- *     summary: Giáo viên xem tất cả các lần làm bài của một học sinh trong assignment
+ *     summary: Giao vien xem tat ca cac lan lam bai cua mot hoc sinh trong assignment
  *     tags: [Assignments]
  *     security:
  *       - bearerAuth: []
@@ -203,42 +219,56 @@ router.get('/:assignmentId/results', getAssignmentResultsController);
  *         required: true
  *         schema:
  *           type: string
- *         description: ID của assignment
+ *         description: ID cua assignment
  *       - in: path
  *         name: studentId
  *         required: true
  *         schema:
  *           type: string
- *         description: ID của học sinh
+ *         description: ID cua hoc sinh
  *     responses:
  *       200:
- *         description: Danh sách các lần làm bài của học sinh (kèm chi tiết từng câu)
+ *         description: Danh sach cac lan lam bai cua hoc sinh
  *       404:
- *         description: Assignment không tìm thấy hoặc không có quyền
+ *         description: Assignment khong tim thay hoac khong co quyen
  */
 router.get('/:assignmentId/students/:studentId/attempts', getStudentAttemptsController);
 
-// ============ PHÍA HỌC SINH ============
+// ============ PHIA HOC SINH ============
 
 /**
  * @swagger
  * /assignments/my:
  *   get:
- *     summary: Học sinh lấy danh sách assignment được giao cho lớp mình
+ *     summary: Hoc sinh lay assignment cua lop hien tai
  *     tags: [Assignments]
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       200:
- *         description: Danh sách assignment kèm trạng thái đã làm chưa
+ *         description: Danh sach assignment cua lop hien tai kem trang thai da lam chua
  */
 router.get('/my', getMyAssignmentsController);
+
+/**
+ * @swagger
+ * /assignments/my-global:
+ *   get:
+ *     summary: Hoc sinh lay danh sach assignment global (khong theo lop)
+ *     tags: [Assignments]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Danh sach assignment global kem trang thai da lam chua
+ */
+router.get('/my-global', getMyGlobalAssignmentsController);
 
 // /**
 //  * @swagger
 //  * /assignments/{assignmentId}/questions:
 //  *   get:
-//  *     summary: Học sinh lấy câu hỏi để làm bài (ẩn đáp án)
+//  *     summary: Hoc sinh lay cau hoi de lam bai (an dap an)
 //  *     tags: [Assignments]
 //  *     security:
 //  *       - bearerAuth: []
@@ -250,9 +280,9 @@ router.get('/my', getMyAssignmentsController);
 //  *           type: string
 //  *     responses:
 //  *       200:
-//  *         description: Danh sách câu hỏi
+//  *         description: Danh sach cau hoi
 //  *       404:
-//  *         description: Assignment không tìm thấy hoặc chưa mở
+//  *         description: Assignment khong tim thay hoac chua mo
 //  */
 // router.get('/:assignmentId/questions', getAssignmentQuestionsController);
 
@@ -260,7 +290,7 @@ router.get('/my', getMyAssignmentsController);
 //  * @swagger
 //  * /assignments/{assignmentId}/submit:
 //  *   post:
-//  *     summary: Học sinh nộp bài
+//  *     summary: Hoc sinh nop bai
 //  *     tags: [Assignments]
 //  *     security:
 //  *       - bearerAuth: []
@@ -287,12 +317,12 @@ router.get('/my', getMyAssignmentsController);
 //  *                     questionId:
 //  *                       type: string
 //  *                     userAnswer:
-//  *                       description: Index (số) hoặc string
+//  *                       description: Index (so) hoac string
 //  *     responses:
 //  *       201:
-//  *         description: Nộp bài thành công, trả về điểm và chi tiết
+//  *         description: Nop bai thanh cong, tra ve diem va chi tiet
 //  *       404:
-//  *         description: Assignment không tìm thấy hoặc chưa mở
+//  *         description: Assignment khong tim thay hoac chua mo
 //  */
 // router.post('/:assignmentId/submit', submitAssignmentController);
 
@@ -300,7 +330,7 @@ router.get('/my', getMyAssignmentsController);
  * @swagger
  * /assignments/{assignmentId}/my-attempt:
  *   get:
- *     summary: Học sinh xem lại bài làm của mình
+ *     summary: Hoc sinh xem lai bai lam cua minh
  *     tags: [Assignments]
  *     security:
  *       - bearerAuth: []
@@ -312,9 +342,9 @@ router.get('/my', getMyAssignmentsController);
  *           type: string
  *     responses:
  *       200:
- *         description: Chi tiết bài làm
+ *         description: Chi tiet bai lam
  *       404:
- *         description: Chưa làm bài này
+ *         description: Chua lam bai nay
  */
 router.get('/:assignmentId/my-attempt', getMyAttemptController);
 

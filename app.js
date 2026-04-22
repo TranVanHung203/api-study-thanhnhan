@@ -10,6 +10,8 @@ import { errorHandler } from './src/errors/errorHandler.js';
 // Import models để đảm bảo tất cả schemas được register
 import User from './src/models/user.schema.js';
 import Class from './src/models/class.schema.js';
+import SchoolClass from './src/models/schoolClass.schema.js';
+import UserSchoolClass from './src/models/userSchoolClass.schema.js';
 import Chapter from './src/models/chapter.schema.js';
 import Lesson from './src/models/lesson.schema.js';
 import Progress from './src/models/progress.schema.js';
@@ -27,6 +29,7 @@ import PreferenceQuestion from './src/models/preferenceQuestion.schema.js';
 // Import routes mới
 import authRoutes from './src/routes/authRoutes.js';
 import classRoutes from './src/routes/classRoutes.js';
+import schoolClassRoutes from './src/routes/schoolClassRoutes.js';
 import chapterRoutes from './src/routes/chapterRoutes.js';
 import lessonRoutes from './src/routes/lessonRoutes.js';
 import progressRoutes from './src/routes/progressRoutes.js';
@@ -237,6 +240,7 @@ const swaggerOptions = {
     './src/routes/userRoutes.js',
     //'./src/routes/chapterRoutes.js',
     './src/routes/classRoutes.js',
+    './src/routes/schoolClassRoutes.js',
     // './src/routes/skillRoutes.js',
     './src/routes/progressRoutes.js',
     './src/routes/quizAttemptRoutes.js',
@@ -372,6 +376,7 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, swaggerUiOpti
 // Routes mới
 app.use('/auth', authRoutes);
 app.use('/classes', classRoutes);
+app.use('/school-classes', schoolClassRoutes);
 app.use('/chapters', chapterRoutes);
 app.use('/lessons', lessonRoutes);
 app.use('/progress', progressRoutes);

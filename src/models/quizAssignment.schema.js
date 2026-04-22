@@ -6,10 +6,11 @@ const QuizAssignmentSchema = new mongoose.Schema({
     ref: 'Quiz',
     required: true
   },
-  classId: {
+  schoolClassId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Class',
-    required: true
+    ref: 'SchoolClass',
+    required: false,
+    default: null
   },
   teacherId: {
     type: mongoose.Schema.Types.ObjectId,

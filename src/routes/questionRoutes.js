@@ -10,6 +10,7 @@ import {
   getQuestionFilterOptionsController
 } from '../controllers/questionController.js';
 import { authToken } from '../middlewares/authMiddleware.js';
+import { uploadImage } from '../middlewares/uploadMiddleware.js';
 
 const router = express.Router();
 
@@ -116,29 +117,34 @@ router.get('/filter-options', getQuestionFilterOptionsController);
  */
 router.get('/', getAllQuestionsController);
 
-// // /**
-// //  * @swagger
-// //  * /questions/quiz/{quizId}:
-// //  *   get:
-// //  *     summary: Lấy danh sách câu hỏi của một bài quiz
-// //  *     tags: [Questions]
-// //  *     parameters:
-// //  *       - in: path
-// //  *         name: quizId
-// //  *         required: true
-// //  *         schema:
-// //  *           type: string
-// //  *     responses:
-// //  *       200:
-// //  *         description: Danh sách câu hỏi
-// //  */
-// router.get('/quiz/:quizId', getQuestionsByQuizController);
+/**
+ * @swagger
+ * /questions/quiz/{quizId}:
+ *   get:
+ *     summary: Lay danh sach cau hoi theo quizId (chi chu quiz moi xem duoc)
+ *     tags: [Questions]
+ *     parameters:
+ *       - in: path
+ *         name: quizId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Danh sach cau hoi
+ *       403:
+ *         description: Khong co quyen xem quiz nay
+ *       404:
+ *         description: Quiz khong ton tai
+ */
+router.get('/quiz/:quizId', getQuestionsByQuizController);
+
 
 /**
  * @swagger
  * /questions:
  *   post:
- *     summary: Tạo câu hỏi mới
+ *     summary: Tao cau hoi moi
  *     tags: [Questions]
  *     requestBody:
  *       required: true
@@ -165,7 +171,40 @@ router.get('/', getAllQuestionsController);
  *                   type: string
  *                 minItems: 2
  *               answer:
- *                 description: Index (số) cho single, mảng index cho multiple
+ *                 description: Index (so) cho single, mang index cho multiple
+ *               questionType:
+ *                 type: string
+ *               detailType:
+ *                 type: string
+ *               hintVoice:
+ *                 type: string
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - quizId
+ *               - choices
+ *               - answer
+ *             properties:
+ *               quizId:
+ *                 type: string
+ *               questionText:
+ *                 type: string
+ *               rawQuestion:
+ *                 type: string
+ *               imageQuestion:
+ *                 type: string
+ *                 description: Link anh truc tiep
+ *               imageQuestionFile:
+ *                 type: string
+ *                 format: binary
+ *                 description: File anh de upload len Cloudinary
+ *               choices:
+ *                 type: string
+ *                 description: JSON string mang lua chon, vi du ["A","B"]
+ *               answer:
+ *                 type: string
+ *                 description: JSON string dap an hoac so cho single
  *               questionType:
  *                 type: string
  *               detailType:
@@ -174,18 +213,18 @@ router.get('/', getAllQuestionsController);
  *                 type: string
  *     responses:
  *       201:
- *         description: Câu hỏi được tạo thành công
+ *         description: Cau hoi duoc tao thanh cong
  *       404:
- *         description: Quiz không tìm thấy hoặc không có quyền
+ *         description: Quiz khong tim thay hoac khong co quyen
  */
-router.post('/', createQuestionController);
+router.post('/', uploadImage.single('imageQuestionFile'), createQuestionController);
 
 
 /**
  * @swagger
  * /questions/{questionId}:
  *   patch:
- *     summary: Cập nhật câu hỏi
+ *     summary: Cap nhat cau hoi
  *     tags: [Questions]
  *     parameters:
  *       - in: path
@@ -212,7 +251,7 @@ router.post('/', createQuestionController);
  *                   type: string
  *                 minItems: 2
  *               answer:
- *                 description: Index (số) cho single, mảng index cho multiple
+ *                 description: Index (so) cho single, mang index cho multiple
  *               questionType:
  *                 type: string
  *               detailType:
@@ -221,11 +260,11 @@ router.post('/', createQuestionController);
  *                 type: string
  *     responses:
  *       200:
- *         description: Cập nhật thành công
+ *         description: Cap nhat thanh cong
  *       403:
- *         description: Không có quyền chỉnh sửa
+ *         description: Khong co quyen chinh sua
  *       404:
- *         description: Câu hỏi không tìm thấy
+ *         description: Cau hoi khong tim thay
  */
 router.patch('/:questionId', updateQuestionController);
 
@@ -234,7 +273,7 @@ router.patch('/:questionId', updateQuestionController);
  * @swagger
  * /questions/{questionId}:
  *   delete:
- *     summary: Xóa câu hỏi
+ *     summary: Xoa cau hoi
  *     tags: [Questions]
  *     parameters:
  *       - in: path
@@ -244,13 +283,13 @@ router.patch('/:questionId', updateQuestionController);
  *           type: string
  *     responses:
  *       200:
- *         description: Xóa thành công
+ *         description: Xoa thanh cong
  *       400:
- *         description: Không thể xóa vì đã có học sinh làm bài liên quan
+ *         description: Khong the xoa vi da co hoc sinh lam bai lien quan
  *       403:
- *         description: Không có quyền xóa
+ *         description: Khong co quyen xoa
  *       404:
- *         description: Câu hỏi không tìm thấy
+ *         description: Cau hoi khong tim thay
  */
 router.delete('/:questionId', deleteQuestionController);
 
@@ -258,7 +297,7 @@ router.delete('/:questionId', deleteQuestionController);
  * @swagger
  * /questions/check-answer:
  *   post:
- *     summary: Kiểm tra đáp án
+ *     summary: Kiem tra dap an
  *     tags: [Questions]
  *     requestBody:
  *       required: true
@@ -273,7 +312,7 @@ router.delete('/:questionId', deleteQuestionController);
  *                 type: string
  *     responses:
  *       200:
- *         description: Kết quả kiểm tra
+ *         description: Ket qua kiem tra
  */
 router.post('/check-answer', checkAnswerController);
 

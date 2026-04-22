@@ -7,8 +7,29 @@ import QuizSession from '../models/quizSession.schema.js';
 // Lấy danh sách quizzes
 export const getQuizzesController = async (req, res, next) => {
   try {
-    const quizzes = await Quiz.find({ createdBy: req.user.id });
-    return res.status(200).json({ quizzes });
+    // Lấy page & limit từ query, mặc định page=1, limit=20
+    const pageRaw = parseInt(req.query.page, 10);
+    const limitRaw = parseInt(req.query.limit, 10);
+    const page = Number.isNaN(pageRaw) ? 1 : Math.max(1, pageRaw);
+    const limit = Number.isNaN(limitRaw) ? 20 : Math.max(1, Math.min(100, limitRaw));
+    const skip = (page - 1) * limit;
+
+    // Đếm tổng số quiz
+    const total = await Quiz.countDocuments({ createdBy: req.user.id });
+    // Lấy danh sách quiz phân trang
+    const quizzes = await Quiz.find({ createdBy: req.user.id })
+      .sort({ createdAt: -1, _id: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    return res.status(200).json({
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+      quizzes
+    });
   } catch (error) {
     next(error);
   }

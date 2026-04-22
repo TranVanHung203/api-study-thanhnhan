@@ -3,6 +3,7 @@ import Question from '../models/question.schema.js';
 import Quiz from '../models/quiz.schema.js';
 import QuizAttempt from '../models/quizAttempt.schema.js';
 import AssignmentAttempt from '../models/assignmentAttempt.schema.js';
+import cloudinary from '../config/cloudinaryConfig.js';
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 10;
@@ -36,6 +37,24 @@ const normalizeString = (value) => {
 };
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(value);
+
+const parseMaybeJson = (value) => {
+  if (typeof value !== 'string') return value;
+  const trimmed = value.trim();
+  if (!trimmed) return value;
+
+  const looksLikeJson =
+    (trimmed.startsWith('[') && trimmed.endsWith(']')) ||
+    (trimmed.startsWith('{') && trimmed.endsWith('}'));
+
+  if (!looksLikeJson) return value;
+
+  try {
+    return JSON.parse(trimmed);
+  } catch (error) {
+    return value;
+  }
+};
 
 const buildCustomFilter = (field, value) => {
   if (!ALLOWED_CUSTOM_FILTER_FIELDS.has(field)) {
@@ -256,9 +275,23 @@ export const getAllQuestionsController = async (req, res, next) => {
 export const getQuestionsByQuizController = async (req, res, next) => {
   try {
     const { quizId } = req.params;
-    const page = parseInt(req.query.page) || 1;
-    const limit = 10;
+    const page = parsePositiveInteger(req.query.page, DEFAULT_PAGE);
+    const requestedLimit = parsePositiveInteger(req.query.limit, DEFAULT_LIMIT);
+    const limit = Math.min(requestedLimit, MAX_LIMIT);
     const skip = (page - 1) * limit;
+
+    if (!isValidObjectId(quizId)) {
+      return res.status(400).json({ message: 'quizId khong hop le' });
+    }
+
+    const quiz = await Quiz.findById(quizId).select('_id createdBy').lean();
+    if (!quiz) {
+      return res.status(404).json({ message: 'Khong tim thay quiz' });
+    }
+
+    if (!quiz.createdBy || String(quiz.createdBy) !== String(req.user.id)) {
+      return res.status(403).json({ message: 'Ban khong co quyen xem cau hoi cua quiz nay' });
+    }
 
     // If random sampling requested, use aggregation $sample to get `limit` random docs
     const random = req.query.random === 'true' || req.query.random === '1';
@@ -269,7 +302,7 @@ export const getQuestionsByQuizController = async (req, res, next) => {
         { $sample: { size: limit } }
       ]);
       const total = await Question.countDocuments({ quizId });
-      const totalPages = Math.ceil(total / limit);
+      const totalPages = total > 0 ? Math.ceil(total / limit) : 1;
       return res.status(200).json({ page: 1, perPage: limit, total, totalPages, questions });
     }
 
@@ -281,7 +314,7 @@ export const getQuestionsByQuizController = async (req, res, next) => {
       Question.countDocuments({ quizId })
     ]);
 
-    const totalPages = Math.ceil(total / limit);
+    const totalPages = total > 0 ? Math.ceil(total / limit) : 1;
 
     return res.status(200).json({ page, perPage: limit, total, totalPages, questions });
   } catch (error) {
@@ -292,36 +325,79 @@ export const getQuestionsByQuizController = async (req, res, next) => {
 // Tạo câu hỏi
 export const createQuestionController = async (req, res, next) => {
   try {
-    const {
-      quizId,
-      questionText,
-      rawQuestion,
-      imageQuestion,
-      choices,
-      answer,
-      questionType,
-      detailType,
-      hintVoice
-    } = req.body;
-    // Kiểm tra quiz tồn tại và do user hiện tại tạo
-    const quiz = await Quiz.findOne({ _id: quizId, createdBy: req.user.id });
-    if (!quiz) {
-      return res.status(404).json({ message: 'Quiz không tìm thấy hoặc bạn không có quyền thêm câu hỏi' });
+    const quizId = normalizeString(req.body.quizId);
+    const questionText = req.body.questionText;
+    const rawQuestion = parseMaybeJson(req.body.rawQuestion);
+    const normalizedQuestionType = normalizeString(req.body.questionType);
+    const detailType = req.body.detailType;
+    const hintVoice = req.body.hintVoice;
+
+    let choices = parseMaybeJson(req.body.choices);
+    if (!Array.isArray(choices) && Array.isArray(req.body['choices[]'])) {
+      choices = req.body['choices[]'];
+    }
+    if (Array.isArray(choices)) {
+      choices = choices.map((choice) => (typeof choice === 'string' ? choice : String(choice)));
     }
 
-    // Expected `choices` shape: string[] with length >= 2.
+    let answer = parseMaybeJson(req.body.answer);
+    if (normalizedQuestionType === 'single' && typeof answer === 'string') {
+      const trimmedAnswer = answer.trim();
+      if (/^-?\d+$/.test(trimmedAnswer)) {
+        answer = Number.parseInt(trimmedAnswer, 10);
+      }
+    }
+
+    if (normalizedQuestionType === 'multiple' && typeof answer === 'string') {
+      const trimmedAnswer = answer.trim();
+      if (trimmedAnswer.includes(',')) {
+        answer = trimmedAnswer
+          .split(',')
+          .map((item) => item.trim())
+          .filter(Boolean)
+          .map((item) => (/^-?\d+$/.test(item) ? Number.parseInt(item, 10) : item));
+      }
+    }
+
+    let imageQuestion = normalizeString(req.body.imageQuestion);
+    if (req.file) {
+      const uploadResult = await new Promise((resolve, reject) => {
+        const uploadStream = cloudinary.uploader.upload_stream(
+          {
+            resource_type: 'image',
+            folder: 'question_images',
+            allowed_formats: ['jpg', 'jpeg', 'png', 'webp', 'gif']
+          },
+          (error, result) => {
+            if (error) reject(error);
+            else resolve(result);
+          }
+        );
+        uploadStream.end(req.file.buffer);
+      });
+      imageQuestion = uploadResult.secure_url;
+    }
+
+    if (!quizId || !isValidObjectId(quizId)) {
+      return res.status(400).json({ message: 'quizId khong hop le' });
+    }
+
+    const quiz = await Quiz.findOne({ _id: quizId, createdBy: req.user.id });
+    if (!quiz) {
+      return res.status(404).json({ message: 'Quiz khong tim thay hoac ban khong co quyen them cau hoi' });
+    }
+
     if (!Array.isArray(choices) || choices.length < 2 || choices.some((c) => typeof c !== 'string')) {
       return res.status(400).json({ message: 'choices must be an array with at least two items' });
     }
 
-    if (questionType === 'single') {
+    if (normalizedQuestionType === 'single') {
       if (typeof answer === 'number') {
         if (answer < 0 || answer >= choices.length) {
           return res.status(400).json({ message: 'answer index out of range' });
         }
       }
-    } else if (questionType === 'multiple') {
-      // expected array of indices or array of texts
+    } else if (normalizedQuestionType === 'multiple') {
       if (!Array.isArray(answer)) {
         return res.status(400).json({ message: 'answer must be an array for multiple choice questions' });
       }
@@ -334,7 +410,7 @@ export const createQuestionController = async (req, res, next) => {
       imageQuestion,
       choices,
       answer,
-      questionType,
+      questionType: normalizedQuestionType || undefined,
       detailType,
       hintVoice
     });
@@ -342,7 +418,7 @@ export const createQuestionController = async (req, res, next) => {
     await question.save();
 
     return res.status(201).json({
-      message: 'Tạo câu hỏi thành công',
+      message: 'Tao cau hoi thanh cong',
       question
     });
   } catch (error) {
@@ -350,7 +426,7 @@ export const createQuestionController = async (req, res, next) => {
   }
 };
 
-// Lấy câu hỏi (ẩn đáp án đúng)
+// Lay cau hoi (an dap an dung)
 export const getQuestionForStudentController = async (req, res, next) => {
   try {
     const { questionId } = req.params;
