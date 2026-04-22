@@ -55,6 +55,7 @@ const calculateQuizScore = (correctCount, totalQuestions) => {
   if (totalQuestions <= 0 || QUIZ_SESSION_SCORING.maxScore <= 0) return 0;
   return roundScore((correctCount / totalQuestions) * QUIZ_SESSION_SCORING.maxScore);
 };
+const FORCE_LAST_DETAIL_TYPE = 'tach_xong_roi_cong';
 
 // Start a quiz session: select `count` random questions from a quiz under the given progress
 // Optimized: parallel fetch, single aggregate query, in-memory sampling
@@ -111,11 +112,19 @@ export const startQuizSession = async (req, res, next) => {
     const facets = {};
     for (const [type, count] of typeCounts.entries()) {
       // facet key phải là string an toàn (tránh '.' '$'); giả định detailType của bạn là kiểu "add/sub/mul" nên ok
-      facets[type] = [
-        { $match: { detailType: type } },
-        { $sample: { size: count } },
-        { $project: { _id: 1 } },
-      ];
+      if (type === FORCE_LAST_DETAIL_TYPE) {
+        facets[type] = [
+          { $match: { detailType: type } },
+          { $sample: { size: count } },
+          { $project: { _id: 1 } },
+        ];
+      } else {
+        facets[type] = [
+          { $match: { detailType: type } },
+          { $sample: { size: count } },
+          { $project: { _id: 1 } },
+        ];
+      }
     }
 
     const aggRes = await Question.aggregate([
@@ -127,6 +136,7 @@ export const startQuizSession = async (req, res, next) => {
 
     // 4) Validate đủ câu cho từng type + gom id
     const selectedIds = [];
+    const forceLastIds = [];
     for (const [type, count] of typeCounts.entries()) {
       const docs = buckets[type] || [];
       if (docs.length < count) {
@@ -134,11 +144,15 @@ export const startQuizSession = async (req, res, next) => {
           `Không đủ câu cho phần detailType='${type}' (cần ${count}, có ${docs.length})`
         );
       }
-      for (const d of docs) selectedIds.push(d._id);
+      if (type === FORCE_LAST_DETAIL_TYPE) {
+        for (const d of docs) forceLastIds.push(d._id);
+      } else {
+        for (const d of docs) selectedIds.push(d._id);
+      }
     }
 
-    // 5) Shuffle toàn bộ câu hỏi để ra A1,S2,A2,... (random order overall)
-    const mixedQuestionIds = shuffleArray(selectedIds);
+    // 5) Shuffle all non-forced questions, then append forced-last questions
+    const mixedQuestionIds = [...shuffleArray(selectedIds), ...forceLastIds];
 
     // 6) Create session (TTL 2 giờ)
     const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000);
@@ -193,7 +207,12 @@ export const getSessionQuestions = async (req, res, next) => {
       return obj;
     }).filter(Boolean);
 
-    return res.status(200).json({ total, questions: questionsNoAnswer });
+    const orderedQuestions = [
+      ...questionsNoAnswer.filter((q) => q.detailType !== FORCE_LAST_DETAIL_TYPE),
+      ...questionsNoAnswer.filter((q) => q.detailType === FORCE_LAST_DETAIL_TYPE),
+    ];
+
+    return res.status(200).json({ total, questions: orderedQuestions });
   } catch (err) {
     next(err);
   }
