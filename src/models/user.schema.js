@@ -28,7 +28,12 @@ const UserSchema = new mongoose.Schema({
       return (this.provider || 'local') === 'local';
     },
     unique: true,
-    sparse: true
+    sparse: true,
+    set: (value) => {
+      if (typeof value !== 'string') return undefined;
+      const normalized = value.trim().toLowerCase();
+      return normalized || undefined;
+    }
   },
   classId: {
     type: mongoose.Schema.Types.ObjectId,

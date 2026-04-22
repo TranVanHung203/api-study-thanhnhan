@@ -339,6 +339,21 @@ const escapeRegex = (value) => {
 };
 
 // Tạo Access Token
+const normalizeEmail = (value) => {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toLowerCase();
+  if (!normalized || !EMAIL_REGEX.test(normalized)) {
+    return null;
+  }
+  return normalized;
+};
+
+const buildEmailInsensitiveQuery = (email) => {
+  if (!email) return null;
+  const escapedEmail = escapeRegex(email);
+  return { email: { $regex: new RegExp(`^${escapedEmail}$`, 'i') } };
+};
+
 const createAccessToken = (user) => {
   return jwt.sign(
     { id: user._id, username: user.username, email: user.email },
@@ -808,7 +823,7 @@ export const googleTokenController = async (req, res, next) => {
     }
 
     const googleId = payload.sub;
-    const email = payload.email || null;
+    const email = normalizeEmail(payload.email);
     const email_verified = payload.email_verified || false;
     const emailLocalPart = email
       ? email.split('@')[0].replace(/[^a-zA-Z0-9_.-]/g, ' ')
@@ -827,7 +842,8 @@ export const googleTokenController = async (req, res, next) => {
 
     // If not found by googleId, try find by email
     if (!user && email) {
-      user = await User.findOne({ email });
+      const emailQuery = buildEmailInsensitiveQuery(email);
+      user = emailQuery ? await User.findOne(emailQuery) : null;
       if (user && !user.googleId && email_verified) {
         user.googleId = googleId;
         user.provider = 'google';
@@ -857,6 +873,10 @@ export const googleTokenController = async (req, res, next) => {
         user.provider = 'google';
         updated = true;
       }
+      if (email && !user.email) {
+        user.email = email;
+        updated = true;
+      }
       if (updated) {
         await user.save();
       }
@@ -875,7 +895,7 @@ export const googleTokenController = async (req, res, next) => {
 
       const newUser = new User({
         username: generatedUsername,
-        email: email || null,
+        ...(email ? { email } : {}),
         passwordHash: passwordHashForOauth,
         fullName: fullName || 'Google User',
         classId: null,
@@ -982,7 +1002,7 @@ export const facebookTokenController = async (req, res, next) => {
       throw new UnauthorizedError('Invalid Facebook accessToken');
     }
 
-    const email = payload?.email || null;
+    const email = normalizeEmail(payload?.email);
     const picture = payload?.picture?.data?.url || null;
     const clientFullName = req.body.fullName || null;
     const emailLocalPart = email
@@ -995,7 +1015,8 @@ export const facebookTokenController = async (req, res, next) => {
 
     // Fallback by email
     if (!user && email) {
-      user = await User.findOne({ email });
+      const emailQuery = buildEmailInsensitiveQuery(email);
+      user = emailQuery ? await User.findOne(emailQuery) : null;
       if (user) {
         if (user.facebookId && user.facebookId !== facebookId) {
           throw new UnauthorizedError('Facebook account mismatch for this email');
@@ -1058,7 +1079,7 @@ export const facebookTokenController = async (req, res, next) => {
 
       const newUser = new User({
         username: generatedUsername,
-        email: email || null,
+        ...(email ? { email } : {}),
         passwordHash: passwordHashForOauth,
         fullName: fullName || 'Facebook User',
         classId: null,
@@ -1148,10 +1169,30 @@ const signInWithZaloAccessToken = async ({ token, fullName: fallbackFullName, de
     payload?.picture ||
     payload?.avatar ||
     null;
+  const email = normalizeEmail(payload?.email);
 
   const fullName = payload?.name || fallbackFullName || 'Zalo User';
 
   let user = await User.findOne({ zaloId });
+  if (!user && email) {
+    const emailQuery = buildEmailInsensitiveQuery(email);
+    user = emailQuery ? await User.findOne(emailQuery) : null;
+    if (user) {
+      if (user.zaloId && user.zaloId !== zaloId) {
+        throw new UnauthorizedError('Zalo account mismatch for this email');
+      }
+      if (!user.zaloId) {
+        user.zaloId = zaloId;
+      }
+      if (user.provider !== 'zalo') {
+        user.provider = 'zalo';
+      }
+      if (!user.email) {
+        user.email = email;
+      }
+      await user.save();
+    }
+  }
   if (user) {
     let updated = false;
     if (fullName && user.fullName !== fullName) {
@@ -1166,6 +1207,10 @@ const signInWithZaloAccessToken = async ({ token, fullName: fallbackFullName, de
       user.provider = 'zalo';
       updated = true;
     }
+    if (email && !user.email) {
+      user.email = email;
+      updated = true;
+    }
     if (updated) {
       await user.save();
     }
@@ -1178,7 +1223,7 @@ const signInWithZaloAccessToken = async ({ token, fullName: fallbackFullName, de
 
     const newUser = new User({
       username: generatedUsername,
-      email: null,
+      ...(email ? { email } : {}),
       passwordHash: passwordHashForOauth,
       fullName: fullName || 'Zalo User',
       classId: null,
