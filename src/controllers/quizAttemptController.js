@@ -77,19 +77,19 @@ export const getQuizAttemptsController = async (req, res, next) => {
     const matchStage = {};
 
     if (!userId) {
-      return res.status(401).json({ message: 'Khong xac dinh duoc user dang dang nhap.' });
+      return res.status(401).json({ message: 'Không xác định được user đang đăng nhập.' });
     }
 
     if (!lessonId) {
-      return res.status(400).json({ message: 'lessonId la bat buoc.' });
+      return res.status(400).json({ message: 'lessonId là bắt buộc.' });
     }
 
     if (!mongoose.Types.ObjectId.isValid(userId)) {
-      return res.status(400).json({ message: 'userId khong hop le.' });
+      return res.status(400).json({ message: 'userId không hợp lệ.' });
     }
 
     if (!mongoose.Types.ObjectId.isValid(lessonId)) {
-      return res.status(400).json({ message: 'lessonId khong hop le.' });
+      return res.status(400).json({ message: 'lessonId không hợp lệ.' });
     }
 
     matchStage.userId = new mongoose.Types.ObjectId(userId);
@@ -101,7 +101,7 @@ export const getQuizAttemptsController = async (req, res, next) => {
     const practiceProgress = progressList.find((item) => normalizeText(item.progressName) === 'luyen tap');
 
     if (!practiceProgress) {
-      return res.status(404).json({ message: 'Khong tim thay progress "Luyen tap" trong lesson nay.' });
+      return res.status(404).json({ message: 'Không tìm thấy progress "Luyện tập" trong lesson này.' });
     }
 
     matchStage.progressId = practiceProgress._id;
@@ -112,7 +112,7 @@ export const getQuizAttemptsController = async (req, res, next) => {
       const endDate = parseDateParam(date, true);
 
       if (!startDate || !endDate) {
-        return res.status(400).json({ message: 'date khong hop le. Dung yyyy-mm-dd, dd/MM/yyyy hoac ISO date.' });
+        return res.status(400).json({ message: 'date không hợp lệ. Dùng yyyy-mm-dd, dd/MM/yyyy hoặc ISO date.' });
       }
 
       matchStage.createdAt = { $gte: startDate, $lte: endDate };
@@ -121,11 +121,11 @@ export const getQuizAttemptsController = async (req, res, next) => {
       const endDate = toDate ? parseDateParam(toDate, true) : null;
 
       if (fromDate && !startDate) {
-        return res.status(400).json({ message: 'fromDate khong hop le. Dung yyyy-mm-dd, dd/MM/yyyy hoac ISO date.' });
+        return res.status(400).json({ message: 'fromDate không hợp lệ. Dùng yyyy-mm-dd, dd/MM/yyyy hoặc ISO date.' });
       }
 
       if (toDate && !endDate) {
-        return res.status(400).json({ message: 'toDate khong hop le. Dung yyyy-mm-dd, dd/MM/yyyy hoac ISO date.' });
+        return res.status(400).json({ message: 'toDate không hợp lệ. Dùng yyyy-mm-dd, dd/MM/yyyy hoặc ISO date.' });
       }
 
       if (startDate || endDate) {

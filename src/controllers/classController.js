@@ -290,18 +290,18 @@ export const getClassChaptersPracticeMapController = async (req, res, next) => {
     const { classId, userId } = req.params;
 
     if (!mongoose.Types.ObjectId.isValid(userId)) {
-      return res.status(400).json({ message: 'userId khong hop le' });
+      return res.status(400).json({ message: 'userId không hợp lệ' });
     }
 
     const classData = await Class.findById(classId);
     if (!classData) {
-      return res.status(404).json({ message: 'Lop khong ton tai' });
+      return res.status(404).json({ message: 'Lớp không tồn tại' });
     }
 
     const chapters = await Chapter.find({ classId }).sort({ order: 1 });
     if (chapters.length === 0) {
       return res.status(200).json({
-        message: 'Lop chua co chapter nao',
+        message: 'Lớp chưa có chapter nào',
         chapters: []
       });
     }

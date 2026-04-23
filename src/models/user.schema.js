@@ -80,10 +80,10 @@ const UserSchema = new mongoose.Schema({
     ref: 'Topic',
     default: null
   },
-  // Roles in system: 'student', 'teacher', 'researchobject'
+  // Roles in system: 'student', 'teacher', 'researchobject', 'admin'
   roles: {
     type: [String],
-    enum: ['student', 'teacher', 'researchobject'],
+    enum: ['student', 'teacher', 'researchobject', 'admin'],
     default: ['student']
   },
   // Guest user fields

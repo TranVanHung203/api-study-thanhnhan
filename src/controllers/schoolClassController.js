@@ -9,8 +9,36 @@ export const getAllSchoolClassesController = async (req, res, next) => {
       .sort({ className: 1 });
 
     return res.status(200).json({
-      message: 'Lay danh sach lop thuc thanh cong',
+      message: 'Lấy danh sách lớp thực thành công',
       data: schoolClasses
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getSchoolClassesByUserIdController = async (req, res, next) => {
+  try {
+    const userId = req.user?.id;
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(401).json({ message: 'Thông tin đăng nhập không hợp lệ' });
+    }
+
+    const mappings = await UserSchoolClass.find({ userId })
+      .populate('schoolClassId', 'className')
+      .lean();
+
+    const data = mappings
+      .filter((item) => item.schoolClassId)
+      .map((item) => ({
+        schoolClassId: item.schoolClassId._id,
+        className: item.schoolClassId.className
+      }));
+
+    return res.status(200).json({
+      message: 'Lấy danh sách lớp theo tài khoản đăng nhập thành công',
+      data
     });
   } catch (error) {
     next(error);
@@ -22,13 +50,13 @@ export const getSchoolClassByIdController = async (req, res, next) => {
     const { id } = req.params;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ message: 'id khong hop le' });
+      return res.status(400).json({ message: 'id không hợp lệ' });
     }
 
     const schoolClass = await SchoolClass.findById(id);
 
     if (!schoolClass) {
-      return res.status(404).json({ message: 'Lop thuc khong ton tai' });
+      return res.status(404).json({ message: 'Lớp thực không tồn tại' });
     }
 
     const mappings = await UserSchoolClass.find({ schoolClassId: id }).select('userId').lean();
@@ -42,7 +70,7 @@ export const getSchoolClassByIdController = async (req, res, next) => {
       : [];
 
     return res.status(200).json({
-      message: 'Lay chi tiet lop thuc thanh cong',
+      message: 'Lấy chi tiết lớp thực thành công',
       data: {
         ...schoolClass.toObject(),
         students
@@ -59,7 +87,7 @@ export const createSchoolClassController = async (req, res, next) => {
 
     if (!className) {
       return res.status(400).json({
-        message: 'className la bat buoc'
+        message: 'className là bắt buộc'
       });
     }
 
@@ -68,7 +96,7 @@ export const createSchoolClassController = async (req, res, next) => {
     });
 
     return res.status(201).json({
-      message: 'Tao lop thuc thanh cong',
+      message: 'Tạo lớp thực thành công',
       data: schoolClass
     });
   } catch (error) {
@@ -82,12 +110,12 @@ export const updateSchoolClassController = async (req, res, next) => {
     const { className } = req.body || {};
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ message: 'id khong hop le' });
+      return res.status(400).json({ message: 'id không hợp lệ' });
     }
 
     const schoolClass = await SchoolClass.findById(id);
     if (!schoolClass) {
-      return res.status(404).json({ message: 'Lop thuc khong ton tai' });
+      return res.status(404).json({ message: 'Lớp thực không tồn tại' });
     }
 
     if (className !== undefined) schoolClass.className = String(className).trim();
@@ -95,7 +123,7 @@ export const updateSchoolClassController = async (req, res, next) => {
     await schoolClass.save();
 
     return res.status(200).json({
-      message: 'Cap nhat lop thuc thanh cong',
+      message: 'Cập nhật lớp thực thành công',
       data: schoolClass
     });
   } catch (error) {
@@ -108,18 +136,18 @@ export const deleteSchoolClassController = async (req, res, next) => {
     const { id } = req.params;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ message: 'id khong hop le' });
+      return res.status(400).json({ message: 'id không hợp lệ' });
     }
 
     const schoolClass = await SchoolClass.findByIdAndDelete(id);
     if (!schoolClass) {
-      return res.status(404).json({ message: 'Lop thuc khong ton tai' });
+      return res.status(404).json({ message: 'Lớp thực không tồn tại' });
     }
 
     await UserSchoolClass.deleteMany({ schoolClassId: id });
 
     return res.status(200).json({
-      message: 'Xoa lop thuc thanh cong'
+      message: 'Xóa lớp thực thành công'
     });
   } catch (error) {
     next(error);
@@ -132,10 +160,10 @@ export const addStudentToSchoolClassController = async (req, res, next) => {
     const { userId } = req.body || {};
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ message: 'id khong hop le' });
+      return res.status(400).json({ message: 'id không hợp lệ' });
     }
     if (!mongoose.Types.ObjectId.isValid(userId)) {
-      return res.status(400).json({ message: 'userId khong hop le' });
+      return res.status(400).json({ message: 'userId không hợp lệ' });
     }
 
     const [schoolClass, user] = await Promise.all([
@@ -144,10 +172,10 @@ export const addStudentToSchoolClassController = async (req, res, next) => {
     ]);
 
     if (!schoolClass) {
-      return res.status(404).json({ message: 'Lop thuc khong ton tai' });
+      return res.status(404).json({ message: 'Lớp thực không tồn tại' });
     }
     if (!user) {
-      return res.status(404).json({ message: 'User khong ton tai' });
+      return res.status(404).json({ message: 'User không tồn tại' });
     }
 
     const exists = await UserSchoolClass.findOne({ userId: user._id, schoolClassId: schoolClass._id });
@@ -156,7 +184,7 @@ export const addStudentToSchoolClassController = async (req, res, next) => {
     }
 
     return res.status(200).json({
-      message: exists ? 'User da co trong lop thuc nay' : 'Them hoc sinh vao lop thuc thanh cong',
+      message: exists ? 'User đã có trong lớp thực này' : 'Thêm học sinh vào lớp thực thành công',
       user: {
         _id: user._id,
         fullName: user.fullName,
@@ -174,19 +202,19 @@ export const assignSchoolClassToUserController = async (req, res, next) => {
     const { userId, schoolClassId } = req.body || {};
 
     if (!mongoose.Types.ObjectId.isValid(userId)) {
-      return res.status(400).json({ message: 'userId khong hop le' });
+      return res.status(400).json({ message: 'userId không hợp lệ' });
     }
 
     const user = await User.findById(userId);
     if (!user) {
-      return res.status(404).json({ message: 'User khong ton tai' });
+      return res.status(404).json({ message: 'User không tồn tại' });
     }
 
     if (schoolClassId === null || schoolClassId === undefined || schoolClassId === '') {
       const deleted = await UserSchoolClass.deleteMany({ userId: user._id });
 
       return res.status(200).json({
-        message: 'Go bo tat ca schoolClassId cua user thanh cong',
+        message: 'Gỡ bỏ tất cả schoolClassId của user thành công',
         deletedCount: deleted.deletedCount || 0,
         user: {
           _id: user._id,
@@ -197,12 +225,12 @@ export const assignSchoolClassToUserController = async (req, res, next) => {
     }
 
     if (!mongoose.Types.ObjectId.isValid(schoolClassId)) {
-      return res.status(400).json({ message: 'schoolClassId khong hop le' });
+      return res.status(400).json({ message: 'schoolClassId không hợp lệ' });
     }
 
     const schoolClass = await SchoolClass.findById(schoolClassId);
     if (!schoolClass) {
-      return res.status(404).json({ message: 'Lop thuc khong ton tai' });
+      return res.status(404).json({ message: 'Lớp thực không tồn tại' });
     }
 
     const exists = await UserSchoolClass.findOne({ userId: user._id, schoolClassId: schoolClass._id });
@@ -211,7 +239,7 @@ export const assignSchoolClassToUserController = async (req, res, next) => {
     }
 
     return res.status(200).json({
-      message: exists ? 'Quan he user-lop da ton tai' : 'Gan schoolClassId cho user thanh cong',
+      message: exists ? 'Quan hệ user-lớp đã tồn tại' : 'Gán schoolClassId cho user thành công',
       user: {
         _id: user._id,
         fullName: user.fullName,
@@ -229,15 +257,15 @@ export const removeStudentFromSchoolClassController = async (req, res, next) => 
     const { id, userId } = req.params;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ message: 'id khong hop le' });
+      return res.status(400).json({ message: 'id không hợp lệ' });
     }
     if (!mongoose.Types.ObjectId.isValid(userId)) {
-      return res.status(400).json({ message: 'userId khong hop le' });
+      return res.status(400).json({ message: 'userId không hợp lệ' });
     }
 
     const user = await User.findById(userId);
     if (!user) {
-      return res.status(404).json({ message: 'User khong ton tai' });
+      return res.status(404).json({ message: 'User không tồn tại' });
     }
 
     const deleted = await UserSchoolClass.findOneAndDelete({
@@ -246,11 +274,11 @@ export const removeStudentFromSchoolClassController = async (req, res, next) => 
     });
 
     if (!deleted) {
-      return res.status(400).json({ message: 'Hoc sinh khong thuoc lop thuc nay' });
+      return res.status(400).json({ message: 'Học sinh không thuộc lớp thực này' });
     }
 
     return res.status(200).json({
-      message: 'Xoa hoc sinh khoi lop thuc thanh cong',
+      message: 'Xóa học sinh khỏi lớp thực thành công',
       user: {
         _id: user._id,
         fullName: user.fullName,

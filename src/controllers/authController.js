@@ -489,17 +489,27 @@ export const getUserController = async (req, res, next) => {
   try {
     const userId = req.user.id;
     const user = await User.findById(userId)
-      .select('_id fullName email classId characterId preferredTopicId isGuest roles isShowCaseView');
+      .select('_id fullName email classId characterId preferredTopicId isGuest roles isShowCaseView')
+      .populate('preferredTopicId', '_id slug name description');
+
+    const preferredTopic =
+      user?.preferredTopicId && typeof user.preferredTopicId === 'object'
+        ? {
+            _id: user.preferredTopicId._id,
+            slug: user.preferredTopicId.slug || null,
+            name: user.preferredTopicId.name || null,
+            description: user.preferredTopicId.description || null
+          }
+        : null;
 
     if (!user) throw new NotFoundError('User không tìm thấy');
-
     return res.status(200).json({
       _id: user._id,
       fullName: user.fullName,
       email: user.email,
       classId: user.classId || null,
       characterId: user.characterId || null,
-      preferredTopicId: user.preferredTopicId || null,
+      slugTopic: preferredTopic?.slug || null,
       isGuest: user.isGuest ?? false,
       roles: user.roles || [],
       isShowCaseView: user.isShowCaseView ?? false

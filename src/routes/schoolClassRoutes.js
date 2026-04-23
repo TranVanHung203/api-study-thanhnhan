@@ -1,6 +1,7 @@
 import express from 'express';
 import {
   getAllSchoolClassesController,
+  getSchoolClassesByUserIdController,
   getSchoolClassByIdController,
   createSchoolClassController,
   updateSchoolClassController,
@@ -49,6 +50,22 @@ router.all('*', authToken);
  *         description: Chua xac thuc
  */
 router.get('/', getAllSchoolClassesController);
+
+/**
+ * @swagger
+ * /school-classes/my/classes:
+ *   get:
+ *     summary: Lay danh sach lop cua tai khoan dang nhap
+ *     tags: [SchoolClass]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Lay danh sach lop theo tai khoan dang nhap thanh cong
+ *       401:
+ *         description: Chua xac thuc hoac token khong hop le
+ */
+router.get('/my/classes', getSchoolClassesByUserIdController);
 
 /**
  * @swagger

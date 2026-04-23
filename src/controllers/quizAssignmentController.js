@@ -3,6 +3,7 @@ import AssignmentAttempt from '../models/assignmentAttempt.schema.js';
 import Quiz from '../models/quiz.schema.js';
 import Question from '../models/question.schema.js';
 import UserSchoolClass from '../models/userSchoolClass.schema.js';
+import User from '../models/user.schema.js';
 
 const getCurrentUserSchoolClassId = async (userId) => {
   const mapping = await UserSchoolClass.findOne({ userId })
@@ -44,76 +45,128 @@ const attachMyAttemptToAssignments = async (assignments, userId) => {
   }));
 };
 
-// Lay danh sach assignment cua giao vien hien tai
+// Lấy danh sách assignment của giáo viên hiện tại
 export const getAssignmentsController = async (req, res, next) => {
   try {
-    const filter = { teacherId: req.user.id };
+    const pageRaw = parseInt(req.query.page, 10);
+    const limitRaw = parseInt(req.query.limit, 10);
+    const page = Number.isNaN(pageRaw) ? 1 : Math.max(1, pageRaw);
+    const limit = Number.isNaN(limitRaw) ? 20 : Math.max(1, Math.min(100, limitRaw));
+    const skip = (page - 1) * limit;
 
-    if (req.query.schoolClassId !== undefined) {
-      filter.schoolClassId =
-        req.query.schoolClassId === '' || req.query.schoolClassId === 'null'
-          ? null
+    const filter = { teacherId: req.user.id };
+    const hasSchoolClassIdQuery = Object.prototype.hasOwnProperty.call(req.query || {}, 'schoolClassId');
+
+    if (hasSchoolClassIdQuery) {
+      const schoolClassIdQuery =
+        typeof req.query.schoolClassId === 'string'
+          ? req.query.schoolClassId.trim()
           : req.query.schoolClassId;
+
+      const isNullSchoolClass =
+        schoolClassIdQuery === null || schoolClassIdQuery === undefined || schoolClassIdQuery === '' || schoolClassIdQuery === 'null';
+
+      if (!isNullSchoolClass) {
+        filter.schoolClassId = schoolClassIdQuery;
+      }
     }
 
-    const assignments = await QuizAssignment.find(filter)
-      .populate('quizId', 'title')
-      .populate('schoolClassId', 'className')
-      .sort({ createdAt: -1 });
+    const [assignments, total] = await Promise.all([
+      QuizAssignment.find(filter)
+        .populate('quizId', 'title')
+        .populate('schoolClassId', 'className')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit),
+      QuizAssignment.countDocuments(filter)
+    ]);
 
-    return res.status(200).json({ assignments });
+    const totalPages = total > 0 ? Math.ceil(total / limit) : 1;
+
+    return res.status(200).json({
+      page,
+      limit,
+      total,
+      totalPages,
+      assignments
+    });
   } catch (err) {
     next(err);
   }
 };
 
-// Tao assignment moi
+// Tạo assignment mới
 export const createAssignmentController = async (req, res, next) => {
   try {
-    const { quizId, schoolClassId, startAt, endAt, status } = req.body;
+    const { quizId, schoolClassId, startAt, endAt, status, name, description } = req.body;
 
     if (!quizId) {
-      return res.status(400).json({ message: 'quizId la bat buoc' });
+      return res.status(400).json({ message: 'quizId là bắt buộc' });
     }
 
-    const isGlobalAssignment =
-      schoolClassId === null || schoolClassId === undefined || schoolClassId === '';
+    if (name !== undefined && name !== null && typeof name !== 'string') {
+      return res.status(400).json({ message: 'name phải là chuỗi' });
+    }
 
-    if (!isGlobalAssignment) {
+    if (description !== undefined && description !== null && typeof description !== 'string') {
+      return res.status(400).json({ message: 'description phải là chuỗi' });
+    }
+
+    const normalizedName = typeof name === 'string' ? name.trim() : '';
+    const normalizedDescription = typeof description === 'string' ? description.trim() : '';
+
+
+    // Chỉ cho phép assignment toàn trường (schoolClassId=null) nếu là admin
+    const isGlobalAssignment = schoolClassId === null || schoolClassId === undefined || schoolClassId === '';
+    if (isGlobalAssignment) {
+      const currentUser = await User.findById(req.user.id).select('roles').lean();
+      const userRoles = Array.isArray(currentUser?.roles)
+        ? currentUser.roles.map((role) => String(role).toLowerCase())
+        : [];
+      const isAdmin = userRoles.includes('admin');
+
+      if (!isAdmin) {
+        return res.status(403).json({
+          message: 'Chỉ admin mới được phép tạo assignment toàn trường (schoolClassId=null)'
+        });
+      }
+    } else {
       const isTeacherInSchoolClass = await UserSchoolClass.exists({
         userId: req.user.id,
         schoolClassId
       });
-
       if (!isTeacherInSchoolClass) {
         return res.status(400).json({
-          message: 'Giao vien chua duoc gan schoolClass nay, khong the tao assignment'
+          message: 'Giáo viên chưa được gán schoolClass này, không thể tạo assignment'
         });
       }
     }
 
     const quiz = await Quiz.findOne({ _id: quizId, createdBy: req.user.id });
     if (!quiz) {
-      return res.status(404).json({ message: 'Quiz khong tim thay hoac ban khong co quyen' });
+      return res.status(404).json({ message: 'Quiz không tìm thấy hoặc bạn không có quyền' });
     }
+
 
     const assignment = new QuizAssignment({
       quizId,
       schoolClassId: isGlobalAssignment ? null : schoolClassId,
       teacherId: req.user.id,
+      name: normalizedName,
+      description: normalizedDescription,
       startAt,
       endAt,
       status: status || 'open'
     });
 
     await assignment.save();
-    return res.status(201).json({ message: 'Tao assignment thanh cong', assignment });
+    return res.status(201).json({ message: 'Tạo assignment thành công', assignment });
   } catch (err) {
     next(err);
   }
 };
 
-// Thay doi trang thai assignment (giao vien)
+// Thay đổi trạng thái assignment (giáo viên)
 export const updateAssignmentStatusController = async (req, res, next) => {
   try {
     const { assignmentId } = req.params;
@@ -122,7 +175,7 @@ export const updateAssignmentStatusController = async (req, res, next) => {
     const validStatuses = ['draft', 'open', 'closed'];
     if (!validStatuses.includes(status)) {
       return res.status(400).json({
-        message: `Trang thai khong hop le. Chi chap nhan: ${validStatuses.join(', ')}`
+        message: `Trạng thái không hợp lệ. Chỉ chấp nhận: ${validStatuses.join(', ')}`
       });
     }
 
@@ -133,47 +186,109 @@ export const updateAssignmentStatusController = async (req, res, next) => {
     );
 
     if (!assignment) {
-      return res.status(404).json({ message: 'Assignment khong tim thay hoac ban khong co quyen' });
+      return res.status(404).json({ message: 'Assignment không tìm thấy hoặc bạn không có quyền' });
     }
 
-    return res.status(200).json({ message: 'Cap nhat trang thai thanh cong', assignment });
+    return res.status(200).json({ message: 'Cập nhật trạng thái thành công', assignment });
   } catch (err) {
     next(err);
   }
 };
 
-// Cap nhat assignment
+// Cập nhật assignment
 export const updateAssignmentController = async (req, res, next) => {
   try {
     const { assignmentId } = req.params;
-    const { schoolClassId, startAt, endAt, status } = req.body;
+    const { quizId, schoolClassId, startAt, endAt, status, name, description } = req.body;
 
     const updateData = {};
+    const hasQuizIdField = Object.prototype.hasOwnProperty.call(req.body || {}, 'quizId');
+    if (hasQuizIdField) {
+      const normalizedQuizId = typeof quizId === 'string' ? quizId.trim() : quizId;
+      if (!normalizedQuizId) {
+        return res.status(400).json({ message: 'quizId là bắt buộc' });
+      }
+
+      const quiz = await Quiz.findOne({ _id: normalizedQuizId, createdBy: req.user.id });
+      if (!quiz) {
+        return res.status(404).json({ message: 'Quiz không tìm thấy hoặc bạn không có quyền' });
+      }
+
+      updateData.quizId = normalizedQuizId;
+    }
+
     if (startAt !== undefined) updateData.startAt = startAt;
     if (endAt !== undefined) updateData.endAt = endAt;
-    if (status !== undefined) updateData.status = status;
+
+    const hasNameField = Object.prototype.hasOwnProperty.call(req.body || {}, 'name');
+    if (hasNameField) {
+      if (name !== null && typeof name !== 'string') {
+        return res.status(400).json({ message: 'name phải là chuỗi' });
+      }
+      updateData.name = typeof name === 'string' ? name.trim() : '';
+    }
+
+    const hasDescriptionField = Object.prototype.hasOwnProperty.call(req.body || {}, 'description');
+    if (hasDescriptionField) {
+      if (description !== null && typeof description !== 'string') {
+        return res.status(400).json({ message: 'description phải là chuỗi' });
+      }
+      updateData.description = typeof description === 'string' ? description.trim() : '';
+    }
+
+    if (status !== undefined) {
+      const validStatuses = ['draft', 'open', 'closed'];
+      if (!validStatuses.includes(status)) {
+        return res.status(400).json({
+          message: `Trạng thái không hợp lệ. Chỉ chấp nhận: ${validStatuses.join(', ')}`
+        });
+      }
+      updateData.status = status;
+    }
 
     const hasSchoolClassIdField = Object.prototype.hasOwnProperty.call(req.body || {}, 'schoolClassId');
     if (hasSchoolClassIdField) {
+      const normalizedSchoolClassId =
+        typeof schoolClassId === 'string' ? schoolClassId.trim() : schoolClassId;
+
       const isGlobalAssignment =
-        schoolClassId === null || schoolClassId === undefined || schoolClassId === '';
+        normalizedSchoolClassId === null ||
+        normalizedSchoolClassId === undefined ||
+        normalizedSchoolClassId === '' ||
+        normalizedSchoolClassId === 'null';
 
       if (isGlobalAssignment) {
+        const currentUser = await User.findById(req.user.id).select('roles').lean();
+        const userRoles = Array.isArray(currentUser?.roles)
+          ? currentUser.roles.map((role) => String(role).toLowerCase())
+          : [];
+        const isAdmin = userRoles.includes('admin');
+
+        if (!isAdmin) {
+          return res.status(403).json({
+            message: 'Chỉ admin mới được phép đặt assignment toàn trường (schoolClassId=null)'
+          });
+        }
+
         updateData.schoolClassId = null;
       } else {
         const isTeacherInSchoolClass = await UserSchoolClass.exists({
           userId: req.user.id,
-          schoolClassId
+          schoolClassId: normalizedSchoolClassId
         });
 
         if (!isTeacherInSchoolClass) {
           return res.status(400).json({
-            message: 'Giao vien chua duoc gan schoolClass nay, khong the cap nhat assignment'
+            message: 'Giáo viên chưa được gán schoolClass này, không thể cập nhật assignment'
           });
         }
 
-        updateData.schoolClassId = schoolClassId;
+        updateData.schoolClassId = normalizedSchoolClassId;
       }
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({ message: 'Không có thuộc tính nào để cập nhật' });
     }
 
     const assignment = await QuizAssignment.findOneAndUpdate(
@@ -183,45 +298,45 @@ export const updateAssignmentController = async (req, res, next) => {
     );
 
     if (!assignment) {
-      return res.status(404).json({ message: 'Assignment khong tim thay hoac ban khong co quyen' });
+      return res.status(404).json({ message: 'Assignment không tìm thấy hoặc bạn không có quyền' });
     }
 
-    return res.status(200).json({ message: 'Cap nhat thanh cong', assignment });
+    return res.status(200).json({ message: 'Cập nhật thành công', assignment });
   } catch (err) {
     next(err);
   }
 };
 
-// Xoa assignment (chi khi chua co hoc sinh lam bai)
+// Xóa assignment (chỉ khi chưa có học sinh làm bài)
 export const deleteAssignmentController = async (req, res, next) => {
   try {
     const { assignmentId } = req.params;
 
     const assignment = await QuizAssignment.findOne({ _id: assignmentId, teacherId: req.user.id });
     if (!assignment) {
-      return res.status(404).json({ message: 'Assignment khong tim thay hoac ban khong co quyen' });
+      return res.status(404).json({ message: 'Assignment không tìm thấy hoặc bạn không có quyền' });
     }
 
     const hasAttempts = await AssignmentAttempt.exists({ assignmentId });
     if (hasAttempts) {
-      return res.status(400).json({ message: 'Khong the xoa vi da co hoc sinh lam bai' });
+      return res.status(400).json({ message: 'Không thể xóa vì đã có học sinh làm bài' });
     }
 
     await QuizAssignment.findByIdAndDelete(assignmentId);
-    return res.status(200).json({ message: 'Xoa assignment thanh cong' });
+    return res.status(200).json({ message: 'Xóa assignment thành công' });
   } catch (err) {
     next(err);
   }
 };
 
-// Lay ket qua lam bai cua hoc sinh theo assignment (giao vien xem)
+// Lấy kết quả làm bài của học sinh theo assignment (giáo viên xem)
 export const getAssignmentResultsController = async (req, res, next) => {
   try {
     const { assignmentId } = req.params;
 
     const assignment = await QuizAssignment.findOne({ _id: assignmentId, teacherId: req.user.id });
     if (!assignment) {
-      return res.status(404).json({ message: 'Assignment khong tim thay hoac ban khong co quyen' });
+      return res.status(404).json({ message: 'Assignment không tìm thấy hoặc bạn không có quyền' });
     }
 
     const attempts = await AssignmentAttempt.find({ assignmentId })
@@ -234,9 +349,9 @@ export const getAssignmentResultsController = async (req, res, next) => {
   }
 };
 
-// ============ PHIA HOC SINH ============
+// ============ PHÍA HỌC SINH ============
 
-// Lay danh sach assignment duoc giao cho lop hien tai cua hoc sinh
+// Lấy danh sách assignment được giao cho lớp hiện tại của học sinh
 export const getMyAssignmentsController = async (req, res, next) => {
   try {
     const currentSchoolClassId = await getCurrentUserSchoolClassId(req.user.id);
@@ -263,7 +378,7 @@ export const getMyAssignmentsController = async (req, res, next) => {
   }
 };
 
-// Lay danh sach assignment global (schoolClassId = null) cho hoc sinh
+// Lấy danh sách assignment global (schoolClassId = null) cho học sinh
 export const getMyGlobalAssignmentsController = async (req, res, next) => {
   try {
     const now = new Date();
@@ -284,7 +399,7 @@ export const getMyGlobalAssignmentsController = async (req, res, next) => {
   }
 };
 
-// Lay cau hoi cua assignment de lam bai (an dap an)
+// Lấy câu hỏi của assignment để làm bài (ẩn đáp án)
 export const getAssignmentQuestionsController = async (req, res, next) => {
   try {
     const { assignmentId } = req.params;
@@ -298,7 +413,7 @@ export const getAssignmentQuestionsController = async (req, res, next) => {
     });
 
     if (!assignment) {
-      return res.status(404).json({ message: 'Assignment khong tim thay hoac chua mo' });
+      return res.status(404).json({ message: 'Assignment không tìm thấy hoặc chưa mở' });
     }
 
     const questions = await Question.find({ quizId: assignment.quizId }).select('-answer');
@@ -308,14 +423,14 @@ export const getAssignmentQuestionsController = async (req, res, next) => {
   }
 };
 
-// Nop bai assignment
+// Nộp bài assignment
 export const submitAssignmentController = async (req, res, next) => {
   try {
     const { assignmentId } = req.params;
     const { answers } = req.body; // [{ questionId, userAnswer }]
 
     if (!Array.isArray(answers) || !answers.length) {
-      return res.status(400).json({ message: 'answers phai la mang va khong duoc rong' });
+      return res.status(400).json({ message: 'answers phải là mảng và không được rỗng' });
     }
 
     const currentSchoolClassId = await getCurrentUserSchoolClassId(req.user.id);
@@ -327,7 +442,7 @@ export const submitAssignmentController = async (req, res, next) => {
     });
 
     if (!assignment) {
-      return res.status(404).json({ message: 'Assignment khong tim thay hoac chua mo' });
+      return res.status(404).json({ message: 'Assignment không tìm thấy hoặc chưa mở' });
     }
 
     const questionIds = answers.map((a) => a.questionId);
@@ -367,7 +482,7 @@ export const submitAssignmentController = async (req, res, next) => {
     await attempt.save();
 
     return res.status(201).json({
-      message: 'Nop bai thanh cong',
+      message: 'Nộp bài thành công',
       score,
       total: answers.length,
       details
@@ -377,14 +492,14 @@ export const submitAssignmentController = async (req, res, next) => {
   }
 };
 
-// Giao vien xem tat ca cac lan lam bai cua mot hoc sinh trong assignment
+// Giáo viên xem tất cả các lần làm bài của một học sinh trong assignment
 export const getStudentAttemptsController = async (req, res, next) => {
   try {
     const { assignmentId, studentId } = req.params;
 
     const assignment = await QuizAssignment.findOne({ _id: assignmentId, teacherId: req.user.id });
     if (!assignment) {
-      return res.status(404).json({ message: 'Assignment khong tim thay hoac ban khong co quyen' });
+      return res.status(404).json({ message: 'Assignment không tìm thấy hoặc bạn không có quyền' });
     }
 
     const attempts = await AssignmentAttempt.find({ assignmentId, userId: studentId })
@@ -398,7 +513,7 @@ export const getStudentAttemptsController = async (req, res, next) => {
   }
 };
 
-// Hoc sinh xem lai bai lam cua minh
+// Học sinh xem lại bài làm của mình
 export const getMyAttemptController = async (req, res, next) => {
   try {
     const { assignmentId } = req.params;
@@ -409,7 +524,7 @@ export const getMyAttemptController = async (req, res, next) => {
     }).populate('details.questionId', 'questionText choices imageQuestion');
 
     if (!attempt) {
-      return res.status(404).json({ message: 'Ban chua lam bai nay' });
+      return res.status(404).json({ message: 'Bạn chưa làm bài này' });
     }
 
     return res.status(200).json({ attempt });

@@ -163,10 +163,10 @@ export const getAllQuestionsController = async (req, res, next) => {
     const hasImage = parseBooleanQuery(req.query.hasImage);
 
     if (questionId && !isValidObjectId(questionId)) {
-      return res.status(400).json({ message: 'questionId khong hop le' });
+      return res.status(400).json({ message: 'questionId không hợp lệ' });
     }
     if (quizId && !isValidObjectId(quizId)) {
-      return res.status(400).json({ message: 'quizId khong hop le' });
+      return res.status(400).json({ message: 'quizId không hợp lệ' });
     }
 
     const andConditions = [];
@@ -227,7 +227,7 @@ export const getAllQuestionsController = async (req, res, next) => {
       try {
         parsedFilters = typeof rawFilters === 'string' ? JSON.parse(rawFilters) : rawFilters;
       } catch (error) {
-        return res.status(400).json({ message: 'filters phai la JSON hop le' });
+        return res.status(400).json({ message: 'filters phải là JSON hợp lệ' });
       }
 
       if (parsedFilters && typeof parsedFilters === 'object' && !Array.isArray(parsedFilters)) {
@@ -281,16 +281,16 @@ export const getQuestionsByQuizController = async (req, res, next) => {
     const skip = (page - 1) * limit;
 
     if (!isValidObjectId(quizId)) {
-      return res.status(400).json({ message: 'quizId khong hop le' });
+      return res.status(400).json({ message: 'quizId không hợp lệ' });
     }
 
     const quiz = await Quiz.findById(quizId).select('_id createdBy').lean();
     if (!quiz) {
-      return res.status(404).json({ message: 'Khong tim thay quiz' });
+      return res.status(404).json({ message: 'Không tìm thấy quiz' });
     }
 
     if (!quiz.createdBy || String(quiz.createdBy) !== String(req.user.id)) {
-      return res.status(403).json({ message: 'Ban khong co quyen xem cau hoi cua quiz nay' });
+      return res.status(403).json({ message: 'Bạn không có quyền xem câu hỏi của quiz này' });
     }
 
     // If random sampling requested, use aggregation $sample to get `limit` random docs
@@ -379,12 +379,12 @@ export const createQuestionController = async (req, res, next) => {
     }
 
     if (!quizId || !isValidObjectId(quizId)) {
-      return res.status(400).json({ message: 'quizId khong hop le' });
+      return res.status(400).json({ message: 'quizId không hợp lệ' });
     }
 
     const quiz = await Quiz.findOne({ _id: quizId, createdBy: req.user.id });
     if (!quiz) {
-      return res.status(404).json({ message: 'Quiz khong tim thay hoac ban khong co quyen them cau hoi' });
+      return res.status(404).json({ message: 'Quiz không tìm thấy hoặc bạn không có quyền thêm câu hỏi' });
     }
 
     if (!Array.isArray(choices) || choices.length < 2 || choices.some((c) => typeof c !== 'string')) {
@@ -418,7 +418,7 @@ export const createQuestionController = async (req, res, next) => {
     await question.save();
 
     return res.status(201).json({
-      message: 'Tao cau hoi thanh cong',
+      message: 'Tạo câu hỏi thành công',
       question
     });
   } catch (error) {
@@ -426,7 +426,7 @@ export const createQuestionController = async (req, res, next) => {
   }
 };
 
-// Lay cau hoi (an dap an dung)
+// Lấy câu hỏi (ẩn đáp án đúng)
 export const getQuestionForStudentController = async (req, res, next) => {
   try {
     const { questionId } = req.params;

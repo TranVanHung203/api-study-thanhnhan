@@ -301,8 +301,18 @@ router.post('/reset-password', resetPasswordController);
  *                   type: string
  *                   nullable: true
  *                 preferredTopicId:
- *                   type: string
+ *                   type: object
  *                   nullable: true
+ *                   properties:
+ *                     _id:
+ *                       type: string
+ *                     slug:
+ *                       type: string
+ *                     name:
+ *                       type: string
+ *                     description:
+ *                       type: string
+ *                       nullable: true
  *                 isGuest:
  *                   type: boolean
  *                 roles:

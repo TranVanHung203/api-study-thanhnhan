@@ -17,6 +17,18 @@ const QuizAssignmentSchema = new mongoose.Schema({
     ref: 'User',
     required: true
   },
+  name: {
+    type: String,
+    required: false,
+    trim: true,
+    default: ''
+  },
+  description: {
+    type: String,
+    required: false,
+    trim: true,
+    default: ''
+  },
   startAt: {
     type: Date,
     default: Date.now

@@ -59,6 +59,12 @@ router.get('/', getAssignmentsController);
  *             properties:
  *               quizId:
  *                 type: string
+ *               name:
+ *                 type: string
+ *                 description: Ten hien thi cua assignment
+ *               description:
+ *                 type: string
+ *                 description: Mo ta ngan cho assignment
  *               schoolClassId:
  *                 type: string
  *                 nullable: true
@@ -102,6 +108,15 @@ router.post('/', createAssignmentController);
  *           schema:
  *             type: object
  *             properties:
+ *               quizId:
+ *                 type: string
+ *                 description: Doi quiz cho assignment (phai la quiz do chinh giao vien tao)
+ *               name:
+ *                 type: string
+ *                 description: Cap nhat ten assignment
+ *               description:
+ *                 type: string
+ *                 description: Cap nhat mo ta assignment
  *               schoolClassId:
  *                 type: string
  *                 nullable: true
@@ -118,6 +133,10 @@ router.post('/', createAssignmentController);
  *     responses:
  *       200:
  *         description: Cap nhat thanh cong
+ *       400:
+ *         description: Du lieu cap nhat khong hop le
+ *       403:
+ *         description: Chi admin moi duoc dat schoolClassId=null
  *       404:
  *         description: Assignment khong tim thay hoac khong co quyen
  */
