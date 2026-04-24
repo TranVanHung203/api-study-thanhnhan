@@ -10,6 +10,8 @@ import {
   getMyAssignmentsController,
   getMyGlobalAssignmentsController,
   getAssignmentQuestionsController,
+  getAssignmentSessionQuestionsController,
+  saveAssignmentSessionAnswersController,
   submitAssignmentController,
   getMyAttemptController
 } from '../controllers/quizAssignmentController.js';
@@ -283,67 +285,222 @@ router.get('/my', getMyAssignmentsController);
  */
 router.get('/my-global', getMyGlobalAssignmentsController);
 
-// /**
-//  * @swagger
-//  * /assignments/{assignmentId}/questions:
-//  *   get:
-//  *     summary: Hoc sinh lay cau hoi de lam bai (an dap an)
-//  *     tags: [Assignments]
-//  *     security:
-//  *       - bearerAuth: []
-//  *     parameters:
-//  *       - in: path
-//  *         name: assignmentId
-//  *         required: true
-//  *         schema:
-//  *           type: string
-//  *     responses:
-//  *       200:
-//  *         description: Danh sach cau hoi
-//  *       404:
-//  *         description: Assignment khong tim thay hoac chua mo
-//  */
-// router.get('/:assignmentId/questions', getAssignmentQuestionsController);
+/**
+ * @swagger
+ * /assignments/{assignmentId}/questions:
+ *   get:
+ *     summary: Hoc sinh bat dau lam bai, tao session va lay cau hoi (an dap an)
+ *     tags: [Assignments]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: assignmentId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       201:
+ *         description: Tao session thanh cong va tra ve danh sach cau hoi kem thong tin countdown
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 sessionId:
+ *                   type: string
+ *                 serverNow:
+ *                   type: string
+ *                   format: date-time
+ *                 endsAt:
+ *                   type: string
+ *                   format: date-time
+ *                 questions:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *       404:
+ *         description: Assignment khong tim thay hoac chua mo
+ *       409:
+ *         description: Chua den gio lam bai, da qua gio nop bai, hoac assignment chua open
+ */
+router.get('/:assignmentId/questions', getAssignmentQuestionsController);
 
-// /**
-//  * @swagger
-//  * /assignments/{assignmentId}/submit:
-//  *   post:
-//  *     summary: Hoc sinh nop bai
-//  *     tags: [Assignments]
-//  *     security:
-//  *       - bearerAuth: []
-//  *     parameters:
-//  *       - in: path
-//  *         name: assignmentId
-//  *         required: true
-//  *         schema:
-//  *           type: string
-//  *     requestBody:
-//  *       required: true
-//  *       content:
-//  *         application/json:
-//  *           schema:
-//  *             type: object
-//  *             required:
-//  *               - answers
-//  *             properties:
-//  *               answers:
-//  *                 type: array
-//  *                 items:
-//  *                   type: object
-//  *                   properties:
-//  *                     questionId:
-//  *                       type: string
-//  *                     userAnswer:
-//  *                       description: Index (so) hoac string
-//  *     responses:
-//  *       201:
-//  *         description: Nop bai thanh cong, tra ve diem va chi tiet
-//  *       404:
-//  *         description: Assignment khong tim thay hoac chua mo
-//  */
-// router.post('/:assignmentId/submit', submitAssignmentController);
+/**
+ * @swagger
+ * /assignments/{assignmentId}/sessions/{sessionId}/questions:
+ *   get:
+ *     summary: Hoc sinh lay lai cau hoi va dap an da chon theo session
+ *     tags: [Assignments]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: assignmentId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: path
+ *         name: sessionId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Danh sach cau hoi va dap an da luu tam kem thong tin countdown
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 sessionId:
+ *                   type: string
+ *                 serverNow:
+ *                   type: string
+ *                   format: date-time
+ *                 endsAt:
+ *                   type: string
+ *                   format: date-time
+ *                 selectedAnswers:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 questions:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *       404:
+ *         description: Session khong ton tai hoac het han
+ *       409:
+ *         description: Chua den gio lam bai, da qua gio nop bai, assignment chua open, hoac session het han
+ */
+router.get('/:assignmentId/sessions/:sessionId/questions', getAssignmentSessionQuestionsController);
+
+/**
+ * @swagger
+ * /assignments/{assignmentId}/sessions/{sessionId}/answers:
+ *   put:
+ *     summary: Luu dap an da chon tam thoi theo session
+ *     tags: [Assignments]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: assignmentId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: path
+ *         name: sessionId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - answers
+ *             properties:
+ *               answers:
+ *                 type: array
+ *                 description: Danh sach dap an tam can luu cho session hien tai
+ *                 items:
+ *                   type: object
+ *                   required:
+ *                     - questionId
+ *                     - userAnswer
+ *                   properties:
+ *                     questionId:
+ *                       type: string
+ *                       description: _id cua cau hoi trong `questions` response khi start/resume session
+ *                     userAnswer:
+ *                       oneOf:
+ *                         - type: integer
+ *                         - type: string
+ *                         - type: array
+ *                         - type: object
+ *                       description: Gia tri dap an hoc sinh chon (index hoac text tuy question type)
+ *           example:
+ *             answers:
+ *               - questionId: "69ead343616cda740b792768"
+ *                 userAnswer: 1
+ *     responses:
+ *       200:
+ *         description: Luu dap an tam thanh cong
+ *       400:
+ *         description: answers khong hop le hoac co questionId khong thuoc session
+ *       404:
+ *         description: Assignment/session khong ton tai hoac da het han
+ */
+router.put('/:assignmentId/sessions/:sessionId/answers', saveAssignmentSessionAnswersController);
+
+/**
+ * @swagger
+ * /assignments/{assignmentId}/sessions/{sessionId}/submit:
+ *   post:
+ *     summary: Hoc sinh nop bai theo session
+ *     tags: [Assignments]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: assignmentId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: path
+ *         name: sessionId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               answers:
+ *                 type: array
+ *                 description: |
+ *                   Danh sach dap an gui len khi nop bai.
+ *                   Neu khong gui `answers`, he thong se dung `selectedAnswers` da luu trong session.
+ *                 items:
+ *                   type: object
+ *                   required:
+ *                     - questionId
+ *                     - userAnswer
+ *                   properties:
+ *                     questionId:
+ *                       type: string
+ *                     userAnswer:
+ *                       oneOf:
+ *                         - type: integer
+ *                         - type: string
+ *                         - type: array
+ *                         - type: object
+ *           examples:
+ *             submit_with_answers:
+ *               summary: Nop bai kem answers trong request
+ *               value:
+ *                 answers:
+ *                   - questionId: "69ead343616cda740b792768"
+ *                     userAnswer: 1
+ *             submit_from_saved_answers:
+ *               summary: Nop bai bang answers da luu truoc do trong session
+ *               value: {}
+ *     responses:
+ *       201:
+ *         description: Nop bai thanh cong
+ *       400:
+ *         description: answers khong hop le hoac rong
+ *       404:
+ *         description: Assignment hoac session khong hop le
+ */
+router.post('/:assignmentId/sessions/:sessionId/submit', submitAssignmentController);
 
 /**
  * @swagger

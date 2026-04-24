@@ -1,5 +1,6 @@
 import QuizAssignment from '../models/quizAssignment.schema.js';
 import AssignmentAttempt from '../models/assignmentAttempt.schema.js';
+import QuizAssignmentSession from '../models/quizAssignmentSession.schema.js';
 import Quiz from '../models/quiz.schema.js';
 import Question from '../models/question.schema.js';
 import UserSchoolClass from '../models/userSchoolClass.schema.js';
@@ -27,22 +28,223 @@ const buildVisibilityFilter = (schoolClassId) => {
   };
 };
 
+const getAssignmentAccessForUser = async (assignmentId, userId, now = new Date()) => {
+  const currentSchoolClassId = await getCurrentUserSchoolClassId(userId);
+  const visibilityFilter = buildVisibilityFilter(currentSchoolClassId);
+
+  const assignment = await QuizAssignment.findOne({
+    _id: assignmentId,
+    ...visibilityFilter
+  }).lean();
+
+  if (!assignment) {
+    return {
+      ok: false,
+      status: 404,
+      code: 'assignment_not_found',
+      message: 'Khong tim thay assignment hoac ban khong co quyen truy cap',
+      assignmentStartAt: null,
+      assignmentEndAt: null
+    };
+  }
+
+  if (assignment.status !== 'open') {
+    return {
+      ok: false,
+      status: 409,
+      code: 'assignment_not_open',
+      message: 'Assignment chua mo de lam bai',
+      assignmentStartAt: assignment.startAt || null,
+      assignmentEndAt: assignment.endAt || null
+    };
+  }
+
+  if (assignment.startAt && new Date(assignment.startAt) > now) {
+    return {
+      ok: false,
+      status: 409,
+      code: 'assignment_not_started',
+      message: 'Chua den thoi gian lam bai',
+      assignmentStartAt: assignment.startAt || null,
+      assignmentEndAt: assignment.endAt || null
+    };
+  }
+
+  if (assignment.endAt && new Date(assignment.endAt) < now) {
+    return {
+      ok: false,
+      status: 409,
+      code: 'assignment_ended',
+      message: 'Da qua gio nop bai',
+      assignmentStartAt: assignment.startAt || null,
+      assignmentEndAt: assignment.endAt || null
+    };
+  }
+
+  return {
+    ok: true,
+    assignment
+  };
+};
+
+const sanitizeQuestions = (questionDocs) => {
+  return questionDocs.map((q) => {
+    const sanitized = { ...q };
+    delete sanitized.answer;
+    delete sanitized.correctAnswer;
+    return sanitized;
+  });
+};
+
+const getOwnedAssignmentSession = async (sessionId, assignmentId, userId, now = new Date()) => {
+  const session = await QuizAssignmentSession.findOne({
+    _id: sessionId,
+    assignmentId,
+    userId
+  }).lean();
+
+  if (!session) {
+    return {
+      session: null,
+      reason: 'session_not_found'
+    };
+  }
+
+  if (session.expiresAt && new Date(session.expiresAt) <= now) {
+    await QuizAssignmentSession.deleteOne({ _id: sessionId });
+    return {
+      session: null,
+      reason: 'session_expired'
+    };
+  }
+
+  return {
+    session,
+    reason: null
+  };
+};
+
+const buildCountdownPayload = (session, now = new Date()) => {
+  const endsAt = session?.expiresAt ? new Date(session.expiresAt) : null;
+
+  return {
+    serverNow: now,
+    endsAt
+  };
+};
+
+const sendAssignmentAccessError = (res, access, now = new Date()) => {
+  return res.status(access.status || 400).json({
+    code: access.code || 'assignment_access_denied',
+    message: access.message || 'Khong the truy cap assignment',
+    serverNow: now,
+    assignmentWindow: {
+      startAt: access.assignmentStartAt || null,
+      endAt: access.assignmentEndAt || null
+    }
+  });
+};
+
+const sendSessionError = (res, reason, now = new Date()) => {
+  if (reason === 'session_expired') {
+    return res.status(409).json({
+      code: 'session_expired',
+      message: 'Phien lam bai da het gio. Vui long bat dau lai neu assignment van con han',
+      serverNow: now
+    });
+  }
+
+  return res.status(404).json({
+    code: 'session_not_found',
+    message: 'Khong tim thay session lam bai',
+    serverNow: now
+  });
+};
+
+const normalizeSessionAnswers = (answers, allowedQuestionIds) => {
+  if (!Array.isArray(answers)) {
+    return { normalized: null, invalidQuestionIds: [] };
+  }
+
+  const allowedSet = new Set(allowedQuestionIds.map((id) => String(id)));
+  const answerByQuestionId = new Map();
+  const invalidQuestionIds = [];
+
+  for (const answer of answers) {
+    if (!answer || !answer.questionId) {
+      continue;
+    }
+
+    const questionId = String(answer.questionId);
+    if (!allowedSet.has(questionId)) {
+      invalidQuestionIds.push(questionId);
+      continue;
+    }
+
+    answerByQuestionId.set(questionId, {
+      questionId,
+      userAnswer: answer.userAnswer,
+      updatedAt: new Date()
+    });
+  }
+
+  const normalized = [];
+  for (const allowedQuestionId of allowedQuestionIds) {
+    const questionId = String(allowedQuestionId);
+    if (answerByQuestionId.has(questionId)) {
+      normalized.push(answerByQuestionId.get(questionId));
+    }
+  }
+
+  return {
+    normalized,
+    invalidQuestionIds
+  };
+};
+
 const attachMyAttemptToAssignments = async (assignments, userId) => {
+  if (!assignments.length) {
+    return [];
+  }
+
   const assignmentIds = assignments.map((a) => a._id);
   const myAttempts = await AssignmentAttempt.find({
     assignmentId: { $in: assignmentIds },
     userId
-  }).select('assignmentId isCompleted score').lean();
+  })
+    .select('assignmentId isCompleted score createdAt')
+    .sort({ createdAt: -1 })
+    .lean();
 
-  const attemptMap = {};
-  myAttempts.forEach((a) => {
-    attemptMap[a.assignmentId.toString()] = a;
+  const attemptsByAssignmentId = {};
+  myAttempts.forEach((attempt) => {
+    const assignmentIdKey = attempt.assignmentId.toString();
+    if (!attemptsByAssignmentId[assignmentIdKey]) {
+      attemptsByAssignmentId[assignmentIdKey] = [];
+    }
+
+    attemptsByAssignmentId[assignmentIdKey].push({
+      score: attempt.score,
+      isCompleted: attempt.isCompleted,
+      createdAt: attempt.createdAt
+    });
   });
 
-  return assignments.map((a) => ({
-    ...a.toObject(),
-    myAttempt: attemptMap[a._id.toString()] || null
-  }));
+  return assignments.map((assignmentDoc) => {
+    const assignment = typeof assignmentDoc.toObject === 'function'
+      ? assignmentDoc.toObject()
+      : assignmentDoc;
+
+    return {
+      assignmentId: assignment._id,
+      name: assignment.name,
+      description: assignment.description,
+      startAt: assignment.startAt,
+      endAt: assignment.endAt,
+      status: assignment.status,
+      myAttempts: attemptsByAssignmentId[assignment._id.toString()] || []
+    };
+  });
 };
 
 // Lấy danh sách assignment của giáo viên hiện tại
@@ -365,9 +567,7 @@ export const getMyAssignmentsController = async (req, res, next) => {
       status: 'open',
       $or: [{ endAt: null }, { endAt: { $gte: now } }]
     })
-      .populate('quizId', 'title description')
-      .populate('schoolClassId', 'className')
-      .populate('teacherId', 'fullName')
+      .select('name description startAt endAt status')
       .sort({ createdAt: -1 });
 
     const result = await attachMyAttemptToAssignments(assignments, req.user.id);
@@ -387,8 +587,7 @@ export const getMyGlobalAssignmentsController = async (req, res, next) => {
       status: 'open',
       $or: [{ endAt: null }, { endAt: { $gte: now } }]
     })
-      .populate('quizId', 'title description')
-      .populate('teacherId', 'fullName')
+      .select('name description startAt endAt status')
       .sort({ createdAt: -1 });
 
     const result = await attachMyAttemptToAssignments(assignments, req.user.id);
@@ -403,59 +602,203 @@ export const getMyGlobalAssignmentsController = async (req, res, next) => {
 export const getAssignmentQuestionsController = async (req, res, next) => {
   try {
     const { assignmentId } = req.params;
+    const userId = req.user.id;
+    const now = new Date();
 
-    const currentSchoolClassId = await getCurrentUserSchoolClassId(req.user.id);
-    const visibilityFilter = buildVisibilityFilter(currentSchoolClassId);
-    const assignment = await QuizAssignment.findOne({
-      _id: assignmentId,
-      status: 'open',
-      ...visibilityFilter
+    const access = await getAssignmentAccessForUser(assignmentId, userId, now);
+    if (!access.ok) {
+      return sendAssignmentAccessError(res, access, now);
+    }
+    const assignment = access.assignment;
+
+    const questionDocs = await Question.find({ quizId: assignment.quizId })
+      .sort({ createdAt: 1 })
+      .lean();
+
+    const questionIds = questionDocs.map((q) => q._id);
+    const questions = sanitizeQuestions(questionDocs);
+
+    await QuizAssignmentSession.deleteMany({
+      userId,
+      assignmentId: assignment._id
     });
 
-    if (!assignment) {
-      return res.status(404).json({ message: 'Assignment không tìm thấy hoặc chưa mở' });
-    }
+    const twoHoursFromNow = new Date(Date.now() + 2 * 60 * 60 * 1000);
+    const expiresAt = assignment.endAt && assignment.endAt < twoHoursFromNow
+      ? assignment.endAt
+      : twoHoursFromNow;
 
-    const questions = await Question.find({ quizId: assignment.quizId }).select('-answer');
-    return res.status(200).json({ questions });
+    const session = await QuizAssignmentSession.create({
+      userId,
+      assignmentId: assignment._id,
+      quizId: assignment.quizId,
+      questionIds,
+      selectedAnswers: [],
+      expiresAt
+    });
+
+    const countdownInfo = buildCountdownPayload(session, now);
+
+    return res.status(201).json({
+      sessionId: session._id,
+      total: questions.length,
+      selectedAnswers: [],
+      questions,
+      ...countdownInfo
+    });
   } catch (err) {
     next(err);
   }
 };
 
-// Nộp bài assignment
+// Hoc sinh lay lai cau hoi theo session dang lam
+export const getAssignmentSessionQuestionsController = async (req, res, next) => {
+  try {
+    const { assignmentId, sessionId } = req.params;
+    const userId = req.user.id;
+    const now = new Date();
+
+    const access = await getAssignmentAccessForUser(assignmentId, userId, now);
+    if (!access.ok) {
+      return sendAssignmentAccessError(res, access, now);
+    }
+
+    const sessionResult = await getOwnedAssignmentSession(sessionId, assignmentId, userId, now);
+    if (!sessionResult.session) {
+      return sendSessionError(res, sessionResult.reason, now);
+    }
+    const session = sessionResult.session;
+
+    const questionDocs = await Question.find({ _id: { $in: session.questionIds } }).lean();
+    const questionMap = new Map(questionDocs.map((q) => [String(q._id), q]));
+
+    const orderedQuestions = session.questionIds
+      .map((id) => questionMap.get(String(id)))
+      .filter(Boolean);
+
+    const countdownInfo = buildCountdownPayload(session, now);
+
+    return res.status(200).json({
+      sessionId: session._id,
+      total: session.questionIds.length,
+      selectedAnswers: session.selectedAnswers || [],
+      questions: sanitizeQuestions(orderedQuestions),
+      ...countdownInfo
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Luu dap an tam trong qua trinh lam bai
+export const saveAssignmentSessionAnswersController = async (req, res, next) => {
+  try {
+    const { assignmentId, sessionId } = req.params;
+    const { answers } = req.body || {};
+    const userId = req.user.id;
+    const now = new Date();
+
+    if (!Array.isArray(answers)) {
+      return res.status(400).json({ message: 'answers phai la mang' });
+    }
+
+    const access = await getAssignmentAccessForUser(assignmentId, userId, now);
+    if (!access.ok) {
+      return sendAssignmentAccessError(res, access, now);
+    }
+
+    const sessionResult = await getOwnedAssignmentSession(sessionId, assignmentId, userId, now);
+    if (!sessionResult.session) {
+      return sendSessionError(res, sessionResult.reason, now);
+    }
+    const session = sessionResult.session;
+
+    const { normalized, invalidQuestionIds } = normalizeSessionAnswers(answers, session.questionIds);
+    if (!normalized) {
+      return res.status(400).json({ message: 'answers phai la mang' });
+    }
+
+    if (invalidQuestionIds.length) {
+      return res.status(400).json({
+        message: 'Co questionId khong thuoc session',
+        invalidQuestionIds
+      });
+    }
+
+    await QuizAssignmentSession.updateOne(
+      { _id: sessionId, assignmentId, userId },
+      { $set: { selectedAnswers: normalized } }
+    );
+
+    return res.status(200).json({
+      message: 'Luu dap an tam thanh cong',
+      sessionId,
+      totalSaved: normalized.length,
+      selectedAnswers: normalized,
+      ...buildCountdownPayload(session, now)
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Nop bai assignment
 export const submitAssignmentController = async (req, res, next) => {
   try {
-    const { assignmentId } = req.params;
-    const { answers } = req.body; // [{ questionId, userAnswer }]
+    const { assignmentId, sessionId } = req.params;
+    const { answers: bodyAnswers } = req.body || {};
+    const userId = req.user.id;
+    const now = new Date();
 
-    if (!Array.isArray(answers) || !answers.length) {
-      return res.status(400).json({ message: 'answers phải là mảng và không được rỗng' });
+    const access = await getAssignmentAccessForUser(assignmentId, userId, now);
+    if (!access.ok) {
+      return sendAssignmentAccessError(res, access, now);
+    }
+    const assignment = access.assignment;
+
+    const sessionResult = await getOwnedAssignmentSession(sessionId, assignmentId, userId, now);
+    if (!sessionResult.session) {
+      return sendSessionError(res, sessionResult.reason, now);
+    }
+    const session = sessionResult.session;
+
+    const sourceAnswers = Array.isArray(bodyAnswers) && bodyAnswers.length
+      ? bodyAnswers
+      : (session.selectedAnswers || []);
+
+    const { normalized, invalidQuestionIds } = normalizeSessionAnswers(sourceAnswers, session.questionIds);
+    if (!normalized || !normalized.length) {
+      return res.status(400).json({
+        code: 'answers_required',
+        message: 'Khong co dap an de nop bai. Vui long chon dap an truoc khi nop'
+      });
     }
 
-    const currentSchoolClassId = await getCurrentUserSchoolClassId(req.user.id);
-    const visibilityFilter = buildVisibilityFilter(currentSchoolClassId);
-    const assignment = await QuizAssignment.findOne({
-      _id: assignmentId,
-      status: 'open',
-      ...visibilityFilter
-    });
-
-    if (!assignment) {
-      return res.status(404).json({ message: 'Assignment không tìm thấy hoặc chưa mở' });
+    if (invalidQuestionIds.length) {
+      return res.status(400).json({
+        message: 'Co questionId khong thuoc session',
+        invalidQuestionIds
+      });
     }
 
-    const questionIds = answers.map((a) => a.questionId);
-    const questions = await Question.find({ _id: { $in: questionIds } }).lean();
-    const questionMap = {};
-    questions.forEach((q) => {
-      questionMap[q._id.toString()] = q;
-    });
+    const answerByQuestionId = new Map(
+      normalized.map((item) => [String(item.questionId), item.userAnswer])
+    );
+
+    const questions = await Question.find({ _id: { $in: session.questionIds } }).lean();
+    const questionById = new Map(questions.map((q) => [String(q._id), q]));
 
     let score = 0;
-    const details = answers.map(({ questionId, userAnswer }) => {
-      const q = questionMap[questionId];
-      if (!q) return { questionId, userAnswer, isCorrect: false, correctAnswer: null };
+    const details = session.questionIds.map((sessionQuestionId) => {
+      const questionId = String(sessionQuestionId);
+      const q = questionById.get(questionId);
+      const userAnswer = answerByQuestionId.has(questionId)
+        ? answerByQuestionId.get(questionId)
+        : null;
+
+      if (!q) {
+        return { questionId: sessionQuestionId, userAnswer, isCorrect: false, correctAnswer: null };
+      }
 
       const correctAnswer = q.answer;
       let isCorrect = false;
@@ -469,30 +812,33 @@ export const submitAssignmentController = async (req, res, next) => {
       }
 
       if (isCorrect) score++;
-      return { questionId, userAnswer, isCorrect, correctAnswer };
+      return { questionId: q._id, userAnswer, isCorrect, correctAnswer };
     });
 
     const attempt = new AssignmentAttempt({
       assignmentId,
-      userId: req.user.id,
+      userId,
       score,
       isCompleted: true,
       details
     });
     await attempt.save();
 
+    await QuizAssignmentSession.deleteOne({ _id: sessionId, assignmentId, userId });
+
     return res.status(201).json({
-      message: 'Nộp bài thành công',
+      message: 'Nop bai thanh cong',
       score,
-      total: answers.length,
-      details
+      total: session.questionIds.length,
+      answered: normalized.length,
+      details,
+      serverNow: now
     });
   } catch (err) {
     next(err);
   }
 };
 
-// Giáo viên xem tất cả các lần làm bài của một học sinh trong assignment
 export const getStudentAttemptsController = async (req, res, next) => {
   try {
     const { assignmentId, studentId } = req.params;
