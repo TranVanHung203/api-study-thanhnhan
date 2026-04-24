@@ -59,6 +59,7 @@ router.get('/', getQuizzesController);
  * @swagger
  * /quizzes:
  *   post:
+ *     description: totalQuestions duoc he thong tu dong tinh theo so cau hoi thuoc quiz
  *     summary: Tạo bài quiz mới
  *     tags: [Quizzes]
  *     requestBody:
@@ -72,8 +73,6 @@ router.get('/', getQuizzesController);
  *                 type: string
  *               description:
  *                 type: string
- *               totalQuestions:
- *                 type: number
  *               bonusPoints:
  *                 type: number
  *     responses:
@@ -142,3 +141,4 @@ router.delete('/:quizId', deleteQuizController);
 
 
 export default router;
+

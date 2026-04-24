@@ -23,6 +23,36 @@ export const getQuizzesController = async (req, res, next) => {
       .limit(limit)
       .lean();
 
+    if (quizzes.length > 0) {
+      const quizIds = quizzes.map((quiz) => quiz._id);
+      const questionCountAgg = await Question.aggregate([
+        { $match: { quizId: { $in: quizIds } } },
+        { $group: { _id: '$quizId', count: { $sum: 1 } } }
+      ]);
+
+      const countMap = new Map(
+        questionCountAgg.map((item) => [String(item._id), item.count])
+      );
+
+      const bulkOps = [];
+      for (const quiz of quizzes) {
+        const calculatedTotalQuestions = countMap.get(String(quiz._id)) || 0;
+        if (quiz.totalQuestions !== calculatedTotalQuestions) {
+          bulkOps.push({
+            updateOne: {
+              filter: { _id: quiz._id },
+              update: { $set: { totalQuestions: calculatedTotalQuestions } }
+            }
+          });
+        }
+        quiz.totalQuestions = calculatedTotalQuestions;
+      }
+
+      if (bulkOps.length > 0) {
+        await Quiz.bulkWrite(bulkOps);
+      }
+    }
+
     return res.status(200).json({
       page,
       limit,
@@ -38,16 +68,18 @@ export const getQuizzesController = async (req, res, next) => {
 // Tạo quiz
 export const createQuizController = async (req, res, next) => {
   try {
-    const { title, description, totalQuestions, bonusPoints } = req.body;
+    const { title, description, bonusPoints } = req.body;
 
     const quiz = new Quiz({
       title,
       description,
-      totalQuestions: totalQuestions || 15,
+      totalQuestions: 0,
       bonusPoints: bonusPoints || 100,
       createdBy: req.user.id
     });
 
+    await quiz.save();
+    quiz.totalQuestions = await Question.countDocuments({ quizId: quiz._id });
     await quiz.save();
 
     return res.status(201).json({
@@ -136,6 +168,7 @@ export const deleteQuizController = async (req, res, next) => {
     next(error);
   }
 };
+
 
 
 
