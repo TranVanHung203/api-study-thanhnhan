@@ -37,6 +37,20 @@ const QuizAssignmentSchema = new mongoose.Schema({
     type: Date,
     required: false
   },
+  durationMinutes: {
+    type: Number,
+    required: false,
+    min: 1,
+    max: 1440,
+    default: 120
+  },
+  attemptLimit: {
+    type: Number,
+    required: false,
+    min: 1,
+    max: 20,
+    default: 1
+  },
   status: {
     type: String,
     enum: ['draft', 'open', 'closed'],

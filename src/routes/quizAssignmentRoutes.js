@@ -77,6 +77,17 @@ router.get('/', getAssignmentsController);
  *               endAt:
  *                 type: string
  *                 format: date-time
+ *               durationMinutes:
+ *                 type: integer
+ *                 minimum: 1
+ *                 maximum: 1440
+ *                 description: Thoi gian lam bai (phut). Mac dinh 120 phut neu khong truyen
+ *               attemptLimit:
+ *                 type: integer
+ *                 nullable: true
+ *                 minimum: 1
+ *                 maximum: 20
+ *                 description: So lan lam bai toi da cua moi hoc sinh cho assignment nay. Dat null de khong gioi han
  *               status:
  *                 type: string
  *                 enum: [draft, open, closed]
@@ -129,6 +140,17 @@ router.post('/', createAssignmentController);
  *               endAt:
  *                 type: string
  *                 format: date-time
+ *               durationMinutes:
+ *                 type: integer
+ *                 minimum: 1
+ *                 maximum: 1440
+ *                 description: Thoi gian lam bai (phut)
+ *               attemptLimit:
+ *                 type: integer
+ *                 nullable: true
+ *                 minimum: 1
+ *                 maximum: 20
+ *                 description: So lan lam bai toi da cua moi hoc sinh cho assignment nay. Dat null de khong gioi han
  *               status:
  *                 type: string
  *                 enum: [draft, open, closed]
@@ -315,6 +337,14 @@ router.get('/my-global', getMyGlobalAssignmentsController);
  *                 endsAt:
  *                   type: string
  *                   format: date-time
+ *                 durationMinutes:
+ *                   type: integer
+ *                 attemptLimit:
+ *                   type: integer
+ *                 completedAttempts:
+ *                   type: integer
+ *                 remainingAttempts:
+ *                   type: integer
  *                 questions:
  *                   type: array
  *                   items:
@@ -322,7 +352,7 @@ router.get('/my-global', getMyGlobalAssignmentsController);
  *       404:
  *         description: Assignment khong tim thay hoac chua mo
  *       409:
- *         description: Chua den gio lam bai, da qua gio nop bai, hoac assignment chua open
+ *         description: Chua den gio lam bai, da qua gio nop bai, assignment chua open, hoac da het so lan lam bai
  */
 router.get('/:assignmentId/questions', getAssignmentQuestionsController);
 
@@ -361,6 +391,8 @@ router.get('/:assignmentId/questions', getAssignmentQuestionsController);
  *                 endsAt:
  *                   type: string
  *                   format: date-time
+ *                 durationMinutes:
+ *                   type: integer
  *                 selectedAnswers:
  *                   type: array
  *                   items:
@@ -499,6 +531,8 @@ router.put('/:assignmentId/sessions/:sessionId/answers', saveAssignmentSessionAn
  *         description: answers khong hop le hoac rong
  *       404:
  *         description: Assignment hoac session khong hop le
+ *       409:
+ *         description: Da het so lan lam bai cho phep
  */
 router.post('/:assignmentId/sessions/:sessionId/submit', submitAssignmentController);
 
@@ -506,7 +540,7 @@ router.post('/:assignmentId/sessions/:sessionId/submit', submitAssignmentControl
  * @swagger
  * /assignments/{assignmentId}/my-attempt:
  *   get:
- *     summary: Hoc sinh xem lai bai lam cua minh
+ *     summary: Hoc sinh xem lai tat ca lan lam bai cua minh
  *     tags: [Assignments]
  *     security:
  *       - bearerAuth: []
@@ -518,7 +552,7 @@ router.post('/:assignmentId/sessions/:sessionId/submit', submitAssignmentControl
  *           type: string
  *     responses:
  *       200:
- *         description: Chi tiet bai lam
+ *         description: Danh sach cac lan lam bai (moi lan co createdAt)
  *       404:
  *         description: Chua lam bai nay
  */

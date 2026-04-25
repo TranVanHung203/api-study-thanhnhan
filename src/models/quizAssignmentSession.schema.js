@@ -5,6 +5,12 @@ const QuizAssignmentSessionSchema = new mongoose.Schema({
   assignmentId: { type: mongoose.Schema.Types.ObjectId, ref: 'QuizAssignment', required: true },
   quizId: { type: mongoose.Schema.Types.ObjectId, ref: 'Quiz', required: true },
   questionIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Question' }],
+  choiceOrders: [
+    {
+      questionId: { type: mongoose.Schema.Types.ObjectId, ref: 'Question', required: true },
+      order: [{ type: Number, required: true }]
+    }
+  ],
   selectedAnswers: [
     {
       questionId: { type: mongoose.Schema.Types.ObjectId, ref: 'Question', required: true },
