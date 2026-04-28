@@ -46,6 +46,7 @@ import quizAssignmentRoutes from './src/routes/quizAssignmentRoutes.js';
 import chatbotRoutes from './src/chatbot/routes.js';
 import realtimeBattleRoutes from './src/routes/realtimeBattleRoutes.js';
 import { initBattleSocket } from './src/ws/battleSocket.js';
+import { initAuthSocket } from './src/ws/authSocket.js';
 
 // Import Swagger
 import swaggerUi from 'swagger-ui-express';
@@ -411,6 +412,7 @@ const io = new Server(server, {
 });
 
 initBattleSocket(io);
+initAuthSocket(io);
 
 server.listen(PORT, HOST, () => {
   console.log(`Server running on ${HOST}:${PORT}`);
