@@ -1,4 +1,4 @@
-import redis, { redisHealthy } from '../config/redisConfig.js';
+import redis, { ensureRedisConnected, redisHealthy } from '../config/redisConfig.js';
 
 const SESSION_KEY_PREFIX = 'session:user:';
 
@@ -15,6 +15,11 @@ const isRedisUsable = () => {
 
 const setCurrentSessionId = async (userId, refreshTokenId, ttlSeconds = getRefreshTokenTtlSeconds()) => {
   try {
+    const connected = await ensureRedisConnected();
+    if (!connected || !isRedisUsable()) {
+      return { ok: false, skipped: true, reason: 'redis-unavailable' };
+    }
+
     if (!isRedisUsable()) {
       return { ok: false, skipped: true, reason: 'redis-unavailable' };
     }
@@ -28,6 +33,11 @@ const setCurrentSessionId = async (userId, refreshTokenId, ttlSeconds = getRefre
 
 const getCurrentSessionId = async (userId) => {
   try {
+    const connected = await ensureRedisConnected();
+    if (!connected || !isRedisUsable()) {
+      return { ok: false, skipped: true, reason: 'redis-unavailable' };
+    }
+
     if (!isRedisUsable()) {
       return { ok: false, skipped: true, reason: 'redis-unavailable' };
     }
@@ -41,6 +51,11 @@ const getCurrentSessionId = async (userId) => {
 
 const deleteUserSessionKey = async (userId) => {
   try {
+    const connected = await ensureRedisConnected();
+    if (!connected || !isRedisUsable()) {
+      return { ok: false, skipped: true, reason: 'redis-unavailable' };
+    }
+
     if (!isRedisUsable()) {
       return { ok: false, skipped: true, reason: 'redis-unavailable' };
     }
