@@ -273,6 +273,18 @@ const getOwnedAssignmentSession = async (sessionId, assignmentId, userId, now = 
   };
 };
 
+const getLatestActiveAssignmentSession = async (assignmentId, userId, now = new Date()) => {
+  const session = await QuizAssignmentSession.findOne({
+    assignmentId,
+    userId,
+    expiresAt: { $gt: now }
+  })
+    .sort({ createdAt: -1 })
+    .lean();
+
+  return session || null;
+};
+
 const buildCountdownPayload = (session, now = new Date()) => {
   const endsAt = session?.expiresAt ? new Date(session.expiresAt) : null;
 
@@ -349,6 +361,18 @@ const normalizeSessionAnswers = (answers, allowedQuestionIds) => {
     normalized,
     invalidQuestionIds
   };
+};
+
+const sanitizeSelectedAnswersForClient = (selectedAnswers) => {
+  if (!Array.isArray(selectedAnswers)) {
+    return [];
+  }
+
+  return selectedAnswers.map((answer) => ({
+    questionId: answer.questionId,
+    userAnswer: answer.userAnswer,
+    updatedAt: answer.updatedAt
+  }));
 };
 
 const attachMyAttemptToAssignments = async (assignments, userId) => {
@@ -832,48 +856,79 @@ export const getAssignmentQuestionsController = async (req, res, next) => {
       });
     }
 
-    const questionDocs = await Question.find({ quizId: assignment.quizId }).lean();
+    const existingSession = await getLatestActiveAssignmentSession(assignment._id, userId, now);
 
-    const sessionQuestionSet = buildQuestionSetForSession(questionDocs);
-    const questionIds = sessionQuestionSet.questionIds;
-    const questions = sanitizeQuestions(sessionQuestionSet.questions);
+    let session = existingSession;
+    let questions = [];
+    let durationMinutesForSession = null;
+    let responseStatus = existingSession ? 200 : 201;
 
-    await QuizAssignmentSession.deleteMany({
-      userId,
-      assignmentId: assignment._id
-    });
+    if (existingSession) {
+      const questionDocs = await Question.find({ _id: { $in: existingSession.questionIds } }).lean();
+      const questionMap = new Map(questionDocs.map((q) => [String(q._id), q]));
+      const choiceOrderMap = new Map(
+        (Array.isArray(existingSession.choiceOrders) ? existingSession.choiceOrders : [])
+          .map((item) => [String(item.questionId), item.order])
+      );
 
-    const hasDurationLimit =
-      Number.isInteger(assignment.durationMinutes) && assignment.durationMinutes > 0;
-    const durationMinutesForSession = hasDurationLimit ? assignment.durationMinutes : null;
-    const durationEndsAt = hasDurationLimit
-      ? new Date(Date.now() + durationMinutesForSession * 60 * 1000)
-      : null;
-    const expiresAt = hasDurationLimit
-      ? (assignment.endAt && assignment.endAt < durationEndsAt ? assignment.endAt : durationEndsAt)
-      : (assignment.endAt || null);
+      const orderedQuestions = existingSession.questionIds
+        .map((id) => {
+          const question = questionMap.get(String(id));
+          if (!question) {
+            return null;
+          }
+          return applyChoiceOrderToQuestion(question, choiceOrderMap);
+        })
+        .filter(Boolean);
 
-    const session = await QuizAssignmentSession.create({
-      userId,
-      assignmentId: assignment._id,
-      quizId: assignment.quizId,
-      questionIds,
-      choiceOrders: sessionQuestionSet.choiceOrders,
-      selectedAnswers: [],
-      expiresAt
-    });
+      questions = sanitizeQuestions(orderedQuestions);
+    } else {
+      const questionDocs = await Question.find({ quizId: assignment.quizId }).lean();
+
+      const sessionQuestionSet = buildQuestionSetForSession(questionDocs);
+      const questionIds = sessionQuestionSet.questionIds;
+      questions = sanitizeQuestions(sessionQuestionSet.questions);
+
+      const hasDurationLimit =
+        Number.isInteger(assignment.durationMinutes) && assignment.durationMinutes > 0;
+      durationMinutesForSession = hasDurationLimit ? assignment.durationMinutes : null;
+      const durationEndsAt = hasDurationLimit
+        ? new Date(Date.now() + durationMinutesForSession * 60 * 1000)
+        : null;
+      const expiresAt = hasDurationLimit
+        ? (assignment.endAt && assignment.endAt < durationEndsAt ? assignment.endAt : durationEndsAt)
+        : (assignment.endAt || null);
+
+      session = await QuizAssignmentSession.create({
+          userId,
+          assignmentId: assignment._id,
+          quizId: assignment.quizId,
+          questionIds,
+          choiceOrders: sessionQuestionSet.choiceOrders,
+          selectedAnswers: [],
+          expiresAt
+        });
+    }
+
+    if (!existingSession) {
+      durationMinutesForSession =
+        Number.isInteger(assignment.durationMinutes) && assignment.durationMinutes > 0
+          ? assignment.durationMinutes
+          : null;
+    }
 
     const countdownInfo = buildCountdownPayload(session, now);
 
-    return res.status(201).json({
+    return res.status(responseStatus).json({
       sessionId: session._id,
       total: questions.length,
-      selectedAnswers: [],
+      selectedAnswers: Array.isArray(session.selectedAnswers) ? session.selectedAnswers : [],
       questions,
       durationMinutes: durationMinutesForSession,
       attemptLimit,
       completedAttempts,
       remainingAttempts: attemptLimit === null ? null : Math.max(0, attemptLimit - completedAttempts),
+      reusedSession: !!existingSession,
       ...countdownInfo
     });
   } catch (err) {
@@ -927,7 +982,7 @@ export const getAssignmentSessionQuestionsController = async (req, res, next) =>
     return res.status(200).json({
       sessionId: session._id,
       total: session.questionIds.length,
-      selectedAnswers: session.selectedAnswers || [],
+      selectedAnswers: sanitizeSelectedAnswersForClient(session.selectedAnswers),
       questions: sanitizeQuestions(orderedQuestions),
       durationMinutes: durationMinutesForSession,
       attemptLimit,
