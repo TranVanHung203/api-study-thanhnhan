@@ -279,6 +279,9 @@ app.get('/facebook-test', (req, res) => {
 app.get('/zalo-test', (req, res) => {
   res.sendFile(path.join(process.cwd(), 'public', 'zalo-test.html'));
 });
+app.get('/zalo_verifierFuMt3RYq6nfnehmCcg4M4NsrbnsHmqD1CJan.html', (req, res) => {
+  res.sendFile(path.join(process.cwd(), 'public', 'zalo_verifierFuMt3RYq6nfnehmCcg4M4NsrbnsHmqD1CJan.html'));
+});
 app.get('/zalo-callback', (req, res) => {
   const code = typeof req.query.code === 'string' ? req.query.code : '';
   const state = typeof req.query.state === 'string' ? req.query.state : '';
