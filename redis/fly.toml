@@ -1,0 +1,12 @@
+app = "redis-hung"
+primary_region = "sin"
+
+[build]
+  image = "redis"
+
+[[services]]
+  internal_port = 6379
+  protocol = "tcp"
+
+  [[services.ports]]
+    port = 6379

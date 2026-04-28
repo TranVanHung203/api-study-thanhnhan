@@ -16,6 +16,7 @@ import Character from '../models/character.schema.js';
 import Topic from '../models/topic.schema.js';
 import PreferenceQuestion from '../models/preferenceQuestion.schema.js';
 import { generateOTP, sendOTPEmail, sendPasswordResetOTPEmail } from '../config/emailConfig.js';
+import { deleteUserSessionKey, setCurrentSessionId } from '../services/sessionService.js';
 
 const SECRET_KEY = process.env.SECRET_KEY || 'your-secret-key';
 const ACCESS_TOKEN_EXPIRY = process.env.ACCESS_TOKEN_EXPIRY || '15m';
@@ -354,12 +355,21 @@ const buildEmailInsensitiveQuery = (email) => {
   return { email: { $regex: new RegExp(`^${escapedEmail}$`, 'i') } };
 };
 
-const createAccessToken = (user) => {
-  return jwt.sign(
-    { id: user._id, username: user.username, email: user.email },
-    SECRET_KEY,
-    { expiresIn: ACCESS_TOKEN_EXPIRY }
-  );
+const syncCurrentSessionToRedis = async (userId, refreshTokenId) => {
+  const result = await setCurrentSessionId(userId, refreshTokenId);
+  if (!result.ok) {
+    console.warn(
+      `[Redis Session] Failed to store session for user ${String(userId)}:`,
+      result.error?.message || result.error
+    );
+  }
+  return result;
+};
+
+const createAccessToken = (user, refreshTokenId = null) => {
+  const payload = { id: user._id, username: user.username, email: user.email };
+  if (refreshTokenId) payload.refreshTokenId = String(refreshTokenId);
+  return jwt.sign(payload, SECRET_KEY, { expiresIn: ACCESS_TOKEN_EXPIRY });
 };
 
 // Tạo Refresh Token và lưu vào database
@@ -384,7 +394,25 @@ const createRefreshToken = async (user, deviceInfo = null) => {
 
   await refreshTokenDoc.save();
 
-  return token;
+  return { token, id: refreshTokenDoc._id };
+};
+
+// Thu hồi tất cả các session cũ của user (dùng cho tính năng single device login)
+const revokeAllUserSessions = async (userId) => {
+  try {
+    const result = await RefreshToken.updateMany(
+      {
+        userId: userId,
+        $or: [ { isRevoked: false }, { isRevoked: { $exists: false } } ],
+        expiresAt: { $gt: new Date() } // Chỉ revoke những token chưa hết hạn
+      },
+      { isRevoked: true }
+    );
+    return result.modifiedCount > 0;
+  } catch (error) {
+    console.error('Lỗi khi revoke user sessions:', error);
+    return false;
+  }
 };
 
 // Đăng nhập
@@ -405,14 +433,21 @@ export const loginController = async (req, res, next) => {
       throw new UnauthorizedError('Mật khẩu không đúng! Vui lòng thử lại.');
     }
 
-    // Tạo tokens
-    const accessToken = createAccessToken(user);
-    const refreshToken = await createRefreshToken(user, deviceInfo);
+    // Thu hồi tất cả các session cũ (thiết bị cũ sẽ bị đăng xuất)
+    const hadPreviousSessions = await revokeAllUserSessions(user._id);
+
+    // Tạo refresh token trước để gắn id vào access token
+    const { token: refreshToken, id: refreshTokenId } = await createRefreshToken(user, deviceInfo);
+    await syncCurrentSessionToRedis(user._id, refreshTokenId);
+    const accessToken = createAccessToken(user, refreshTokenId);
 
     return res.status(200).json({
       message: 'Đăng nhập thành công',
       accessToken,
-      refreshToken
+      refreshToken,
+      ...(hadPreviousSessions && { 
+        note: 'Phiên đăng nhập trước đó đã được đăng xuất' 
+      })
     });
   } catch (error) {
     next(error);
@@ -470,9 +505,10 @@ export const refreshTokenController = async (req, res, next) => {
     // Revoke token cũ trong database
     await RefreshToken.updateOne({ _id: storedToken._id }, { isRevoked: true });
 
-    // Tạo cả access token và refresh token mới
-    const newAccessToken = createAccessToken(user);
-    const newRefreshToken = await createRefreshToken(user, deviceInfo);
+    // Tạo refresh token mới trước, rồi gắn id vào access token
+    const { token: newRefreshToken, id: newRefreshTokenId } = await createRefreshToken(user, deviceInfo);
+    await syncCurrentSessionToRedis(user._id, newRefreshTokenId);
+    const newAccessToken = createAccessToken(user, newRefreshTokenId);
 
     return res.status(200).json({
       message: 'Refresh token thành công',
@@ -713,6 +749,10 @@ export const logoutController = async (req, res, next) => {
     // Nếu có userId, xóa tất cả refresh tokens của user (optional - logout khỏi tất cả thiết bị)
     await RefreshToken.updateMany({ userId }, { isRevoked: true });
 
+    if (userId) {
+      await deleteUserSessionKey(userId);
+    }
+
     // // Nếu là guest, xóa tất cả dữ liệu liên quan
     // if (userId) {
     //   const user = await User.findById(userId);
@@ -759,9 +799,10 @@ export const guestLoginController = async (req, res, next) => {
 
     const deviceInfo = req.headers['user-agent'] || null;
 
-    // Tạo tokens
-    const accessToken = createAccessToken(guestUser);
-    const refreshToken = await createRefreshToken(guestUser, deviceInfo);
+    // Tạo refresh token trước để gắn id vào access token
+    const { token: refreshToken, id: refreshTokenId } = await createRefreshToken(guestUser, deviceInfo);
+    await syncCurrentSessionToRedis(guestUser._id, refreshTokenId);
+    const accessToken = createAccessToken(guestUser, refreshTokenId);
 
     return res.status(201).json({
       message: 'Đăng nhập khách thành công',
@@ -924,9 +965,13 @@ export const googleTokenController = async (req, res, next) => {
       user = newUser;
     }
 
-    // Issue tokens
-    const newAccessToken = createAccessToken(user);
-    const refreshToken = await createRefreshToken(user, deviceInfo);
+    // Thu hồi tất cả các session cũ (thiết bị cũ sẽ bị đăng xuất)
+    await revokeAllUserSessions(user._id);
+
+    // Tạo refresh token mới trước, rồi tạo access token gắn id
+    const { token: refreshToken, id: refreshTokenId } = await createRefreshToken(user, deviceInfo);
+    await syncCurrentSessionToRedis(user._id, refreshTokenId);
+    const newAccessToken = createAccessToken(user, refreshTokenId);
 
     return res.status(200).json({
       message: 'Google sign-in successful',
@@ -1108,8 +1153,13 @@ export const facebookTokenController = async (req, res, next) => {
       user = newUser;
     }
 
-    const newAccessToken = createAccessToken(user);
-    const refreshToken = await createRefreshToken(user, deviceInfo);
+    // Thu hồi tất cả các session cũ (thiết bị cũ sẽ bị đăng xuất)
+    await revokeAllUserSessions(user._id);
+
+    // Tạo refresh token mới trước, rồi tạo access token gắn id
+    const { token: refreshToken, id: refreshTokenId } = await createRefreshToken(user, deviceInfo);
+    await syncCurrentSessionToRedis(user._id, refreshTokenId);
+    const newAccessToken = createAccessToken(user, refreshTokenId);
 
     return res.status(200).json({
       message: 'Facebook sign-in successful',
@@ -1249,8 +1299,13 @@ const signInWithZaloAccessToken = async ({ token, fullName: fallbackFullName, de
     user = newUser;
   }
 
-  const accessToken = createAccessToken(user);
-  const refreshToken = await createRefreshToken(user, deviceInfo);
+  // Thu hồi tất cả các session cũ (thiết bị cũ sẽ bị đăng xuất)
+  await revokeAllUserSessions(user._id);
+
+  // Tạo refresh token mới trước, rồi tạo access token gắn id
+  const { token: refreshToken, id: refreshTokenId } = await createRefreshToken(user, deviceInfo);
+  await syncCurrentSessionToRedis(user._id, refreshTokenId);
+  const accessToken = createAccessToken(user, refreshTokenId);
 
   return {
     message: 'Zalo sign-in successful',
@@ -1893,9 +1948,10 @@ export const verifyOTPAndRegisterController = async (req, res, next) => {
     // Xóa OTP record sau khi đăng ký thành công
     await OTPVerification.deleteOne({ _id: otpRecord._id });
 
-    // Tạo tokens
-    const accessToken = createAccessToken(newUser);
-    const refreshToken = await createRefreshToken(newUser);
+    // Tạo refresh token trước, rồi gắn id vào access token
+    const { token: refreshToken, id: refreshTokenId } = await createRefreshToken(newUser);
+    await syncCurrentSessionToRedis(newUser._id, refreshTokenId);
+    const accessToken = createAccessToken(newUser, refreshTokenId);
 
     return res.status(201).json({
       message: 'Đăng ký thành công',
