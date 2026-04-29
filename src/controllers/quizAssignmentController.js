@@ -3,6 +3,7 @@ import AssignmentAttempt from '../models/assignmentAttempt.schema.js';
 import QuizAssignmentSession from '../models/quizAssignmentSession.schema.js';
 import Quiz from '../models/quiz.schema.js';
 import Question from '../models/question.schema.js';
+import Class from '../models/class.schema.js';
 import UserSchoolClass from '../models/userSchoolClass.schema.js';
 import User from '../models/user.schema.js';
 
@@ -459,6 +460,71 @@ export const getAssignmentsController = async (req, res, next) => {
     const [assignments, total] = await Promise.all([
       QuizAssignment.find(filter)
         .populate('quizId', 'title')
+        .populate('classId', 'className')
+        .populate('schoolClassId', 'className')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit),
+      QuizAssignment.countDocuments(filter)
+    ]);
+
+    const totalPages = total > 0 ? Math.ceil(total / limit) : 1;
+
+    return res.status(200).json({
+      page,
+      limit,
+      total,
+      totalPages,
+      assignments
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Lấy danh sách assignment theo quizId của giáo viên hiện tại
+export const getAssignmentsByQuizController = async (req, res, next) => {
+  try {
+    const { quizId } = req.params;
+    const hasSchoolClassIdQuery = Object.prototype.hasOwnProperty.call(req.query || {}, 'schoolClassId');
+    const schoolClassIdQuery = hasSchoolClassIdQuery
+      ? (typeof req.query.schoolClassId === 'string' ? req.query.schoolClassId.trim() : req.query.schoolClassId)
+      : undefined;
+    const pageRaw = parseInt(req.query.page, 10);
+    const limitRaw = parseInt(req.query.limit, 10);
+    const page = Number.isNaN(pageRaw) ? 1 : Math.max(1, pageRaw);
+    const limit = Number.isNaN(limitRaw) ? 20 : Math.max(1, Math.min(100, limitRaw));
+    const skip = (page - 1) * limit;
+
+    const normalizedQuizId = typeof quizId === 'string' ? quizId.trim() : quizId;
+    if (!normalizedQuizId) {
+      return res.status(400).json({ message: 'quizId là bắt buộc' });
+    }
+
+    const quiz = await Quiz.findOne({ _id: normalizedQuizId, createdBy: req.user.id });
+    if (!quiz) {
+      return res.status(404).json({ message: 'Quiz không tìm thấy hoặc bạn không có quyền' });
+    }
+
+    const filter = {
+      teacherId: req.user.id,
+      quizId: normalizedQuizId
+    };
+
+    const isNullSchoolClass =
+      schoolClassIdQuery === null ||
+      schoolClassIdQuery === undefined ||
+      schoolClassIdQuery === '' ||
+      schoolClassIdQuery === 'null';
+
+    if (!isNullSchoolClass) {
+      filter.schoolClassId = schoolClassIdQuery;
+    }
+
+    const [assignments, total] = await Promise.all([
+      QuizAssignment.find(filter)
+        .populate('quizId', 'title')
+        .populate('classId', 'className')
         .populate('schoolClassId', 'className')
         .sort({ createdAt: -1 })
         .skip(skip)
@@ -485,6 +551,7 @@ export const createAssignmentController = async (req, res, next) => {
   try {
     const {
       quizId,
+      classId,
       schoolClassId,
       startAt,
       endAt,
@@ -517,6 +584,20 @@ export const createAssignmentController = async (req, res, next) => {
     const attemptLimitResult = normalizeAssignmentAttemptLimit(attemptLimit);
     if (attemptLimitResult.error) {
       return res.status(400).json({ message: attemptLimitResult.error });
+    }
+
+    const normalizedClassId = typeof classId === 'string' ? classId.trim() : classId;
+    const isNullClassId =
+      normalizedClassId === null ||
+      normalizedClassId === undefined ||
+      normalizedClassId === '' ||
+      normalizedClassId === 'null';
+
+    if (!isNullClassId) {
+      const existingClass = await Class.findById(normalizedClassId).select('_id').lean();
+      if (!existingClass) {
+        return res.status(400).json({ message: 'classId không tồn tại' });
+      }
     }
 
 
@@ -554,6 +635,7 @@ export const createAssignmentController = async (req, res, next) => {
 
     const assignment = new QuizAssignment({
       quizId,
+      classId: isNullClassId ? null : normalizedClassId,
       schoolClassId: isGlobalAssignment ? null : schoolClassId,
       teacherId: req.user.id,
       name: normalizedName,
@@ -607,6 +689,7 @@ export const updateAssignmentController = async (req, res, next) => {
     const { assignmentId } = req.params;
     const {
       quizId,
+      classId,
       schoolClassId,
       startAt,
       endAt,
@@ -677,6 +760,27 @@ export const updateAssignmentController = async (req, res, next) => {
         });
       }
       updateData.status = status;
+    }
+
+    const hasClassIdField = Object.prototype.hasOwnProperty.call(req.body || {}, 'classId');
+    if (hasClassIdField) {
+      const normalizedClassId = typeof classId === 'string' ? classId.trim() : classId;
+      const isNullClassId =
+        normalizedClassId === null ||
+        normalizedClassId === undefined ||
+        normalizedClassId === '' ||
+        normalizedClassId === 'null';
+
+      if (isNullClassId) {
+        updateData.classId = null;
+      } else {
+        const existingClass = await Class.findById(normalizedClassId).select('_id').lean();
+        if (!existingClass) {
+          return res.status(400).json({ message: 'classId không tồn tại' });
+        }
+
+        updateData.classId = normalizedClassId;
+      }
     }
 
     const hasSchoolClassIdField = Object.prototype.hasOwnProperty.call(req.body || {}, 'schoolClassId');

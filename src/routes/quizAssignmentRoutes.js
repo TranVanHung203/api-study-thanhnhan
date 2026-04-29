@@ -1,6 +1,7 @@
 import express from 'express';
 import {
   getAssignmentsController,
+  getAssignmentsByQuizController,
   createAssignmentController,
   updateAssignmentController,
   updateAssignmentStatusController,
@@ -44,6 +45,47 @@ router.get('/', getAssignmentsController);
 
 /**
  * @swagger
+ * /assignments/quiz/{quizId}:
+ *   get:
+ *     summary: Lay danh sach assignment theo quizId
+ *     tags: [Assignments]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: quizId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID cua quiz can lay assignment
+ *       - in: query
+ *         name: page
+ *         required: false
+ *         schema:
+ *           type: integer
+ *         description: So trang
+ *       - in: query
+ *         name: limit
+ *         required: false
+ *         schema:
+ *           type: integer
+ *         description: So ban ghi moi trang
+ *       - in: query
+ *         name: schoolClassId
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Loc theo schoolClassId. Truyen null de lay tat ca assignment cua giao vien cho quiz nay
+ *     responses:
+ *       200:
+ *         description: Danh sach assignment theo quizId
+ *       404:
+ *         description: Quiz khong tim thay hoac khong co quyen
+ */
+router.get('/quiz/:quizId', getAssignmentsByQuizController);
+
+/**
+ * @swagger
  * /assignments:
  *   post:
  *     summary: Tao assignment moi
@@ -67,6 +109,10 @@ router.get('/', getAssignmentsController);
  *               description:
  *                 type: string
  *                 description: Mo ta ngan cho assignment
+ *               classId:
+ *                 type: string
+ *                 nullable: true
+ *                 description: ID khoi lop. Neu null thi bo lien ket khoi lop
  *               schoolClassId:
  *                 type: string
  *                 nullable: true
@@ -130,6 +176,10 @@ router.post('/', createAssignmentController);
  *               description:
  *                 type: string
  *                 description: Cap nhat mo ta assignment
+ *               classId:
+ *                 type: string
+ *                 nullable: true
+ *                 description: Cap nhat khoi lop cho assignment. Dat null de bo lien ket
  *               schoolClassId:
  *                 type: string
  *                 nullable: true

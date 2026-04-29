@@ -208,7 +208,7 @@ const swaggerOptions = {
   definition: {
     openapi: '3.0.0',
     info: {
-      title: 'api-backend',
+      title: 'api-backend-fly',
       version: '1.0.0',
       description: 'API dạy học online: quản lý khoá học, bài học, người dùng, quiz, thông báo...'
     },
