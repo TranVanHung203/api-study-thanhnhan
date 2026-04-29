@@ -12,6 +12,12 @@ const QuizAssignmentSchema = new mongoose.Schema({
     required: false,
     default: null
   },
+  classId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Class',
+    required: false,
+    default: null
+  },
   teacherId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',

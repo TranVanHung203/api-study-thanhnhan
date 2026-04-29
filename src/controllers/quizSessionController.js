@@ -232,7 +232,7 @@ export const submitQuizSession = async (req, res, next) => {
         : req.body?.timeSpentSeconds;
     const totalTimeSpentSeconds = Number(totalTimeSpentRaw);
     if (!Number.isFinite(totalTimeSpentSeconds) || totalTimeSpentSeconds < 0) {
-      throw new BadRequestError('Thiáº¿u hoáº·c sai `totalTimeSpentSeconds` (>= 0)');
+      throw new BadRequestError('Thiếu hoặc sai `totalTimeSpentSeconds` (>= 0)');
     }
 
     // ===================== 1) Load Progress + Lesson =====================
