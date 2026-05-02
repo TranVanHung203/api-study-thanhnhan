@@ -17,6 +17,20 @@ const router = express.Router();
 // Tất cả routes đều cần authentication
 router.all('*', authToken);
 
+/**
+ * @swagger
+ * /classes:
+ *   get:
+ *     summary: Lấy danh sách tất cả lớp
+ *     tags: [Class]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Danh sách lớp
+ */
+router.get('/', getAllClassesController);
+
 // /**
 //  * @swagger
 //  * /classes:

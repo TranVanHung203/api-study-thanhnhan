@@ -76,6 +76,12 @@ router.get('/', getAssignmentsController);
  *         schema:
  *           type: string
  *         description: Loc theo schoolClassId. Truyen null de lay tat ca assignment cua giao vien cho quiz nay
+ *       - in: query
+ *         name: classId
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Loc theo classId. Truyen null de lay tat ca assignment theo quiz nay
  *     responses:
  *       200:
  *         description: Danh sach assignment theo quizId

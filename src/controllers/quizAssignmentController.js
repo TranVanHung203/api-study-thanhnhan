@@ -107,6 +107,20 @@ const normalizeAssignmentAttemptLimit = (attemptLimit) => {
   return { hasValue: true, value: parsed, error: null };
 };
 
+const normalizeNullableAssignmentLinkValue = (value) => {
+  if (value === undefined) {
+    return { hasValue: false, value: undefined };
+  }
+
+  const normalized = typeof value === 'string' ? value.trim() : value;
+  const isNullLike = normalized === '' || normalized === null || normalized === 'null';
+
+  return {
+    hasValue: true,
+    value: isNullLike ? null : normalized
+  };
+};
+
 const resolveAssignmentAttemptLimit = (assignment) => {
   if (assignment?.attemptLimit === null) {
     return null;
@@ -487,8 +501,12 @@ export const getAssignmentsByQuizController = async (req, res, next) => {
   try {
     const { quizId } = req.params;
     const hasSchoolClassIdQuery = Object.prototype.hasOwnProperty.call(req.query || {}, 'schoolClassId');
+    const hasClassIdQuery = Object.prototype.hasOwnProperty.call(req.query || {}, 'classId');
     const schoolClassIdQuery = hasSchoolClassIdQuery
       ? (typeof req.query.schoolClassId === 'string' ? req.query.schoolClassId.trim() : req.query.schoolClassId)
+      : undefined;
+    const classIdQuery = hasClassIdQuery
+      ? (typeof req.query.classId === 'string' ? req.query.classId.trim() : req.query.classId)
       : undefined;
     const pageRaw = parseInt(req.query.page, 10);
     const limitRaw = parseInt(req.query.limit, 10);
@@ -510,6 +528,16 @@ export const getAssignmentsByQuizController = async (req, res, next) => {
       teacherId: req.user.id,
       quizId: normalizedQuizId
     };
+
+    const isNullClassId =
+      classIdQuery === null ||
+      classIdQuery === undefined ||
+      classIdQuery === '' ||
+      classIdQuery === 'null';
+
+    if (!isNullClassId) {
+      filter.classId = classIdQuery;
+    }
 
     const isNullSchoolClass =
       schoolClassIdQuery === null ||
@@ -586,12 +614,22 @@ export const createAssignmentController = async (req, res, next) => {
       return res.status(400).json({ message: attemptLimitResult.error });
     }
 
-    const normalizedClassId = typeof classId === 'string' ? classId.trim() : classId;
-    const isNullClassId =
-      normalizedClassId === null ||
-      normalizedClassId === undefined ||
-      normalizedClassId === '' ||
-      normalizedClassId === 'null';
+    const classIdResult = normalizeNullableAssignmentLinkValue(classId);
+    const schoolClassIdResult = normalizeNullableAssignmentLinkValue(schoolClassId);
+
+    if (
+      classIdResult.hasValue &&
+      schoolClassIdResult.hasValue &&
+      classIdResult.value !== null &&
+      schoolClassIdResult.value !== null
+    ) {
+      return res.status(400).json({
+        message: 'Chỉ một trong hai trường classId và schoolClassId được khác null'
+      });
+    }
+
+    const normalizedClassId = classIdResult.hasValue ? classIdResult.value : null;
+    const isNullClassId = normalizedClassId === null;
 
     if (!isNullClassId) {
       const existingClass = await Class.findById(normalizedClassId).select('_id').lean();
@@ -602,7 +640,8 @@ export const createAssignmentController = async (req, res, next) => {
 
 
     // Chỉ cho phép assignment toàn trường (schoolClassId=null) nếu là admin
-    const isGlobalAssignment = schoolClassId === null || schoolClassId === undefined || schoolClassId === '';
+    const normalizedSchoolClassId = schoolClassIdResult.hasValue ? schoolClassIdResult.value : null;
+    const isGlobalAssignment = normalizedSchoolClassId === null;
     if (isGlobalAssignment) {
       const currentUser = await User.findById(req.user.id).select('roles').lean();
       const userRoles = Array.isArray(currentUser?.roles)
@@ -618,7 +657,7 @@ export const createAssignmentController = async (req, res, next) => {
     } else {
       const isTeacherInSchoolClass = await UserSchoolClass.exists({
         userId: req.user.id,
-        schoolClassId
+        schoolClassId: normalizedSchoolClassId
       });
       if (!isTeacherInSchoolClass) {
         return res.status(400).json({
@@ -636,7 +675,7 @@ export const createAssignmentController = async (req, res, next) => {
     const assignment = new QuizAssignment({
       quizId,
       classId: isNullClassId ? null : normalizedClassId,
-      schoolClassId: isGlobalAssignment ? null : schoolClassId,
+      schoolClassId: isGlobalAssignment ? null : normalizedSchoolClassId,
       teacherId: req.user.id,
       name: normalizedName,
       description: normalizedDescription,
@@ -701,6 +740,20 @@ export const updateAssignmentController = async (req, res, next) => {
     } = req.body;
 
     const updateData = {};
+    const classIdResult = normalizeNullableAssignmentLinkValue(classId);
+    const schoolClassIdResult = normalizeNullableAssignmentLinkValue(schoolClassId);
+
+    if (
+      classIdResult.hasValue &&
+      schoolClassIdResult.hasValue &&
+      classIdResult.value !== null &&
+      schoolClassIdResult.value !== null
+    ) {
+      return res.status(400).json({
+        message: 'Chỉ một trong hai trường classId và schoolClassId được khác null'
+      });
+    }
+
     const hasQuizIdField = Object.prototype.hasOwnProperty.call(req.body || {}, 'quizId');
     if (hasQuizIdField) {
       const normalizedQuizId = typeof quizId === 'string' ? quizId.trim() : quizId;
@@ -764,12 +817,8 @@ export const updateAssignmentController = async (req, res, next) => {
 
     const hasClassIdField = Object.prototype.hasOwnProperty.call(req.body || {}, 'classId');
     if (hasClassIdField) {
-      const normalizedClassId = typeof classId === 'string' ? classId.trim() : classId;
-      const isNullClassId =
-        normalizedClassId === null ||
-        normalizedClassId === undefined ||
-        normalizedClassId === '' ||
-        normalizedClassId === 'null';
+      const normalizedClassId = classIdResult.value;
+      const isNullClassId = normalizedClassId === null;
 
       if (isNullClassId) {
         updateData.classId = null;
@@ -780,19 +829,14 @@ export const updateAssignmentController = async (req, res, next) => {
         }
 
         updateData.classId = normalizedClassId;
+        updateData.schoolClassId = null;
       }
     }
 
     const hasSchoolClassIdField = Object.prototype.hasOwnProperty.call(req.body || {}, 'schoolClassId');
     if (hasSchoolClassIdField) {
-      const normalizedSchoolClassId =
-        typeof schoolClassId === 'string' ? schoolClassId.trim() : schoolClassId;
-
-      const isGlobalAssignment =
-        normalizedSchoolClassId === null ||
-        normalizedSchoolClassId === undefined ||
-        normalizedSchoolClassId === '' ||
-        normalizedSchoolClassId === 'null';
+      const normalizedSchoolClassId = schoolClassIdResult.value;
+      const isGlobalAssignment = normalizedSchoolClassId === null;
 
       if (isGlobalAssignment) {
         const currentUser = await User.findById(req.user.id).select('roles').lean();
@@ -821,6 +865,7 @@ export const updateAssignmentController = async (req, res, next) => {
         }
 
         updateData.schoolClassId = normalizedSchoolClassId;
+        updateData.classId = null;
       }
     }
 
