@@ -956,13 +956,24 @@ export const getMyAssignmentsController = async (req, res, next) => {
   }
 };
 
-// Lấy danh sách assignment global (schoolClassId = null) cho học sinh
+// Lấy danh sách assignment global (schoolClassId = null) cho học sinh, lọc theo classId của user
 export const getMyGlobalAssignmentsController = async (req, res, next) => {
   try {
-    const assignments = await QuizAssignment.find({
+    // Lấy classId từ User profile
+    const user = await User.findById(req.user.id).select('classId').lean();
+    const userClassId = user?.classId || null;
+
+    const filter = {
       schoolClassId: null,
       status: { $in: ['open', 'closed'] }
-    })
+    };
+
+    // Nếu user có classId, thêm vào filter
+    if (userClassId) {
+      filter.classId = userClassId;
+    }
+
+    const assignments = await QuizAssignment.find(filter)
       .select('name description startAt endAt durationMinutes attemptLimit status')
       .sort({ createdAt: -1 });
 
