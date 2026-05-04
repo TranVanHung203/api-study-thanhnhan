@@ -30,7 +30,7 @@ export const getClassByIdController = async (req, res, next) => {
       return res.status(404).json({ message: 'Lớp không tồn tại' });
     }
 
-    const students = await User.find({ classId: id }).select('-passwordHash');
+    const students = await User.find({ classId: id, isStatus: { $ne: 'deleted' } }).select('-passwordHash');
 
     return res.status(200).json({
       message: 'Lấy thông tin lớp thành công',
@@ -131,7 +131,7 @@ export const addStudentToClassController = async (req, res, next) => {
       return res.status(404).json({ message: 'Lớp không tồn tại' });
     }
 
-    const user = await User.findById(userId);
+    const user = await User.findOne({ _id: userId, isStatus: { $ne: 'deleted' } });
     if (!user) {
       return res.status(404).json({ message: 'Người dùng không tồn tại' });
     }
@@ -158,7 +158,7 @@ export const removeStudentFromClassController = async (req, res, next) => {
       return res.status(400).json({ message: 'Vui lòng cung cấp userId' });
     }
 
-    const user = await User.findById(userId);
+    const user = await User.findOne({ _id: userId, isStatus: { $ne: 'deleted' } });
     if (!user) {
       return res.status(404).json({ message: 'Người dùng không tồn tại' });
     }

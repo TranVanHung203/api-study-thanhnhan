@@ -112,7 +112,8 @@ export const getSchoolClassByIdController = async (req, res, next) => {
     const students = userIds.length
       ? await User.find({
         _id: { $in: userIds },
-        roles: { $in: ['student', 'researchobject'] }
+        roles: { $in: ['student', 'researchobject'] },
+        isStatus: { $ne: 'deleted' }
       })
         .select('_id fullName email roles classId schoolId')
         .sort({ fullName: 1 })
@@ -122,7 +123,7 @@ export const getSchoolClassByIdController = async (req, res, next) => {
     const teacherMappings = await TeacherSchoolClass.find({ schoolClassId: id }).select('teacherId').lean();
     const teacherIds = teacherMappings.map((item) => item.teacherId).filter(Boolean);
     const teachers = teacherIds.length
-      ? await User.find({ _id: { $in: teacherIds } })
+      ? await User.find({ _id: { $in: teacherIds }, isStatus: { $ne: 'deleted' } })
         .select('_id fullName email roles schoolId')
         .sort({ fullName: 1 })
         .lean()
@@ -260,7 +261,7 @@ export const addStudentToSchoolClassController = async (req, res, next) => {
 
     const [schoolClass, user] = await Promise.all([
       SchoolClass.findById(id),
-      User.findById(userId)
+      User.findOne({ _id: userId, isStatus: { $ne: 'deleted' } })
     ]);
 
     if (!schoolClass) {
@@ -306,7 +307,7 @@ export const assignSchoolClassToUserController = async (req, res, next) => {
       return res.status(400).json({ message: 'userId khong hop le' });
     }
 
-    const user = await User.findById(userId);
+    const user = await User.findOne({ _id: userId, isStatus: { $ne: 'deleted' } });
     if (!user) {
       return res.status(404).json({ message: 'User khong ton tai' });
     }
@@ -376,7 +377,8 @@ export const addTeacherToSchoolClassController = async (req, res, next) => {
 
     const [schoolClass, teacher] = await Promise.all([
       SchoolClass.findById(id),
-      User.findById(teacherId).select('_id fullName email roles schoolId')
+      User.findOne({ _id: teacherId, isStatus: { $ne: 'deleted' } })
+        .select('_id fullName email roles schoolId')
     ]);
 
     if (!schoolClass) {
@@ -456,7 +458,7 @@ export const removeStudentFromSchoolClassController = async (req, res, next) => 
       return res.status(400).json({ message: 'userId khong hop le' });
     }
 
-    const user = await User.findById(userId);
+    const user = await User.findOne({ _id: userId, isStatus: { $ne: 'deleted' } });
     if (!user) {
       return res.status(404).json({ message: 'User khong ton tai' });
     }

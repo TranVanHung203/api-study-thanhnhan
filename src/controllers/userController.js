@@ -7,6 +7,13 @@ import User from '../models/user.schema.js';
 import SchoolClass from '../models/schoolClass.schema.js';
 import UserSchoolClass from '../models/userSchoolClass.schema.js';
 import TeacherSchoolClass from '../models/teacherSchoolClass.schema.js';
+import UserActivity from '../models/userActivity.schema.js';
+import Reward from '../models/reward.schema.js';
+import Rating from '../models/rating.schema.js';
+import QuizAttempt from '../models/quizAttempt.schema.js';
+import LessonCompletion from '../models/lessonCompletion.schema.js';
+import VideoWatch from '../models/videoWatch.schema.js';
+import QuizSession from '../models/quizSession.schema.js';
 
 const hasRole = (user, roleName) => {
   if (!Array.isArray(user?.roles)) return false;
@@ -54,7 +61,9 @@ const getTeacherContext = async (teacherId) => {
     return { error: { status: 401, message: 'Thong tin dang nhap khong hop le' } };
   }
 
-  const teacher = await User.findById(teacherId).select('_id roles schoolId').lean();
+  const teacher = await User.findOne({ _id: teacherId, isStatus: { $ne: 'deleted' } })
+    .select('_id roles schoolId')
+    .lean();
   if (!teacher) {
     return { error: { status: 404, message: 'Giao vien khong ton tai' } };
   }
@@ -105,7 +114,8 @@ export const getStudentsController = async (req, res, next) => {
 
     const query = {
       roles: { $in: ['researchobject'] },
-      isGuest: { $ne: true }
+      isGuest: { $ne: true },
+      isStatus: { $ne: 'deleted' }
     };
     const [studentsRaw, total] = await Promise.all([
       User.find(query)
@@ -299,7 +309,8 @@ export const getTeacherManagedStudentsController = async (req, res, next) => {
       createdByTeacherId: teacherContext.teacher._id,
       schoolId: teacherContext.teacher.schoolId,
       roles: { $in: ['student'] },
-      isGuest: { $ne: true }
+      isGuest: { $ne: true },
+      isStatus: { $ne: 'deleted' }
     };
 
     let total;
@@ -418,7 +429,8 @@ export const updateTeacherManagedStudentController = async (req, res, next) => {
       _id: studentId,
       createdByTeacherId: teacherContext.teacher._id,
       schoolId: teacherContext.teacher.schoolId,
-      roles: { $in: ['student'] }
+      roles: { $in: ['student'] },
+      isStatus: { $ne: 'deleted' }
     });
 
     if (!student) {
@@ -571,7 +583,8 @@ export const resetTeacherStudentPasswordController = async (req, res, next) => {
       _id: studentId,
       createdByTeacherId: teacherContext.teacher._id,
       schoolId: teacherContext.teacher.schoolId,
-      roles: { $in: ['student'] }
+      roles: { $in: ['student'] },
+      isStatus: { $ne: 'deleted' }
     });
 
     if (!student) {
@@ -597,6 +610,127 @@ export const resetTeacherStudentPasswordController = async (req, res, next) => {
       message: 'Reset mật khẩu học sinh thành công',
       studentId: student._id,
       defaultPassword
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const removeStudentFromManagedClassController = async (req, res, next) => {
+  try {
+    const teacherContext = await getTeacherContext(req.user?.id);
+    if (teacherContext.error) {
+      return res.status(teacherContext.error.status).json({ message: teacherContext.error.message });
+    }
+
+    if (!teacherContext.managedClassIds.length) {
+      return res.status(400).json({ message: 'Giáo viên chưa được gán lớp quản lý' });
+    }
+
+    const { studentId, schoolClassId } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(studentId)) {
+      return res.status(400).json({ message: 'studentId không hợp lệ' });
+    }
+
+    const classValidation = await validateManagedSchoolClass(teacherContext, schoolClassId);
+    if (classValidation.error) {
+      return res.status(classValidation.error.status).json({ message: classValidation.error.message });
+    }
+
+    const student = await User.findOne({
+      _id: studentId,
+      createdByTeacherId: teacherContext.teacher._id,
+      schoolId: teacherContext.teacher.schoolId,
+      roles: { $in: ['student'] },
+      isGuest: { $ne: true },
+      isStatus: { $ne: 'deleted' }
+    }).select('_id fullName email');
+
+    if (!student) {
+      return res.status(404).json({ message: 'Không tìm thấy học sinh thuộc quản lý của giáo viên' });
+    }
+
+    const classMapping = await UserSchoolClass.findOne({
+      userId: student._id,
+      schoolClassId: classValidation.schoolClass._id
+    })
+      .select('_id')
+      .lean();
+
+    if (!classMapping) {
+      return res.status(400).json({ message: 'Học sinh không thuộc lớp học này' });
+    }
+
+    const [
+      hasActivity,
+      hasReward,
+      hasRating,
+      hasQuizAttempt,
+      hasLessonCompletion,
+      hasVideoWatch,
+      hasQuizSession
+    ] = await Promise.all([
+      UserActivity.exists({ userId: student._id }),
+      Reward.exists({ userId: student._id }),
+      Rating.exists({ userId: student._id }),
+      QuizAttempt.exists({ userId: student._id }),
+      LessonCompletion.exists({ userId: student._id }),
+      VideoWatch.exists({ userId: student._id }),
+      QuizSession.exists({ userId: student._id })
+    ]);
+
+    if (
+      hasActivity ||
+      hasReward ||
+      hasRating ||
+      hasQuizAttempt ||
+      hasLessonCompletion ||
+      hasVideoWatch ||
+      hasQuizSession
+    ) {
+      return res.status(400).json({ message: 'Không thể xóa học sinh đã có dữ liệu' });
+    }
+
+    await Promise.all([
+      UserSchoolClass.deleteMany({ userId: student._id }),
+      User.updateOne(
+        { _id: student._id },
+        {
+          $set: {
+            username: null,
+            passwordHash: null,
+            fullName: null,
+            gender: null,
+            email: null,
+            classId: null,
+            schoolId: null,
+            createdByTeacherId: null,
+            dateOfBirth: null,
+            address: null,
+            googleId: null,
+            facebookId: null,
+            zaloId: null,
+            provider: null,
+            avatar: null,
+            characterId: null,
+            preferredTopicId: null,
+            roles: [],
+            isGuest: null,
+            isShowCaseView: null,
+            isStatus: 'deleted',
+            deletedAt: new Date()
+          }
+        }
+      )
+    ]);
+
+    return res.status(200).json({
+      message: 'Xóa học sinh thành công',
+      student: {
+        userId: student._id,
+        fullName: student.fullName,
+        email: student.email
+      }
     });
   } catch (error) {
     next(error);
@@ -634,7 +768,8 @@ export const exportStudentsByClassController = async (req, res, next) => {
         createdByTeacherId: teacherContext.teacher._id,
         schoolId: teacherContext.teacher.schoolId,
         roles: { $in: ['student'] },
-        isGuest: { $ne: true }
+        isGuest: { $ne: true },
+        isStatus: { $ne: 'deleted' }
       })
         .select('username fullName gender dateOfBirth address')
         .sort({ fullName: 1 })

@@ -26,7 +26,7 @@ export const getLeaderboardController = async (req, res, next) => {
 
     // Lấy users của class
     const User = require('../models/user.schema.js').default;
-    const users = await User.find({ classId }).select('_id');
+    const users = await User.find({ classId, isStatus: { $ne: 'deleted' } }).select('_id');
 
     const userIds = users.map(u => u._id);
 

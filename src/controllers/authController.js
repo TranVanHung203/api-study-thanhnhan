@@ -423,7 +423,7 @@ export const loginController = async (req, res, next) => {
     const deviceInfo = req.headers['user-agent'] || null;
 
     // Tìm user
-    const user = await User.findOne({ username }).populate('classId');
+    const user = await User.findOne({ username, isStatus: { $ne: 'deleted' } }).populate('classId');
     if (!user) {
       throw new UnauthorizedError('Không tìm thấy tên đăng nhập!');
     }
@@ -506,7 +506,7 @@ export const refreshTokenController = async (req, res, next) => {
       throw new UnauthorizedError('Refresh token không hợp lệ');
     }
 
-    const user = await User.findById(decoded.id);
+    const user = await User.findOne({ _id: decoded.id, isStatus: { $ne: 'deleted' } });
 
     if (!user) {
       throw new NotFoundError('User không tìm thấy');
@@ -534,7 +534,7 @@ export const refreshTokenController = async (req, res, next) => {
 export const getUserController = async (req, res, next) => {
   try {
     const userId = req.user.id;
-    const user = await User.findById(userId)
+    const user = await User.findOne({ _id: userId, isStatus: { $ne: 'deleted' } })
       .select('_id fullName email classId characterId preferredTopicId isGuest roles isShowCaseView')
       .populate('preferredTopicId', '_id slug name description');
 
@@ -608,7 +608,7 @@ export const changePasswordController = async (req, res, next) => {
     }
 
     // Tìm user
-    const user = await User.findById(userId);
+    const user = await User.findOne({ _id: userId, isStatus: { $ne: 'deleted' } });
     if (!user) {
       throw new NotFoundError('User không tìm thấy');
     }
@@ -658,7 +658,8 @@ export const forgotPasswordController = async (req, res, next) => {
 
     const escapedEmail = escapeRegex(normalizedEmail);
     const user = await User.findOne({
-      email: { $regex: new RegExp(`^${escapedEmail}$`, 'i') }
+      email: { $regex: new RegExp(`^${escapedEmail}$`, 'i') },
+      isStatus: { $ne: 'deleted' }
     });
 
     if (!user || user.isGuest) {
@@ -713,7 +714,8 @@ export const resetPasswordController = async (req, res, next) => {
 
     const escapedEmail = escapeRegex(normalizedEmail);
     const user = await User.findOne({
-      email: { $regex: new RegExp(`^${escapedEmail}$`, 'i') }
+      email: { $regex: new RegExp(`^${escapedEmail}$`, 'i') },
+      isStatus: { $ne: 'deleted' }
     });
 
     if (!user || user.isGuest) {
@@ -908,13 +910,15 @@ export const googleTokenController = async (req, res, next) => {
     // Try to find user by googleId
     let user = null;
     if (googleId) {
-      user = await User.findOne({ googleId });
+      user = await User.findOne({ googleId, isStatus: { $ne: 'deleted' } });
     }
 
     // If not found by googleId, try find by email
     if (!user && email) {
       const emailQuery = buildEmailInsensitiveQuery(email);
-      user = emailQuery ? await User.findOne(emailQuery) : null;
+      user = emailQuery
+        ? await User.findOne({ ...emailQuery, isStatus: { $ne: 'deleted' } })
+        : null;
       if (user && !user.googleId && email_verified) {
         user.googleId = googleId;
         user.provider = 'google';
@@ -1086,12 +1090,14 @@ export const facebookTokenController = async (req, res, next) => {
     const fullName = payload?.name || clientFullName || emailLocalPart || 'Facebook User';
 
     // Try to find by facebookId first
-    let user = await User.findOne({ facebookId });
+    let user = await User.findOne({ facebookId, isStatus: { $ne: 'deleted' } });
 
     // Fallback by email
     if (!user && email) {
       const emailQuery = buildEmailInsensitiveQuery(email);
-      user = emailQuery ? await User.findOne(emailQuery) : null;
+      user = emailQuery
+        ? await User.findOne({ ...emailQuery, isStatus: { $ne: 'deleted' } })
+        : null;
       if (user) {
         if (user.facebookId && user.facebookId !== facebookId) {
           throw new UnauthorizedError('Facebook account mismatch for this email');
@@ -1253,10 +1259,12 @@ const signInWithZaloAccessToken = async ({ token, fullName: fallbackFullName, de
 
   const fullName = payload?.name || fallbackFullName || 'Zalo User';
 
-  let user = await User.findOne({ zaloId });
+  let user = await User.findOne({ zaloId, isStatus: { $ne: 'deleted' } });
   if (!user && email) {
     const emailQuery = buildEmailInsensitiveQuery(email);
-    user = emailQuery ? await User.findOne(emailQuery) : null;
+    user = emailQuery
+      ? await User.findOne({ ...emailQuery, isStatus: { $ne: 'deleted' } })
+      : null;
     if (user) {
       if (user.zaloId && user.zaloId !== zaloId) {
         throw new UnauthorizedError('Zalo account mismatch for this email');
@@ -1455,7 +1463,7 @@ export const deleteGuestController = async (req, res, next) => {
   try {
     const userId = req.user.id;
 
-    const user = await User.findById(userId);
+    const user = await User.findOne({ _id: userId, isStatus: { $ne: 'deleted' } });
     if (!user) {
       throw new NotFoundError('User không tìm thấy');
     }
@@ -1491,14 +1499,15 @@ export const sendOTPForConvertController = async (req, res, next) => {
       throw new BadRequestError('Email không hợp lệ');
     }
 
-    const user = await User.findById(userId);
+    const user = await User.findOne({ _id: userId, isStatus: { $ne: 'deleted' } });
     if (!user) throw new NotFoundError('User không tìm thấy');
     if (!user.isGuest) throw new BadRequestError('Tài khoản này đã là user thường');
 
     // Kiểm tra username/email đã tồn tại ở user khác
     const existingUser = await User.findOne({
       $or: [{ username }, { email }],
-      _id: { $ne: userId }
+      _id: { $ne: userId },
+      isStatus: { $ne: 'deleted' }
     });
     if (existingUser) {
       throw new BadRequestError('Username hoặc email đã tồn tại');
@@ -1552,7 +1561,7 @@ export const verifyOTPAndConvertController = async (req, res, next) => {
       throw new BadRequestError('OTP này không dùng để chuyển đổi tài khoản');
     }
 
-    const user = await User.findById(otpRecord.guestUserId);
+    const user = await User.findOne({ _id: otpRecord.guestUserId, isStatus: { $ne: 'deleted' } });
     if (!user) {
       await OTPVerification.deleteOne({ _id: otpRecord._id });
       throw new NotFoundError('User không tìm thấy');
@@ -1566,7 +1575,8 @@ export const verifyOTPAndConvertController = async (req, res, next) => {
     // Kiểm tra lại username/email chưa bị chiếm
     const existingUser = await User.findOne({
       $or: [{ username: otpRecord.username }, { email: otpRecord.email }],
-      _id: { $ne: user._id }
+      _id: { $ne: user._id },
+      isStatus: { $ne: 'deleted' }
     });
     if (existingUser) {
       await OTPVerification.deleteOne({ _id: otpRecord._id });
@@ -1603,7 +1613,7 @@ export const getPreferenceQuestionsController = async (req, res, next) => {
         .sort({ order: 1 })
         .select('_id code questionText questionType options order')
         .lean(),
-      User.findById(userId)
+      User.findOne({ _id: userId, isStatus: { $ne: 'deleted' } })
         .select('_id')
         .lean()
     ]);
@@ -1755,7 +1765,7 @@ export const submitPreferenceAnswersController = async (req, res, next) => {
 
     const inferredResult = await inferPreferredTopic(normalizedAnswers, topics);
 
-    const user = await User.findById(userId);
+    const user = await User.findOne({ _id: userId, isStatus: { $ne: 'deleted' } });
     if (!user) {
       throw new NotFoundError('User không tìm thấy');
     }
@@ -1779,7 +1789,13 @@ export const submitPreferenceAnswersController = async (req, res, next) => {
 export const setShowCaseViewController = async (req, res, next) => {
   try {
     const userId = req.user.id;
-    await User.findByIdAndUpdate(userId, { $set: { isShowCaseView: true } }, { upsert: false });
+    const updated = await User.updateOne(
+      { _id: userId, isStatus: { $ne: 'deleted' } },
+      { $set: { isShowCaseView: true } }
+    );
+    if (!updated.matchedCount) {
+      throw new NotFoundError('User không tìm thấy');
+    }
     return res.status(200).json({ message: 'Cập nhật isShowCaseView thành công', isShowCaseView: true });
   } catch (error) {
     next(error);
@@ -1796,7 +1812,7 @@ export const changeFullNameController = async (req, res, next) => {
       throw new BadRequestError('fullName không được để trống');
     }
 
-    const user = await User.findById(userId);
+    const user = await User.findOne({ _id: userId, isStatus: { $ne: 'deleted' } });
     if (!user) {
       throw new NotFoundError('User không tìm thấy');
     }
@@ -1824,7 +1840,7 @@ export const changeFullNameAndAttachCharacterController = async (req, res, next)
       throw new BadRequestError('characterId là bắt buộc');
     }
 
-    const user = await User.findById(userId);
+    const user = await User.findOne({ _id: userId, isStatus: { $ne: 'deleted' } });
     if (!user) throw new NotFoundError('User không tìm thấy');
 
     const character = await Character.findById(characterId);
@@ -1875,7 +1891,10 @@ export const sendOTPForRegisterController = async (req, res, next) => {
     }
 
     // Kiểm tra user đã tồn tại
-    const existingUser = await User.findOne({ $or: [{ username }, { email }] });
+    const existingUser = await User.findOne({
+      $or: [{ username }, { email }],
+      isStatus: { $ne: 'deleted' }
+    });
     if (existingUser) {
       throw new BadRequestError('Username hoặc email đã tồn tại');
     }
@@ -1933,7 +1952,8 @@ export const verifyOTPAndRegisterController = async (req, res, next) => {
 
     // Kiểm tra lại user có tồn tại không (double check)
     const existingUser = await User.findOne({
-      $or: [{ username: otpRecord.username }, { email: otpRecord.email }]
+      $or: [{ username: otpRecord.username }, { email: otpRecord.email }],
+      isStatus: { $ne: 'deleted' }
     });
 
     if (existingUser) {

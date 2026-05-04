@@ -5,6 +5,7 @@ import {
   getTeacherManagedStudentsController,
   updateTeacherManagedStudentController,
   resetTeacherStudentPasswordController,
+  removeStudentFromManagedClassController,
   exportStudentsByClassController,
   downloadStudentTemplateController,
   uploadBulkStudentsController
@@ -248,6 +249,44 @@ router.patch('/teacher/students/:studentId', updateTeacherManagedStudentControll
  *         description: Chua xac thuc
  */
 router.patch('/teacher/students/:studentId/reset-password', resetTeacherStudentPasswordController);
+
+/**
+ * @swagger
+ * /users/teacher/students/{studentId}/school-classes/{schoolClassId}:
+ *   delete:
+ *     summary: Giao vien xoa hoc sinh khoi lop do minh quan ly
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: studentId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: User ID cua hoc sinh
+ *       - in: path
+ *         name: schoolClassId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: SchoolClass ID
+ *     responses:
+ *       200:
+ *         description: Xoa hoc sinh khoi lop thanh cong
+ *       400:
+ *         description: studentId hoac schoolClassId khong hop le, hoac hoc sinh khong thuoc lop
+ *       403:
+ *         description: Giao vien khong duoc quan ly lop hoc nay
+ *       404:
+ *         description: Khong tim thay hoc sinh
+ *       401:
+ *         description: Chua xac thuc
+ */
+router.delete(
+  '/teacher/students/:studentId/school-classes/:schoolClassId',
+  removeStudentFromManagedClassController
+);
 
 /**
  * @swagger

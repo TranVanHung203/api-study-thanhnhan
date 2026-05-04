@@ -121,7 +121,8 @@ const authToken = async (req, res, next) => {
 
 const requireGuest = async (req, res, next) => {
   try {
-    const user = await User.findById(req.user.id).select('isGuest');
+        const user = await User.findOne({ _id: req.user.id, isStatus: { $ne: 'deleted' } })
+            .select('isGuest');
     if (!user || !user.isGuest) {
       return res.status(403).json({ message: 'Chỉ tài khoản khách mới được phép thực hiện thao tác này' });
     }

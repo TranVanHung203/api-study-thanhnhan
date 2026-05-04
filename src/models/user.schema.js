@@ -117,6 +117,16 @@ const UserSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  isStatus: {
+    type: String,
+    enum: ['active', 'deleted'],
+    default: 'active',
+    index: true
+  },
+  deletedAt: {
+    type: Date,
+    default: null
+  },
   isShowCaseView: {
     type: Boolean,
     default: false
