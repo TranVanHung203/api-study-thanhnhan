@@ -661,36 +661,6 @@ export const removeStudentFromManagedClassController = async (req, res, next) =>
       return res.status(400).json({ message: 'Học sinh không thuộc lớp học này' });
     }
 
-    const [
-      hasActivity,
-      hasReward,
-      hasRating,
-      hasQuizAttempt,
-      hasLessonCompletion,
-      hasVideoWatch,
-      hasQuizSession
-    ] = await Promise.all([
-      UserActivity.exists({ userId: student._id }),
-      Reward.exists({ userId: student._id }),
-      Rating.exists({ userId: student._id }),
-      QuizAttempt.exists({ userId: student._id }),
-      LessonCompletion.exists({ userId: student._id }),
-      VideoWatch.exists({ userId: student._id }),
-      QuizSession.exists({ userId: student._id })
-    ]);
-
-    if (
-      hasActivity ||
-      hasReward ||
-      hasRating ||
-      hasQuizAttempt ||
-      hasLessonCompletion ||
-      hasVideoWatch ||
-      hasQuizSession
-    ) {
-      return res.status(400).json({ message: 'Không thể xóa học sinh đã có dữ liệu' });
-    }
-
     await Promise.all([
       UserSchoolClass.deleteMany({ userId: student._id }),
       User.updateOne(
