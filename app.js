@@ -27,6 +27,7 @@ import Character from './src/models/character.schema.js';
 import RealtimeBattle from './src/models/realtimeBattle.schema.js';
 import Topic from './src/models/topic.schema.js';
 import PreferenceQuestion from './src/models/preferenceQuestion.schema.js';
+import UserStreak from './src/models/userStreak.schema.js';
 //nhanhmoi
 // Import routes mới
 import authRoutes from './src/routes/authRoutes.js';
@@ -47,6 +48,7 @@ import userRoutes from './src/routes/userRoutes.js';
 import quizAssignmentRoutes from './src/routes/quizAssignmentRoutes.js';
 import chatbotRoutes from './src/chatbot/routes.js';
 import realtimeBattleRoutes from './src/routes/realtimeBattleRoutes.js';
+import streakRoutes from './src/routes/streakRoutes.js';
 import { initBattleSocket } from './src/ws/battleSocket.js';
 import { initAuthSocket } from './src/ws/authSocket.js';
 
@@ -255,7 +257,8 @@ const swaggerOptions = {
       './src/routes/ratingRoutes.js',
     // './src/routes/rewardRoutes.js',
     './src/routes/quizAssignmentRoutes.js',
-    './src/routes/realtimeBattleRoutes.js'
+    './src/routes/realtimeBattleRoutes.js',
+    './src/routes/streakRoutes.js'
   ],
 };
 
@@ -398,6 +401,7 @@ app.use('/users', userRoutes);
 app.use('/assignments', quizAssignmentRoutes);
 app.use('/chatbot', chatbotRoutes);
 app.use('/battle', realtimeBattleRoutes);
+app.use('/streaks', streakRoutes);
 
 app.use(errorHandler);
 
