@@ -1,15 +1,7 @@
 import multer from 'multer';
-import path from 'path';
 
-// Cấu hình storage
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, 'uploads/'); // Đường dẫn lưu file tại gốc dự án
-    },
-    filename: (req, file, cb) => {
-        cb(null, Date.now() + path.extname(file.originalname)); // Tên file duy nhất
-    }
-});
+// Lưu file vào memory để controller đọc trực tiếp từ buffer
+const storage = multer.memoryStorage();
 
 const upload = multer({
     storage,

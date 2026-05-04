@@ -25,7 +25,10 @@ const UserSchema = new mongoose.Schema({
     // Social providers may not return email; require it only for local accounts.
     required: function () {
       if (this.isGuest) return false;
-      return (this.provider || 'local') === 'local';
+      if ((this.provider || 'local') !== 'local') return false;
+      // Student accounts created by teachers can be managed without email.
+      if (this.createdByTeacherId) return false;
+      return true;
     },
     unique: true,
     sparse: true,
@@ -39,6 +42,29 @@ const UserSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Class',
     required: false
+  },
+  schoolId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'School',
+    required: false,
+    default: null
+  },
+  createdByTeacherId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: false,
+    default: null
+  },
+  dateOfBirth: {
+    type: Date,
+    required: false,
+    default: null
+  },
+  address: {
+    type: String,
+    required: false,
+    trim: true,
+    default: null
   },
   // OAuth fields
   googleId: {

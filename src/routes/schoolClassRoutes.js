@@ -2,13 +2,16 @@ import express from 'express';
 import {
   getAllSchoolClassesController,
   getSchoolClassesByUserIdController,
+  getSchoolClassesByTeacherIdController,
   getSchoolClassByIdController,
   createSchoolClassController,
   updateSchoolClassController,
   deleteSchoolClassController,
   addStudentToSchoolClassController,
   assignSchoolClassToUserController,
-  removeStudentFromSchoolClassController
+  removeStudentFromSchoolClassController,
+  addTeacherToSchoolClassController,
+  removeTeacherFromSchoolClassController
 } from '../controllers/schoolClassController.js';
 import { authToken } from '../middlewares/authMiddleware.js';
 
@@ -69,6 +72,22 @@ router.get('/my/classes', getSchoolClassesByUserIdController);
 
 /**
  * @swagger
+ * /school-classes/my/managed-classes:
+ *   get:
+ *     summary: Lay danh sach lop ma giao vien dang quan ly
+ *     tags: [SchoolClass]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Lay danh sach lop quan ly theo giao vien thanh cong
+ *       401:
+ *         description: Chua xac thuc hoac token khong hop le
+ */
+router.get('/my/managed-classes', getSchoolClassesByTeacherIdController);
+
+/**
+ * @swagger
  * /school-classes/assign-user:
  *   post:
  *     summary: Gan schoolClassId cho user theo userId
@@ -103,6 +122,76 @@ router.get('/my/classes', getSchoolClassesByUserIdController);
  *         description: Chua xac thuc
  */
 router.post('/assign-user', assignSchoolClassToUserController);
+
+/**
+ * @swagger
+ * /school-classes/{id}/teachers:
+ *   post:
+ *     summary: Gan giao vien quan ly lop thuc
+ *     tags: [SchoolClass]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: SchoolClass ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - teacherId
+ *             properties:
+ *               teacherId:
+ *                 type: string
+ *                 example: 680627760d7f1dc29b04c200
+ *     responses:
+ *       200:
+ *         description: Gan giao vien quan ly lop thanh cong hoac da ton tai
+ *       400:
+ *         description: id hoac teacherId khong hop le, hoac giao vien khong thuoc truong cua lop
+ *       404:
+ *         description: Lop thuc hoac giao vien khong ton tai
+ *       401:
+ *         description: Chua xac thuc
+ */
+router.post('/:id/teachers', addTeacherToSchoolClassController);
+
+/**
+ * @swagger
+ * /school-classes/{id}/teachers/{teacherId}:
+ *   delete:
+ *     summary: Go giao vien khoi lop thuc
+ *     tags: [SchoolClass]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: SchoolClass ID
+ *       - in: path
+ *         name: teacherId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Teacher User ID
+ *     responses:
+ *       200:
+ *         description: Go giao vien khoi lop thanh cong
+ *       400:
+ *         description: id hoac teacherId khong hop le, hoac giao vien khong duoc gan lop nay
+ *       401:
+ *         description: Chua xac thuc
+ */
+router.delete('/:id/teachers/:teacherId', removeTeacherFromSchoolClassController);
 
 /**
  * @swagger
