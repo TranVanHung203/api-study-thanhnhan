@@ -697,19 +697,14 @@ export const removeStudentFromManagedClassController = async (req, res, next) =>
         { _id: student._id },
         {
           $set: {
-            username: null,
             passwordHash: null,
             fullName: null,
             gender: null,
-            email: null,
             classId: null,
             schoolId: null,
             createdByTeacherId: null,
             dateOfBirth: null,
             address: null,
-            googleId: null,
-            facebookId: null,
-            zaloId: null,
             provider: null,
             avatar: null,
             characterId: null,
@@ -719,6 +714,13 @@ export const removeStudentFromManagedClassController = async (req, res, next) =>
             isShowCaseView: null,
             isStatus: 'deleted',
             deletedAt: new Date()
+          },
+          $unset: {
+            username: '',
+            email: '',
+            googleId: '',
+            facebookId: '',
+            zaloId: ''
           }
         }
       )
