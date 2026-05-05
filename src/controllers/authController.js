@@ -368,7 +368,12 @@ const syncCurrentSessionToRedis = async (userId, refreshTokenId) => {
 };
 
 const createAccessToken = (user, refreshTokenId = null) => {
-  const payload = { id: user._id, username: user.username, email: user.email };
+  const payload = {
+    id: user._id,
+    username: user.username,
+    fullName: user.fullName || null,
+    email: user.email
+  };
   if (refreshTokenId) payload.refreshTokenId = String(refreshTokenId);
   return jwt.sign(payload, SECRET_KEY, { expiresIn: ACCESS_TOKEN_EXPIRY });
 };
