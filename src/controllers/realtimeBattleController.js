@@ -22,7 +22,7 @@ const sanitizeQuestion = (question) => ({
 
 export const getRandomBattleQuestionsController = async (req, res, next) => {
   try {
-    const limit = Math.min(toPositiveInt(req.query.limit, 10), 20);
+    const limit = Math.min(toPositiveInt(req.query.limit, 10),20);
     const questions = await Question.aggregate([{ $sample: { size: limit } }]);
 
     return res.status(200).json({

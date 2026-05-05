@@ -28,6 +28,13 @@ const BattlePlayerResultSchema = new mongoose.Schema(
     totalScore: { type: Number, default: 0 },
     correctCount: { type: Number, default: 0 },
     totalCorrectTimeMs: { type: Number, default: 0 },
+    status: {
+      type: String,
+      enum: ['active', 'left'],
+      default: 'active'
+    },
+    leftReason: { type: String, default: null },
+    leftAt: { type: Date, default: null },
     isWinner: { type: Boolean, default: false }
   },
   { _id: false }

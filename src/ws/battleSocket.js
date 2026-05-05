@@ -127,17 +127,42 @@ const pickPairFromQueue = () => {
   return null;
 };
 
-const buildPublicScores = (battle) =>
-  battle.players.map((player) => ({
-    userId: player.userId,
-    username: player.username,
-    fullName: player.fullName,
-    totalScore: player.totalScore,
-    correctCount: player.correctCount,
-    totalCorrectTimeMs: player.totalCorrectTimeMs
-  }));
+const isSameUserId = (left, right) => {
+  if (left == null || right == null) return false;
+  return String(left) === String(right);
+};
 
-const getPlayerBySocket = (battle, socketId) => battle.players.find((player) => player.socketId === socketId);
+const isActivePlayer = (player) => player?.status !== 'left';
+
+const getActivePlayers = (battle) => battle.players.filter(isActivePlayer);
+
+const buildPublicPlayerScore = (player) => ({
+  userId: player.userId,
+  username: player.username,
+  fullName: player.fullName,
+  totalScore: player.totalScore,
+  correctCount: player.correctCount,
+  totalCorrectTimeMs: player.totalCorrectTimeMs,
+  status: player.status || 'active',
+  leftReason: player.leftReason || null,
+  leftAt: player.leftAt || null
+});
+
+const buildPublicScores = (battle, options = {}) => {
+  const { includeInactive = false } = options;
+  const players = includeInactive ? battle.players : getActivePlayers(battle);
+
+  return players.map(buildPublicPlayerScore);
+};
+
+const getPublicWinner = (battle) => {
+  if (!battle?.winnerUserId) return null;
+  const winner = battle.players.find((player) => isSameUserId(player.userId, battle.winnerUserId));
+  return winner ? buildPublicPlayerScore(winner) : null;
+};
+
+const getPlayerBySocket = (battle, socketId) =>
+  battle.players.find((player) => player.socketId === socketId && isActivePlayer(player));
 
 const getQuestionById = (battle, questionId) =>
   battle.questions.find((question) => String(question._id) === String(questionId));
@@ -152,7 +177,7 @@ const getCurrentQuestionState = (battle) => {
 
 const getActiveAnsweredUserIds = (battle, state) => {
   if (!battle || !state) return [];
-  const activeUserIds = new Set(battle.players.map((player) => String(player.userId)));
+  const activeUserIds = new Set(getActivePlayers(battle).map((player) => String(player.userId)));
   return Array.from(state.submissions.keys()).filter((userId) => activeUserIds.has(String(userId)));
 };
 
@@ -201,7 +226,10 @@ const persistBattleResult = async (battle) => {
     totalScore: player.totalScore,
     correctCount: player.correctCount,
     totalCorrectTimeMs: player.totalCorrectTimeMs,
-    isWinner: battle.winnerUserId === player.userId
+    status: player.status || 'active',
+    leftReason: player.leftReason || null,
+    leftAt: player.leftAt || null,
+    isWinner: isSameUserId(battle.winnerUserId, player.userId)
   }));
 
   const questions = battle.questions.map((question) => {
@@ -240,7 +268,7 @@ const persistBattleResult = async (battle) => {
 };
 
 const evaluateWinner = (battle) => {
-  const sorted = [...battle.players].sort((left, right) => {
+  const sorted = getActivePlayers(battle).sort((left, right) => {
     if (right.totalScore !== left.totalScore) return right.totalScore - left.totalScore;
     if (left.totalCorrectTimeMs !== right.totalCorrectTimeMs) {
       return left.totalCorrectTimeMs - right.totalCorrectTimeMs;
@@ -280,7 +308,10 @@ const finalizeBattle = async (io, battle, reason = 'completed', options = {}) =>
     status: battle.status,
     reason: battle.reason,
     winnerUserId: battle.winnerUserId,
-    players: buildPublicScores(battle),
+    winner: getPublicWinner(battle),
+    isDraw: !battle.winnerUserId,
+    players: buildPublicScores(battle, { includeInactive: true }),
+    activePlayers: buildPublicScores(battle),
     startedAt: battle.startedAt,
     endedAt: battle.endedAt
   };
@@ -301,32 +332,43 @@ const handlePlayerOutFromBattle = async (io, battle, socketId, reason) => {
   const leavingPlayer = getPlayerBySocket(battle, socketId);
   if (!leavingPlayer) return;
 
-  battle.players = battle.players.filter((player) => player.socketId !== socketId);
+  leavingPlayer.status = 'left';
+  leavingPlayer.leftReason = reason;
+  leavingPlayer.leftAt = new Date();
   socketToBattle.delete(socketId);
+
+  const remainingPlayers = getActivePlayers(battle);
 
   io.to(battle.battleId).emit('battle:playerLeft', {
     battleId: battle.battleId,
     userId: leavingPlayer.userId,
     reason,
-    remainingPlayerCount: battle.players.length,
-    players: buildPublicScores(battle)
+    remainingPlayerCount: remainingPlayers.length,
+    players: buildPublicScores(battle),
+    allPlayers: buildPublicScores(battle, { includeInactive: true })
   });
 
-  if (battle.players.length <= 1) {
-    const winner = battle.players[0] || null;
+  if (remainingPlayers.length <= 1) {
+    const winner = remainingPlayers[0] || null;
     await finalizeBattle(io, battle, 'completed', {
       forcedWinnerUserId: winner ? winner.userId : null,
       forcedStatus: winner ? 'completed' : 'aborted',
       forcedReason: winner ? 'last_player_standing' : reason
     });
+    const leavingSocket = io.sockets.get(socketId);
+    if (leavingSocket) leavingSocket.leave(battle.battleId);
     return;
   }
+
+  const leavingSocket = io.sockets.get(socketId);
+  if (leavingSocket) leavingSocket.leave(battle.battleId);
 
   const currentState = getCurrentQuestionState(battle);
   io.to(battle.battleId).emit('battle:scoreUpdate', {
     battleId: battle.battleId,
     currentQuestionIndex: battle.currentQuestionIndex,
     scores: buildPublicScores(battle),
+    allScores: buildPublicScores(battle, { includeInactive: true }),
     answeredUserIds: getActiveAnsweredUserIds(battle, currentState)
   });
 
@@ -381,7 +423,7 @@ const tryMoveNextQuestion = async (io, battle) => {
   if (!state) return;
 
   const activeAnsweredUserIds = getActiveAnsweredUserIds(battle, state);
-  if (activeAnsweredUserIds.length < battle.players.length) return;
+  if (activeAnsweredUserIds.length < getActivePlayers(battle).length) return;
 
   const isLastQuestion = battle.currentQuestionIndex >= battle.questions.length - 1;
   if (isLastQuestion) {
@@ -423,7 +465,10 @@ const createBattle = async (io, participantEntries) => {
     fullName: entry.fullName,
     totalScore: 0,
     correctCount: 0,
-    totalCorrectTimeMs: 0
+    totalCorrectTimeMs: 0,
+    status: 'active',
+    leftReason: null,
+    leftAt: null
   }));
 
   const questionStates = new Map();
@@ -534,7 +579,8 @@ export const getBattleSnapshot = (battleId) => {
     questionDurationMs: SCORE_CONFIG.questionDurationMs,
     currentQuestionIndex: battle.currentQuestionIndex,
     winnerUserId: battle.winnerUserId,
-    players: buildPublicScores(battle),
+    players: buildPublicScores(battle, { includeInactive: true }),
+    activePlayers: buildPublicScores(battle),
     questionCount: battle.questions.length
   };
 };
@@ -884,6 +930,7 @@ export const initBattleSocket = (io) => {
         battleId,
         currentQuestionIndex: battle.currentQuestionIndex,
         scores: buildPublicScores(battle),
+        allScores: buildPublicScores(battle, { includeInactive: true }),
         answeredUserIds: getActiveAnsweredUserIds(battle, state)
       });
 
