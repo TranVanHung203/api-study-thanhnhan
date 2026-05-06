@@ -1,5 +1,6 @@
 import express from 'express';
 import {
+  getOnlineUsersController,
   getStudentsController,
   createStudentByTeacherController,
   getTeacherManagedStudentsController,
@@ -16,6 +17,22 @@ import upload from '../middlewares/upload.js';
 const router = express.Router();
 
 router.all('*', authToken);
+
+/**
+ * @swagger
+ * /users/online:
+ *   get:
+ *     summary: Lay danh sach user dang online
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Danh sach user dang online kem so phut dang online
+ *       401:
+ *         description: Chua xac thuc
+ */
+router.get('/online', getOnlineUsersController);
 
 /**
  * @swagger

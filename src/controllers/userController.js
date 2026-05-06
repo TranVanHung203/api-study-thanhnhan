@@ -14,6 +14,7 @@ import QuizAttempt from '../models/quizAttempt.schema.js';
 import LessonCompletion from '../models/lessonCompletion.schema.js';
 import VideoWatch from '../models/videoWatch.schema.js';
 import QuizSession from '../models/quizSession.schema.js';
+import { getOnlineUserIds } from '../ws/authSocket.js';
 
 const hasRole = (user, roleName) => {
   if (!Array.isArray(user?.roles)) return false;
@@ -54,6 +55,27 @@ const parsePagination = (query) => {
   const limit = Number.isNaN(limitRaw) ? 20 : Math.max(1, Math.min(100, limitRaw));
   const skip = (page - 1) * limit;
   return { page, limit, skip };
+};
+
+const getMinutesAgo = (dateValue, now = new Date()) => {
+  if (!dateValue) return null;
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return null;
+  return Math.max(0, Math.floor((now.getTime() - date.getTime()) / 60000));
+};
+
+const buildPresencePayload = (user, now = new Date()) => {
+  const isOnline = user?.isOnline === true;
+  const onlineAt = user?.onlineAt || null;
+  const lastSeenAt = user?.lastSeenAt || null;
+
+  return {
+    isOnline,
+    onlineAt,
+    onlineForMinutes: isOnline ? getMinutesAgo(onlineAt, now) : null,
+    lastSeenAt,
+    lastSeenMinutesAgo: lastSeenAt ? getMinutesAgo(lastSeenAt, now) : null
+  };
 };
 
 const getTeacherContext = async (teacherId) => {
@@ -119,7 +141,7 @@ export const getStudentsController = async (req, res, next) => {
     };
     const [studentsRaw, total] = await Promise.all([
       User.find(query)
-        .select('_id fullName email')
+        .select('_id fullName email isOnline onlineAt lastSeenAt')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
@@ -129,7 +151,8 @@ export const getStudentsController = async (req, res, next) => {
     const students = studentsRaw.map((student) => ({
       userId: String(student._id),
       fullName: student.fullName,
-      email: student.email
+      email: student.email,
+      presence: buildPresencePayload(student)
     }));
 
     return res.status(200).json({
@@ -319,7 +342,7 @@ export const getTeacherManagedStudentsController = async (req, res, next) => {
     if (searchQuery) {
       const normalizedSearch = normalizeSearchText(searchQuery);
       const allUsers = await User.find(userFilter)
-        .select('_id username fullName email gender schoolId dateOfBirth address createdAt')
+        .select('_id username fullName email gender schoolId dateOfBirth address createdAt isOnline onlineAt lastSeenAt')
         .sort({ createdAt: -1 })
         .lean();
 
@@ -341,7 +364,7 @@ export const getTeacherManagedStudentsController = async (req, res, next) => {
       [total, users] = await Promise.all([
         User.countDocuments(userFilter),
         User.find(userFilter)
-          .select('_id username fullName email gender schoolId dateOfBirth address createdAt')
+          .select('_id username fullName email gender schoolId dateOfBirth address createdAt isOnline onlineAt lastSeenAt')
           .sort({ createdAt: -1 })
           .skip(skip)
           .limit(limit)
@@ -393,7 +416,8 @@ export const getTeacherManagedStudentsController = async (req, res, next) => {
         schoolId: user.schoolId,
         schoolClasses: classList,
         dateOfBirth: user.dateOfBirth || null,
-        address: user.address || null
+        address: user.address || null,
+        presence: buildPresencePayload(user)
       };
     });
 
@@ -403,6 +427,46 @@ export const getTeacherManagedStudentsController = async (req, res, next) => {
       total,
       totalPages: Math.ceil(total / limit),
       students
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getOnlineUsersController = async (req, res, next) => {
+  try {
+    const onlineUserIds = getOnlineUserIds();
+    const now = new Date();
+
+    if (onlineUserIds.length === 0) {
+      return res.status(200).json({
+        total: 0,
+        users: []
+      });
+    }
+
+    const users = await User.find({
+      _id: { $in: onlineUserIds },
+      isStatus: { $ne: 'deleted' }
+    })
+      .select('_id username fullName email roles avatar isOnline onlineAt lastSeenAt')
+      .sort({ fullName: 1 })
+      .lean();
+
+    return res.status(200).json({
+      total: users.length,
+      users: users.map((user) => ({
+        userId: user._id,
+        username: user.username || null,
+        fullName: user.fullName,
+        email: user.email || null,
+        avatar: user.avatar || null,
+        roles: user.roles || [],
+        presence: {
+          ...buildPresencePayload({ ...user, isOnline: true }, now),
+          socketConnected: true
+        }
+      }))
     });
   } catch (error) {
     next(error);

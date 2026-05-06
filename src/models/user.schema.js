@@ -131,6 +131,19 @@ const UserSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  isOnline: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  onlineAt: {
+    type: Date,
+    default: null
+  },
+  lastSeenAt: {
+    type: Date,
+    default: null
+  },
   createdAt: {
     type: Date,
     default: Date.now
