@@ -486,6 +486,38 @@ router.post('/change-fullname-and-attach', authToken, changeFullNameAndAttachCha
  *     responses:
  *       200:
  *         description: Lấy dữ liệu preference thành công
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 questions:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       _id:
+ *                         type: string
+ *                       code:
+ *                         type: string
+ *                       questionText:
+ *                         type: string
+ *                       questionType:
+ *                         type: string
+ *                         enum: [single, multiple, text]
+ *                       order:
+ *                         type: number
+ *                       options:
+ *                         type: array
+ *                         items:
+ *                           type: object
+ *                           properties:
+ *                             value:
+ *                               type: string
+ *                             label:
+ *                               type: string
+ *                             imageCode:
+ *                               type: string
  *       401:
  *         description: Chưa xác thực hoặc token không hợp lệ
  */

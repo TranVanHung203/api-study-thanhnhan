@@ -70,6 +70,7 @@ const buildQuestionOptionMap = (question) => {
       label: typeof option?.label === 'string' && option.label.trim()
         ? option.label.trim()
         : value,
+      imageCode: typeof option?.imageCode === 'string' ? option.imageCode.trim() : null,
       topicScores: normalizeOptionTopicScores(option?.topicScores)
     });
   }
@@ -87,7 +88,8 @@ const sanitizeQuestionForClient = (question) => {
     options: Array.isArray(question.options)
       ? question.options.map((option) => ({
         value: option.value,
-        label: option.label
+        label: option.label,
+        imageCode: option.imageCode ?? null
       }))
       : []
   };

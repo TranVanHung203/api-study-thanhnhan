@@ -92,12 +92,15 @@ const main = async () => {
             const value = String(option?.value || '').trim();
             if (!value) return null;
             const label = String(option?.label || value).trim();
+            const imageCode = option?.imageCode == null
+              ? null
+              : String(option.imageCode).trim();
 
             const topicScores = normalizeTopicScores(option?.topicScores).filter((scoreItem) =>
               activeTopicSlugs.has(scoreItem.topicSlug)
             );
 
-            return { value, label, topicScores };
+            return { value, label, imageCode, topicScores };
           })
           .filter(Boolean)
         : [];

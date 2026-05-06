@@ -7,6 +7,8 @@
     "start": "node ./app.js",
     "backup:ocean-math": "node ./scripts/backupLearningAppToOceanMath.js",
     "seed:onboarding": "node ./scripts/seedOnboardingConfig.js",
+    "migrate:preference-image": "node ./scripts/addPreferenceQuestionImageCodeNull.js",
+    "sample:preference": "node ./scripts/addPreferenceQuestionSample.js",
     "grant:admin": "node ./scripts/grantAdminRole.js"
   },
   "author": "",

@@ -23,6 +23,11 @@ const PreferenceOptionSchema = new mongoose.Schema({
     required: true,
     trim: true
   },
+  imageCode: {
+    type: String,
+    default: null,
+    trim: true
+  },
   topicScores: {
     type: [OptionTopicScoreSchema],
     default: []
