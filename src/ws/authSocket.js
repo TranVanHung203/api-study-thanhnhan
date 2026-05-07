@@ -160,7 +160,7 @@ export const initAuthSocket = (io) => {
         console.error('[Presence] Failed to mark user online:', error);
       });
 
-      emitPresenceEvent(presenceResult.changed ? 'presence:user-online' : 'presence:updated', {
+      const onlinePresencePayload = {
         userId,
         user: socket.data.user,
         presence: presenceResult.presence || {
@@ -169,7 +169,16 @@ export const initAuthSocket = (io) => {
           onlineAt: onlineAt.toISOString(),
           lastSeenAt: now.toISOString()
         }
-      });
+      };
+
+      // Always emit user-online when a socket successfully connects so admin clients
+      // that only subscribe to this event still receive immediate online updates.
+      emitPresenceEvent('presence:user-online', onlinePresencePayload);
+
+      // Keep updated event for backward compatibility on additional connections.
+      if (!presenceResult.changed) {
+        emitPresenceEvent('presence:updated', onlinePresencePayload);
+      }
     }
 
     socket.emit('auth:connected', {
