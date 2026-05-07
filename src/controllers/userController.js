@@ -49,6 +49,47 @@ const normalizeDateOfBirth = (value) => {
   return { hasValue: true, value: parsedDate, error: null };
 };
 
+const normalizePlainText = (value) => String(value || '')
+  .trim()
+  .toLowerCase()
+  .replace(/[đ]/g, 'd')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '');
+
+const parseGenderValue = (value) => {
+  if (value === undefined || value === null || String(value).trim() === '') {
+    return { hasValue: false, value: undefined, error: null };
+  }
+
+  const normalized = normalizePlainText(value);
+  if (normalized === '1' || normalized === 'nam' || normalized === 'male') {
+    return { hasValue: true, value: 1, error: null };
+  }
+  if (normalized === '0' || normalized === 'nu' || normalized === 'female') {
+    return { hasValue: true, value: 0, error: null };
+  }
+
+  return { hasValue: true, value: null, error: 'Giới tính chỉ nhận Nam/Nữ hoặc 1/0' };
+};
+
+const normalizePhoneFromExcel = (value) => {
+  if (value === undefined || value === null) return null;
+
+  const raw = String(value).trim();
+  if (!raw) return null;
+
+  // Excel may serialize typed phone as number (e.g. 901234567 or 901234567.0).
+  const numericLike = raw.replace(/\.0+$/, '');
+  if (/^\d+$/.test(numericLike)) {
+    if (numericLike.length === 9 && !numericLike.startsWith('0')) {
+      return `0${numericLike}`;
+    }
+    return numericLike;
+  }
+
+  return raw;
+};
+
 const parsePagination = (query) => {
   const pageRaw = parseInt(query?.page, 10);
   const limitRaw = parseInt(query?.limit, 10);
@@ -942,15 +983,12 @@ export const exportStudentsByClassController = async (req, res, next) => {
       : [];
     const parentInfoMap = new Map(parentInfos.map((item) => [String(item.studentId), item]));
 
-    const toExcelText = (value) => {
-      if (value === null || value === undefined) return '';
-      return String(value).trim();
-    };
+    const toExcelText = (value) => normalizePhoneFromExcel(value) || '';
 
     const rows = users.map((user) => ({
       username: user.username || '',
       fullName: user.fullName || '',
-      gender: user.gender ?? '',
+      gender: user.gender === 1 ? 'Nam' : user.gender === 0 ? 'Nữ' : '',
       dateOfBirth: user.dateOfBirth ? new Date(user.dateOfBirth).toISOString().slice(0, 10) : '',
       fatherName: parentInfoMap.get(String(user._id))?.fatherName || '',
       fatherPhone: toExcelText(parentInfoMap.get(String(user._id))?.fatherPhone),
@@ -979,7 +1017,7 @@ export const exportStudentsByClassController = async (req, res, next) => {
     const vietnameseHeaders = [
       'Tên đăng nhập',
       'Họ và tên',
-      'Giới tính (0: Nữ, 1: Nam)',
+      'Giới tính',
       'Ngày sinh',
       'Tên bố/người giám hộ nam',
       'SĐT bố/người giám hộ nam',
@@ -1052,7 +1090,7 @@ export const downloadStudentTemplateController = async (req, res, next) => {
       {
         username: 'student_01',
         fullName: 'Nguyễn Văn A',
-        gender: '1',
+        gender: 'Nam',
         dateOfBirth: '2010-01-15',
         fatherName: 'Nguyen Van B',
         fatherPhone: '0901234567',
@@ -1064,7 +1102,7 @@ export const downloadStudentTemplateController = async (req, res, next) => {
       {
         username: 'student_02',
         fullName: 'Trần Thị B',
-        gender: '0',
+        gender: 'Nữ',
         dateOfBirth: '2010-06-20',
         fatherName: '',
         fatherPhone: '',
@@ -1093,7 +1131,7 @@ export const downloadStudentTemplateController = async (req, res, next) => {
     const templateVietnameseHeaders = [
       'Tên đăng nhập (Bắt buộc nhập)',
       'Họ và tên (Bắt buộc nhập)',
-      'Giới tính (0: Nữ, 1: Nam)',
+      'Giới tính (Nam/Nữ)',
       'Ngày sinh',
       'Tên bố/người giám hộ nam',
       'SĐT bố/người giám hộ nam',
@@ -1145,7 +1183,7 @@ export const downloadStudentTemplateController = async (req, res, next) => {
       ['Cột', 'Yêu cầu', 'Ghi chú'],
       ['Tên đăng nhập (Bắt buộc nhập)', 'Bắt buộc, duy nhất', 'Không chứa ký tự đặc biệt'],
       ['Họ và tên (Bắt buộc nhập)', 'Bắt buộc', 'Tên đầy đủ của học sinh'],
-      ['Giới tính (0: Nữ, 1: Nam)', 'Tùy chọn', 'Nhập 0 hoặc 1'],
+      ['Giới tính (Nam/Nữ)', 'Tùy chọn', 'Nhập Nam hoặc Nữ (chấp nhận cả 1/0)'],
       ['Ngày sinh', 'Tùy chọn', 'Định dạng YYYY-MM-DD'],
       ['Địa chỉ', 'Tùy chọn', 'Địa chỉ của học sinh'],
       ['Mật khẩu (Bắt buộc khi tạo mới)', 'Bắt buộc khi tạo mới', 'Tối thiểu 6 ký tự']
@@ -1256,7 +1294,7 @@ export const uploadBulkStudentsController = async (req, res, next) => {
       return '';
     };
 
-    const rawRows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+    const rawRows = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false });
     const rows = rawRows
       .map((raw) => {
         const normalized = {};
@@ -1307,18 +1345,17 @@ export const uploadBulkStudentsController = async (req, res, next) => {
           results.errors.push({ row: rowIndex, message: 'fullName không được để trống' });
           continue;
         }
-        const gender = row.gender !== undefined && row.gender !== null && row.gender !== ''
-          ? Number(row.gender)
-          : undefined;
+        const genderResult = parseGenderValue(row.gender);
+        const gender = genderResult.hasValue ? genderResult.value : undefined;
         const dateOfBirth = row.dateOfBirth || undefined;
         const address = normalizeOptionalText(row.address);
         const fatherName = normalizeOptionalText(row.fatherName);
-        const fatherPhone = normalizeOptionalText(row.fatherPhone);
+        const fatherPhone = normalizePhoneFromExcel(row.fatherPhone);
         const motherName = normalizeOptionalText(row.motherName);
-        const motherPhone = normalizeOptionalText(row.motherPhone);
+        const motherPhone = normalizePhoneFromExcel(row.motherPhone);
 
-        if (gender !== undefined && ![0, 1].includes(gender)) {
-          results.errors.push({ row: rowIndex, message: 'gender chỉ nhận 0 (Nữ) hoặc 1 (Nam)' });
+        if (genderResult.error) {
+          results.errors.push({ row: rowIndex, message: genderResult.error });
           continue;
         }
 
