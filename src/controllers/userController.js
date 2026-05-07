@@ -942,16 +942,21 @@ export const exportStudentsByClassController = async (req, res, next) => {
       : [];
     const parentInfoMap = new Map(parentInfos.map((item) => [String(item.studentId), item]));
 
+    const toExcelText = (value) => {
+      if (value === null || value === undefined) return '';
+      return String(value).trim();
+    };
+
     const rows = users.map((user) => ({
       username: user.username || '',
       fullName: user.fullName || '',
       gender: user.gender ?? '',
       dateOfBirth: user.dateOfBirth ? new Date(user.dateOfBirth).toISOString().slice(0, 10) : '',
-      address: user.address || '',
       fatherName: parentInfoMap.get(String(user._id))?.fatherName || '',
-      fatherPhone: parentInfoMap.get(String(user._id))?.fatherPhone || '',
+      fatherPhone: toExcelText(parentInfoMap.get(String(user._id))?.fatherPhone),
       motherName: parentInfoMap.get(String(user._id))?.motherName || '',
-      motherPhone: parentInfoMap.get(String(user._id))?.motherPhone || '',
+      motherPhone: toExcelText(parentInfoMap.get(String(user._id))?.motherPhone),
+      address: user.address || '',
       password: ''
     }));
 
@@ -961,40 +966,57 @@ export const exportStudentsByClassController = async (req, res, next) => {
         'fullName',
         'gender',
         'dateOfBirth',
-        'address',
-        'password',
         'fatherName',
         'fatherPhone',
         'motherName',
-        'motherPhone'
+        'motherPhone',
+        'address',
+        'password'
       ]
     });
 
-    try {
-      if (ws['A1']) ws['A1'].v = 'username';
-      if (ws['B1']) ws['B1'].v = 'fullName';
-      if (ws['C1']) ws['C1'].v = 'gender';
-      if (ws['D1']) ws['D1'].v = 'dateOfBirth';
-      if (ws['E1']) ws['E1'].v = 'address';
-      if (ws['F1']) ws['F1'].v = 'fatherName';
-      if (ws['G1']) ws['G1'].v = 'fatherPhone';
-      if (ws['H1']) ws['H1'].v = 'motherName';
-      if (ws['I1']) ws['I1'].v = 'motherPhone';
-      if (ws['J1']) ws['J1'].v = 'password';
-    } catch (err) {
-      // ignore if header cells not present
-    }
+    // Rename header row to Vietnamese labels for exported file readability.
+    const vietnameseHeaders = [
+      'Tên đăng nhập',
+      'Họ và tên',
+      'Giới tính (0: Nữ, 1: Nam)',
+      'Ngày sinh',
+      'Tên bố/người giám hộ nam',
+      'SĐT bố/người giám hộ nam',
+      'Tên mẹ/người giám hộ nữ',
+      'SĐT mẹ/người giám hộ nữ',
+      'Địa chỉ',
+      'Mật khẩu'
+    ];
+    vietnameseHeaders.forEach((label, colIndex) => {
+      const headerCell = XLSX.utils.encode_cell({ c: colIndex, r: 0 });
+      if (!ws[headerCell]) {
+        ws[headerCell] = { t: 's', v: label };
+      } else {
+        ws[headerCell].t = 's';
+        ws[headerCell].v = label;
+      }
+    });
+
+    // Force phone columns to text to preserve leading zero when opening in Excel.
+    rows.forEach((row, rowIndex) => {
+      const excelRowIndex = rowIndex + 1; // row 1 is header
+      const fatherPhoneCell = XLSX.utils.encode_cell({ c: 5, r: excelRowIndex }); // F
+      const motherPhoneCell = XLSX.utils.encode_cell({ c: 7, r: excelRowIndex }); // H
+      ws[fatherPhoneCell] = { t: 's', v: row.fatherPhone || '' };
+      ws[motherPhoneCell] = { t: 's', v: row.motherPhone || '' };
+    });
 
     ws['!cols'] = [
       { wch: 16 },
       { wch: 24 },
       { wch: 10 },
       { wch: 14 },
+      { wch: 24 },
+      { wch: 16 },
+      { wch: 24 },
+      { wch: 16 },
       { wch: 30 },
-      { wch: 24 },
-      { wch: 16 },
-      { wch: 24 },
-      { wch: 16 },
       { wch: 14 }
     ];
 
@@ -1059,26 +1081,45 @@ export const downloadStudentTemplateController = async (req, res, next) => {
         'fullName',
         'gender',
         'dateOfBirth',
-        'address',
-        'password',
         'fatherName',
         'fatherPhone',
         'motherName',
-        'motherPhone'
+        'motherPhone',
+        'address',
+        'password'
       ]
     });
-    // Ghi lại header và thêm chú thích cho trường bắt buộc
-    // json_to_sheet sẽ tạo header ở row 1, ta sửa lại các header để hiển thị (required)
-    try {
-      if (ws['A1']) ws['A1'].v = 'username (Bắt buộc nhập)';
-      if (ws['B1']) ws['B1'].v = 'fullName (Bắt buộc nhập)';
-      if (ws['C1']) ws['C1'].v = 'gender';
-      if (ws['D1']) ws['D1'].v = 'dateOfBirth';
-      if (ws['E1']) ws['E1'].v = 'address';
-      if (ws['F1']) ws['F1'].v = 'password (Bắt buộc nhập)';
-    } catch (err) {
-      // ignore if header cells not present
-    }
+
+    const templateVietnameseHeaders = [
+      'Tên đăng nhập (Bắt buộc nhập)',
+      'Họ và tên (Bắt buộc nhập)',
+      'Giới tính (0: Nữ, 1: Nam)',
+      'Ngày sinh',
+      'Tên bố/người giám hộ nam',
+      'SĐT bố/người giám hộ nam',
+      'Tên mẹ/người giám hộ nữ',
+      'SĐT mẹ/người giám hộ nữ',
+      'Địa chỉ',
+      'Mật khẩu (Bắt buộc khi tạo mới)'
+    ];
+    templateVietnameseHeaders.forEach((label, colIndex) => {
+      const headerCell = XLSX.utils.encode_cell({ c: colIndex, r: 0 });
+      if (!ws[headerCell]) {
+        ws[headerCell] = { t: 's', v: label };
+      } else {
+        ws[headerCell].t = 's';
+        ws[headerCell].v = label;
+      }
+    });
+
+    // Preserve leading zero in phone samples.
+    templateData.forEach((row, rowIndex) => {
+      const excelRowIndex = rowIndex + 1; // row 1 is header
+      const fatherPhoneCell = XLSX.utils.encode_cell({ c: 5, r: excelRowIndex }); // F
+      const motherPhoneCell = XLSX.utils.encode_cell({ c: 7, r: excelRowIndex }); // H
+      ws[fatherPhoneCell] = { t: 's', v: String(row.fatherPhone || '') };
+      ws[motherPhoneCell] = { t: 's', v: String(row.motherPhone || '') };
+    });
 
     // Đặt độ rộng cột
     ws['!cols'] = [
@@ -1102,21 +1143,21 @@ export const downloadStudentTemplateController = async (req, res, next) => {
       ['Hướng dẫn nhập liệu:'],
       [''],
       ['Cột', 'Yêu cầu', 'Ghi chú'],
-      ['username (required)', 'Bắt buộc, duy nhất', 'Không chứa ký tự đặc biệt'],
-      ['fullName (required)', 'Bắt buộc', 'Tên đầy đủ của học sinh'],
-      ['gender', 'Tùy chọn', '0 = Nữ, 1 = Nam'],
-      ['dateOfBirth', 'Tùy chọn', 'Định dạng YYYY-MM-DD'],
-      ['address', 'Tùy chọn', 'Địa chỉ của học sinh'],
-      ['password (required)', 'Bắt buộc', 'Tối thiểu 6 ký tự']
+      ['Tên đăng nhập (Bắt buộc nhập)', 'Bắt buộc, duy nhất', 'Không chứa ký tự đặc biệt'],
+      ['Họ và tên (Bắt buộc nhập)', 'Bắt buộc', 'Tên đầy đủ của học sinh'],
+      ['Giới tính (0: Nữ, 1: Nam)', 'Tùy chọn', 'Nhập 0 hoặc 1'],
+      ['Ngày sinh', 'Tùy chọn', 'Định dạng YYYY-MM-DD'],
+      ['Địa chỉ', 'Tùy chọn', 'Địa chỉ của học sinh'],
+      ['Mật khẩu (Bắt buộc khi tạo mới)', 'Bắt buộc khi tạo mới', 'Tối thiểu 6 ký tự']
     ];
 
     instructionData.splice(
       instructionData.length - 1,
       0,
-      ['fatherName', 'Tuy chon', 'Ten bo/nguoi giam ho nam'],
-      ['fatherPhone', 'Tuy chon', 'So dien thoai bo/nguoi giam ho nam'],
-      ['motherName', 'Tuy chon', 'Ten me/nguoi giam ho nu'],
-      ['motherPhone', 'Tuy chon', 'So dien thoai me/nguoi giam ho nu']
+      ['Tên bố/người giám hộ nam', 'Tùy chọn', 'Tên bố/người giám hộ nam'],
+      ['SĐT bố/người giám hộ nam', 'Tùy chọn', 'Số điện thoại bố/người giám hộ nam'],
+      ['Tên mẹ/người giám hộ nữ', 'Tùy chọn', 'Tên mẹ/người giám hộ nữ'],
+      ['SĐT mẹ/người giám hộ nữ', 'Tùy chọn', 'Số điện thoại mẹ/người giám hộ nữ']
     );
 
     const wsInstruction = XLSX.utils.aoa_to_sheet(instructionData);
@@ -1181,18 +1222,37 @@ export const uploadBulkStudentsController = async (req, res, next) => {
     }
 
     const normalizeHeaderKey = (key) => {
-      const raw = String(key || '').trim().toLowerCase();
-      if (!raw) return '';
-      if (raw.startsWith('username')) return 'username';
-      if (raw.startsWith('fullname')) return 'fullName';
-      if (raw.startsWith('gender')) return 'gender';
-      if (raw.startsWith('dateofbirth')) return 'dateOfBirth';
-      if (raw.startsWith('address')) return 'address';
-      if (raw.startsWith('fathername')) return 'fatherName';
-      if (raw.startsWith('fatherphone')) return 'fatherPhone';
-      if (raw.startsWith('mothername')) return 'motherName';
-      if (raw.startsWith('motherphone')) return 'motherPhone';
-      if (raw.startsWith('password')) return 'password';
+      const normalized = String(key || '')
+        .trim()
+        .toLowerCase()
+        .replace(/[đ]/g, 'd')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]/g, '');
+
+      if (!normalized) return '';
+      if (normalized.startsWith('username') || normalized.startsWith('tendangnhap')) return 'username';
+      if (normalized.startsWith('fullname') || normalized.startsWith('hovaten')) return 'fullName';
+      if (normalized.startsWith('gender') || normalized.startsWith('gioitinh')) return 'gender';
+      if (normalized.startsWith('dateofbirth') || normalized.startsWith('ngaysinh')) return 'dateOfBirth';
+      if (normalized.startsWith('address') || normalized.startsWith('diachi')) return 'address';
+      if (normalized.startsWith('fathername') || normalized.startsWith('tenbonguoigiamhonam')) return 'fatherName';
+      if (
+        normalized.startsWith('fatherphone') ||
+        normalized.startsWith('sdtbonguoigiamhonam') ||
+        normalized.startsWith('sodienthoaibonguoigiamhonam')
+      ) {
+        return 'fatherPhone';
+      }
+      if (normalized.startsWith('mothername') || normalized.startsWith('tenmenguoigiamhonu')) return 'motherName';
+      if (
+        normalized.startsWith('motherphone') ||
+        normalized.startsWith('sdtmenguoigiamhonu') ||
+        normalized.startsWith('sodienthoaimenguoigiamhonu')
+      ) {
+        return 'motherPhone';
+      }
+      if (normalized.startsWith('password') || normalized.startsWith('matkhau')) return 'password';
       return '';
     };
 
@@ -1247,11 +1307,6 @@ export const uploadBulkStudentsController = async (req, res, next) => {
           results.errors.push({ row: rowIndex, message: 'fullName không được để trống' });
           continue;
         }
-        if (!password || password.length < 6) {
-          results.errors.push({ row: rowIndex, message: 'password phải tối thiểu 6 ký tự' });
-          continue;
-        }
-
         const gender = row.gender !== undefined && row.gender !== null && row.gender !== ''
           ? Number(row.gender)
           : undefined;
@@ -1364,6 +1419,14 @@ export const uploadBulkStudentsController = async (req, res, next) => {
       }
 
       if (!student) {
+        if (!item.password || item.password.length < 6) {
+          results.errors.push({
+            row: item.rowIndex,
+            message: 'Mật khẩu là bắt buộc khi tạo mới và phải tối thiểu 6 ký tự'
+          });
+          continue;
+        }
+
         createDocs.push({
           username: item.username,
           passwordHash: await bcrypt.hash(item.password, 10),
