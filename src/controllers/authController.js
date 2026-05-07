@@ -542,7 +542,7 @@ export const getUserController = async (req, res, next) => {
   try {
     const userId = req.user.id;
     const user = await User.findOne({ _id: userId, isStatus: { $ne: 'deleted' } })
-      .select('_id fullName email classId characterId preferredTopicId isGuest roles isShowCaseView')
+      .select('_id userCode fullName email classId characterId preferredTopicId isGuest roles isShowCaseView')
       .populate('preferredTopicId', '_id slug name description');
 
     const preferredTopic =
@@ -558,6 +558,7 @@ export const getUserController = async (req, res, next) => {
     if (!user) throw new NotFoundError('User không tìm thấy');
     return res.status(200).json({
       _id: user._id,
+      userCode: user.userCode || null,
       fullName: user.fullName,
       email: user.email,
       classId: user.classId || null,

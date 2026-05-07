@@ -112,6 +112,22 @@ router.get('/students', getStudentsController);
  *                 type: string
  *                 nullable: true
  *                 example: 12 Nguyen Trai, Ha Noi
+ *               fatherName:
+ *                 type: string
+ *                 nullable: true
+ *                 example: Nguyen Van B
+ *               fatherPhone:
+ *                 type: string
+ *                 nullable: true
+ *                 example: 0901234567
+ *               motherName:
+ *                 type: string
+ *                 nullable: true
+ *                 example: Tran Thi C
+ *               motherPhone:
+ *                 type: string
+ *                 nullable: true
+ *                 example: 0912345678
  *     responses:
  *       201:
  *         description: Tao tai khoan hoc sinh thanh cong
@@ -161,7 +177,7 @@ router.post('/teacher/students', createStudentByTeacherController);
  *         required: false
  *         schema:
  *           type: string
- *         description: Tim theo fullName, username hoac email
+ *         description: Tim theo userCode, fullName, username hoac email
  *     responses:
  *       200:
  *         description: Lay danh sach hoc sinh thanh cong
@@ -222,6 +238,22 @@ router.get('/teacher/students', getTeacherManagedStudentsController);
  *                 type: string
  *                 nullable: true
  *                 example: 99 Le Loi, Da Nang
+ *               fatherName:
+ *                 type: string
+ *                 nullable: true
+ *                 example: Nguyen Van B
+ *               fatherPhone:
+ *                 type: string
+ *                 nullable: true
+ *                 example: 0901234567
+ *               motherName:
+ *                 type: string
+ *                 nullable: true
+ *                 example: Tran Thi C
+ *               motherPhone:
+ *                 type: string
+ *                 nullable: true
+ *                 example: 0912345678
  *     responses:
  *       200:
  *         description: Cap nhat hoc sinh thanh cong

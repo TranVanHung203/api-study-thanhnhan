@@ -7,6 +7,12 @@ const UserSchema = new mongoose.Schema({
     unique: true,
     sparse: true
   },
+  userCode: {
+    type: String,
+    unique: true,
+    sparse: true,
+    index: true
+  },
   passwordHash: {
     type: String,
     required: function () { return !this.isGuest; }
@@ -147,6 +153,45 @@ const UserSchema = new mongoose.Schema({
   createdAt: {
     type: Date,
     default: Date.now
+  }
+});
+
+UserSchema.pre('save', async function (next) {
+  if (!this.isNew || this.userCode) return next();
+
+  const createdDate = this.createdAt || new Date();
+  const year = createdDate.getFullYear();
+  const isStudent = Array.isArray(this.roles) && this.roles.includes('student');
+  const prefix = isStudent ? 'HS' : 'U';
+  const codePrefix = `${prefix}${year}_`;
+  const escapedPrefix = codePrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  try {
+    const latestRows = await this.constructor.aggregate([
+      { $match: { userCode: { $regex: `^${escapedPrefix}` } } },
+      {
+        $project: {
+          sequence: {
+            $convert: {
+              input: { $arrayElemAt: [{ $split: ['$userCode', '_'] }, 1] },
+              to: 'int',
+              onError: 0,
+              onNull: 0
+            }
+          }
+        }
+      },
+      { $sort: { sequence: -1 } },
+      { $limit: 1 }
+    ]);
+
+    const maxSequence = latestRows?.[0]?.sequence || 0;
+    const nextNumber = maxSequence + 1;
+
+    this.userCode = `${codePrefix}${nextNumber}`;
+    return next();
+  } catch (error) {
+    return next(error);
   }
 });
 

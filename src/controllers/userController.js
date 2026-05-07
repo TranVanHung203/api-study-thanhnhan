@@ -7,6 +7,7 @@ import User from '../models/user.schema.js';
 import SchoolClass from '../models/schoolClass.schema.js';
 import UserSchoolClass from '../models/userSchoolClass.schema.js';
 import TeacherSchoolClass from '../models/teacherSchoolClass.schema.js';
+import ParentInfo from '../models/parentInfo.schema.js';
 import UserActivity from '../models/userActivity.schema.js';
 import Reward from '../models/reward.schema.js';
 import Rating from '../models/rating.schema.js';
@@ -14,7 +15,7 @@ import QuizAttempt from '../models/quizAttempt.schema.js';
 import LessonCompletion from '../models/lessonCompletion.schema.js';
 import VideoWatch from '../models/videoWatch.schema.js';
 import QuizSession from '../models/quizSession.schema.js';
-import { getOnlineUserIds } from '../ws/authSocket.js';
+import { getOnlineUserIds, getPresenceByUserIds } from '../services/presenceService.js';
 
 const hasRole = (user, roleName) => {
   if (!Array.isArray(user?.roles)) return false;
@@ -141,18 +142,24 @@ export const getStudentsController = async (req, res, next) => {
     };
     const [studentsRaw, total] = await Promise.all([
       User.find(query)
-        .select('_id fullName email isOnline onlineAt lastSeenAt')
+        .select('_id userCode fullName email isOnline onlineAt lastSeenAt')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
         .lean(),
       User.countDocuments(query)
     ]);
+    const presenceResult = await getPresenceByUserIds(studentsRaw.map((student) => student._id));
     const students = studentsRaw.map((student) => ({
       userId: String(student._id),
+      userCode: student.userCode || null,
       fullName: student.fullName,
       email: student.email,
-      presence: buildPresencePayload(student)
+      presence: buildPresencePayload({
+        ...student,
+        ...(presenceResult.presenceByUserId.get(String(student._id)) || {}),
+        isOnline: presenceResult.presenceByUserId.has(String(student._id)) || student.isOnline === true
+      })
     }));
 
     return res.status(200).json({
@@ -185,13 +192,21 @@ export const createStudentByTeacherController = async (req, res, next) => {
       gender,
       schoolClassId,
       dateOfBirth,
-      address
+      address,
+      fatherName,
+      fatherPhone,
+      motherName,
+      motherPhone
     } = req.body || {};
 
     const normalizedUsername = String(username || '').trim();
     const normalizedPassword = String(password || '');
     const normalizedFullName = String(fullName || '').trim();
     const normalizedAddress = normalizeOptionalText(address);
+    const normalizedFatherName = normalizeOptionalText(fatherName);
+    const normalizedFatherPhone = normalizeOptionalText(fatherPhone);
+    const normalizedMotherName = normalizeOptionalText(motherName);
+    const normalizedMotherPhone = normalizeOptionalText(motherPhone);
     const dobResult = normalizeDateOfBirth(dateOfBirth);
 
     if (!normalizedUsername || !normalizedPassword || !normalizedFullName || !schoolClassId) {
@@ -223,22 +238,45 @@ export const createStudentByTeacherController = async (req, res, next) => {
       return res.status(409).json({ message: 'username da ton tai' });
     }
     const passwordHash = await bcrypt.hash(normalizedPassword, 10);
-    const user = await User.create({
-      username: normalizedUsername,
-      passwordHash,
-      fullName: normalizedFullName,
-      gender: gender === undefined || gender === null ? undefined : Number(gender),
-      dateOfBirth: dobResult.hasValue ? dobResult.value : null,
-      address: normalizedAddress,
-      roles: ['student'],
-      provider: 'local',
-      isGuest: false,
-      classId: null,
-      schoolId: teacherContext.teacher.schoolId,
-      createdByTeacherId: teacherContext.teacher._id
-    });
+    let user;
+    try {
+      user = await User.create({
+        username: normalizedUsername,
+        passwordHash,
+        fullName: normalizedFullName,
+        gender: gender === undefined || gender === null ? undefined : Number(gender),
+        dateOfBirth: dobResult.hasValue ? dobResult.value : null,
+        address: normalizedAddress,
+        roles: ['student'],
+        provider: 'local',
+        isGuest: false,
+        classId: null,
+        schoolId: teacherContext.teacher.schoolId,
+        createdByTeacherId: teacherContext.teacher._id
+      });
+    } catch (createError) {
+      if (createError?.code === 11000) {
+        const duplicatedField = Object.keys(createError?.keyPattern || {})[0] || 'unknown';
+        return res.status(409).json({ message: `Du lieu bi trung (${duplicatedField})` });
+      }
+      throw createError;
+    }
 
     await UserSchoolClass.create({ userId: user._id, schoolClassId: schoolClassResult.schoolClass._id });
+
+    const parentInfoPayload = {
+      fatherName: normalizedFatherName,
+      fatherPhone: normalizedFatherPhone,
+      motherName: normalizedMotherName,
+      motherPhone: normalizedMotherPhone
+    };
+    const hasParentInfo = Object.values(parentInfoPayload).some((value) => value !== null);
+    const createdParentInfo = hasParentInfo
+      ? await ParentInfo.create({
+        studentId: user._id,
+        ...parentInfoPayload
+      })
+      : null;
 
     return res.status(201).json({
       message: 'Giáo viên tạo tài khoản học sinh thành công',
@@ -254,7 +292,16 @@ export const createStudentByTeacherController = async (req, res, next) => {
           className: schoolClassResult.schoolClass.className
         },
         dateOfBirth: user.dateOfBirth || null,
-        address: user.address || null
+        address: user.address || null,
+        parentInfo: createdParentInfo
+          ? {
+            parentInfoId: createdParentInfo._id,
+            fatherName: createdParentInfo.fatherName || null,
+            fatherPhone: createdParentInfo.fatherPhone || null,
+            motherName: createdParentInfo.motherName || null,
+            motherPhone: createdParentInfo.motherPhone || null
+          }
+          : null
       }
     });
   } catch (error) {
@@ -342,7 +389,7 @@ export const getTeacherManagedStudentsController = async (req, res, next) => {
     if (searchQuery) {
       const normalizedSearch = normalizeSearchText(searchQuery);
       const allUsers = await User.find(userFilter)
-        .select('_id username fullName email gender schoolId dateOfBirth address createdAt isOnline onlineAt lastSeenAt')
+        .select('_id userCode username fullName email gender schoolId dateOfBirth address createdAt isOnline onlineAt lastSeenAt')
         .sort({ createdAt: -1 })
         .lean();
 
@@ -350,11 +397,13 @@ export const getTeacherManagedStudentsController = async (req, res, next) => {
         const normalizedFullName = normalizeSearchText(user.fullName);
         const normalizedUsername = normalizeSearchText(user.username);
         const normalizedEmail = normalizeSearchText(user.email);
+        const normalizedUserCode = normalizeSearchText(user.userCode);
 
         return (
           normalizedFullName.includes(normalizedSearch) ||
           normalizedUsername.includes(normalizedSearch) ||
-          normalizedEmail.includes(normalizedSearch)
+          normalizedEmail.includes(normalizedSearch) ||
+          normalizedUserCode.includes(normalizedSearch)
         );
       });
 
@@ -364,7 +413,7 @@ export const getTeacherManagedStudentsController = async (req, res, next) => {
       [total, users] = await Promise.all([
         User.countDocuments(userFilter),
         User.find(userFilter)
-          .select('_id username fullName email gender schoolId dateOfBirth address createdAt isOnline onlineAt lastSeenAt')
+          .select('_id userCode username fullName email gender schoolId dateOfBirth address createdAt isOnline onlineAt lastSeenAt')
           .sort({ createdAt: -1 })
           .skip(skip)
           .limit(limit)
@@ -391,14 +440,22 @@ export const getTeacherManagedStudentsController = async (req, res, next) => {
       schoolClassIds.forEach((schoolClassId) => classIdsForPage.add(schoolClassId));
     }
 
-    const schoolClasses = await SchoolClass.find({ _id: { $in: Array.from(classIdsForPage) } })
-      .select('_id className schoolId')
-      .lean();
-    const classMap = new Map(schoolClasses.map((item) => [String(item._id), item]));
+    const [schoolClasses, presenceResult, parentInfos] = await Promise.all([
+      SchoolClass.find({ _id: { $in: Array.from(classIdsForPage) } })
+        .select('_id className schoolId')
+        .lean(),
+      getPresenceByUserIds(users.map((user) => user._id)),
+      ParentInfo.find({ studentId: { $in: pageUserIds } })
+        .select('_id studentId fatherName fatherPhone motherName motherPhone')
+        .lean()
+    ]);
 
+    const classMap = new Map(schoolClasses.map((item) => [String(item._id), item]));
+    const parentInfoMap = new Map(parentInfos.map((item) => [String(item.studentId), item]));
     const students = users.map((user) => {
       const userIdStr = String(user._id);
       const schoolClassIds = userIdToClassIdsMap.get(userIdStr) || [];
+      const parentInfo = parentInfoMap.get(userIdStr) || null;
       const classList = schoolClassIds
         .map((classId) => classMap.get(classId))
         .filter(Boolean)
@@ -409,6 +466,7 @@ export const getTeacherManagedStudentsController = async (req, res, next) => {
 
       return {
         userId: user._id,
+        userCode: user.userCode || null,
         username: user.username,
         fullName: user.fullName,
         email: user.email,
@@ -417,7 +475,20 @@ export const getTeacherManagedStudentsController = async (req, res, next) => {
         schoolClasses: classList,
         dateOfBirth: user.dateOfBirth || null,
         address: user.address || null,
-        presence: buildPresencePayload(user)
+        parentInfo: parentInfo
+          ? {
+              parentInfoId: parentInfo._id,
+              fatherName: parentInfo.fatherName || null,
+              fatherPhone: parentInfo.fatherPhone || null,
+              motherName: parentInfo.motherName || null,
+              motherPhone: parentInfo.motherPhone || null
+            }
+          : null,
+        presence: buildPresencePayload({
+          ...user,
+          ...(presenceResult.presenceByUserId.get(userIdStr) || {}),
+          isOnline: presenceResult.presenceByUserId.has(userIdStr) || user.isOnline === true
+        })
       };
     });
 
@@ -435,35 +506,44 @@ export const getTeacherManagedStudentsController = async (req, res, next) => {
 
 export const getOnlineUsersController = async (req, res, next) => {
   try {
-    const onlineUserIds = getOnlineUserIds();
+    const onlineResult = await getOnlineUserIds();
+    const onlineUserIds = onlineResult.userIds;
     const now = new Date();
 
     if (onlineUserIds.length === 0) {
       return res.status(200).json({
         total: 0,
+        source: onlineResult.source,
         users: []
       });
     }
 
+    const presenceResult = await getPresenceByUserIds(onlineUserIds);
     const users = await User.find({
       _id: { $in: onlineUserIds },
       isStatus: { $ne: 'deleted' }
     })
-      .select('_id username fullName email roles avatar isOnline onlineAt lastSeenAt')
+      .select('_id userCode username fullName email roles avatar isOnline onlineAt lastSeenAt')
       .sort({ fullName: 1 })
       .lean();
 
     return res.status(200).json({
       total: users.length,
+      source: presenceResult.source,
       users: users.map((user) => ({
         userId: user._id,
+        userCode: user.userCode || null,
         username: user.username || null,
         fullName: user.fullName,
         email: user.email || null,
         avatar: user.avatar || null,
         roles: user.roles || [],
         presence: {
-          ...buildPresencePayload({ ...user, isOnline: true }, now),
+          ...buildPresencePayload({
+            ...user,
+            ...(presenceResult.presenceByUserId.get(String(user._id)) || {}),
+            isOnline: true
+          }, now),
           socketConnected: true
         }
       }))
@@ -519,7 +599,11 @@ export const updateTeacherManagedStudentController = async (req, res, next) => {
       password,
       schoolClassId,
       dateOfBirth,
-      address
+      address,
+      fatherName,
+      fatherPhone,
+      motherName,
+      motherPhone
     } = req.body || {};
 
     if (username !== undefined) {
@@ -594,6 +678,36 @@ export const updateTeacherManagedStudentController = async (req, res, next) => {
 
     await student.save();
 
+    const parentInfoUpdate = {};
+    if (fatherName !== undefined) {
+      parentInfoUpdate.fatherName = normalizeOptionalText(fatherName);
+    }
+    if (fatherPhone !== undefined) {
+      parentInfoUpdate.fatherPhone = normalizeOptionalText(fatherPhone);
+    }
+    if (motherName !== undefined) {
+      parentInfoUpdate.motherName = normalizeOptionalText(motherName);
+    }
+    if (motherPhone !== undefined) {
+      parentInfoUpdate.motherPhone = normalizeOptionalText(motherPhone);
+    }
+
+    let parentInfoDoc = await ParentInfo.findOne({ studentId: student._id });
+    const hasParentInfoUpdate = Object.keys(parentInfoUpdate).length > 0;
+    const hasAnyParentValue = Object.values(parentInfoUpdate).some((value) => value !== null);
+
+    if (hasParentInfoUpdate) {
+      if (parentInfoDoc) {
+        Object.assign(parentInfoDoc, parentInfoUpdate);
+        await parentInfoDoc.save();
+      } else if (hasAnyParentValue) {
+        parentInfoDoc = await ParentInfo.create({
+          studentId: student._id,
+          ...parentInfoUpdate
+        });
+      }
+    }
+
     const studentClasses = await UserSchoolClass.find({ userId: student._id })
       .populate('schoolClassId', 'className')
       .lean();
@@ -616,7 +730,16 @@ export const updateTeacherManagedStudentController = async (req, res, next) => {
         schoolId: student.schoolId,
         schoolClasses: classList,
         dateOfBirth: student.dateOfBirth || null,
-        address: student.address || null
+        address: student.address || null,
+        parentInfo: parentInfoDoc
+          ? {
+            parentInfoId: parentInfoDoc._id,
+            fatherName: parentInfoDoc.fatherName || null,
+            fatherPhone: parentInfoDoc.fatherPhone || null,
+            motherName: parentInfoDoc.motherName || null,
+            motherPhone: parentInfoDoc.motherPhone || null
+          }
+          : null
       }
     });
   } catch (error) {
@@ -812,17 +935,39 @@ export const exportStudentsByClassController = async (req, res, next) => {
         .lean()
       : [];
 
+    const parentInfos = users.length
+      ? await ParentInfo.find({ studentId: { $in: users.map((user) => user._id) } })
+        .select('studentId fatherName fatherPhone motherName motherPhone')
+        .lean()
+      : [];
+    const parentInfoMap = new Map(parentInfos.map((item) => [String(item.studentId), item]));
+
     const rows = users.map((user) => ({
       username: user.username || '',
       fullName: user.fullName || '',
       gender: user.gender ?? '',
       dateOfBirth: user.dateOfBirth ? new Date(user.dateOfBirth).toISOString().slice(0, 10) : '',
       address: user.address || '',
+      fatherName: parentInfoMap.get(String(user._id))?.fatherName || '',
+      fatherPhone: parentInfoMap.get(String(user._id))?.fatherPhone || '',
+      motherName: parentInfoMap.get(String(user._id))?.motherName || '',
+      motherPhone: parentInfoMap.get(String(user._id))?.motherPhone || '',
       password: ''
     }));
 
     const ws = XLSX.utils.json_to_sheet(rows, {
-      header: ['username', 'fullName', 'gender', 'dateOfBirth', 'address', 'password']
+      header: [
+        'username',
+        'fullName',
+        'gender',
+        'dateOfBirth',
+        'address',
+        'password',
+        'fatherName',
+        'fatherPhone',
+        'motherName',
+        'motherPhone'
+      ]
     });
 
     try {
@@ -831,7 +976,11 @@ export const exportStudentsByClassController = async (req, res, next) => {
       if (ws['C1']) ws['C1'].v = 'gender';
       if (ws['D1']) ws['D1'].v = 'dateOfBirth';
       if (ws['E1']) ws['E1'].v = 'address';
-      if (ws['F1']) ws['F1'].v = 'password';
+      if (ws['F1']) ws['F1'].v = 'fatherName';
+      if (ws['G1']) ws['G1'].v = 'fatherPhone';
+      if (ws['H1']) ws['H1'].v = 'motherName';
+      if (ws['I1']) ws['I1'].v = 'motherPhone';
+      if (ws['J1']) ws['J1'].v = 'password';
     } catch (err) {
       // ignore if header cells not present
     }
@@ -842,6 +991,10 @@ export const exportStudentsByClassController = async (req, res, next) => {
       { wch: 10 },
       { wch: 14 },
       { wch: 30 },
+      { wch: 24 },
+      { wch: 16 },
+      { wch: 24 },
+      { wch: 16 },
       { wch: 14 }
     ];
 
@@ -879,6 +1032,10 @@ export const downloadStudentTemplateController = async (req, res, next) => {
         fullName: 'Nguyễn Văn A',
         gender: '1',
         dateOfBirth: '2010-01-15',
+        fatherName: 'Nguyen Van B',
+        fatherPhone: '0901234567',
+        motherName: 'Tran Thi C',
+        motherPhone: '0912345678',
         address: '123 Đường ABC, Hà Nội',
         password: '123456'
       },
@@ -887,12 +1044,29 @@ export const downloadStudentTemplateController = async (req, res, next) => {
         fullName: 'Trần Thị B',
         gender: '0',
         dateOfBirth: '2010-06-20',
+        fatherName: '',
+        fatherPhone: '',
+        motherName: '',
+        motherPhone: '',
         address: '456 Đường XYZ, Hà Nội',
         password: '123456'
       }
     ];
 
-    const ws = XLSX.utils.json_to_sheet(templateData);
+    const ws = XLSX.utils.json_to_sheet(templateData, {
+      header: [
+        'username',
+        'fullName',
+        'gender',
+        'dateOfBirth',
+        'address',
+        'password',
+        'fatherName',
+        'fatherPhone',
+        'motherName',
+        'motherPhone'
+      ]
+    });
     // Ghi lại header và thêm chú thích cho trường bắt buộc
     // json_to_sheet sẽ tạo header ở row 1, ta sửa lại các header để hiển thị (required)
     try {
@@ -913,6 +1087,10 @@ export const downloadStudentTemplateController = async (req, res, next) => {
       { wch: 8 },
       { wch: 15 },
       { wch: 30 },
+      { wch: 20 },
+      { wch: 16 },
+      { wch: 20 },
+      { wch: 16 },
       { wch: 12 }
     ];
 
@@ -931,6 +1109,15 @@ export const downloadStudentTemplateController = async (req, res, next) => {
       ['address', 'Tùy chọn', 'Địa chỉ của học sinh'],
       ['password (required)', 'Bắt buộc', 'Tối thiểu 6 ký tự']
     ];
+
+    instructionData.splice(
+      instructionData.length - 1,
+      0,
+      ['fatherName', 'Tuy chon', 'Ten bo/nguoi giam ho nam'],
+      ['fatherPhone', 'Tuy chon', 'So dien thoai bo/nguoi giam ho nam'],
+      ['motherName', 'Tuy chon', 'Ten me/nguoi giam ho nu'],
+      ['motherPhone', 'Tuy chon', 'So dien thoai me/nguoi giam ho nu']
+    );
 
     const wsInstruction = XLSX.utils.aoa_to_sheet(instructionData);
     wsInstruction['!cols'] = [{ wch: 15 }, { wch: 25 }, { wch: 40 }];
@@ -1001,6 +1188,10 @@ export const uploadBulkStudentsController = async (req, res, next) => {
       if (raw.startsWith('gender')) return 'gender';
       if (raw.startsWith('dateofbirth')) return 'dateOfBirth';
       if (raw.startsWith('address')) return 'address';
+      if (raw.startsWith('fathername')) return 'fatherName';
+      if (raw.startsWith('fatherphone')) return 'fatherPhone';
+      if (raw.startsWith('mothername')) return 'motherName';
+      if (raw.startsWith('motherphone')) return 'motherPhone';
       if (raw.startsWith('password')) return 'password';
       return '';
     };
@@ -1066,6 +1257,10 @@ export const uploadBulkStudentsController = async (req, res, next) => {
           : undefined;
         const dateOfBirth = row.dateOfBirth || undefined;
         const address = normalizeOptionalText(row.address);
+        const fatherName = normalizeOptionalText(row.fatherName);
+        const fatherPhone = normalizeOptionalText(row.fatherPhone);
+        const motherName = normalizeOptionalText(row.motherName);
+        const motherPhone = normalizeOptionalText(row.motherPhone);
 
         if (gender !== undefined && ![0, 1].includes(gender)) {
           results.errors.push({ row: rowIndex, message: 'gender chỉ nhận 0 (Nữ) hoặc 1 (Nam)' });
@@ -1086,7 +1281,11 @@ export const uploadBulkStudentsController = async (req, res, next) => {
           gender,
           dobValue: dobResult.value,
           hasDobValue: dobResult.hasValue,
-          address
+          address,
+          fatherName,
+          fatherPhone,
+          motherName,
+          motherPhone
         });
         seenUsernames.add(username);
       } catch (rowError) {
@@ -1129,6 +1328,11 @@ export const uploadBulkStudentsController = async (req, res, next) => {
         .select('userId schoolClassId')
         .lean()
       : [];
+    const existingParentInfos = managedUserIds.length
+      ? await ParentInfo.find({ studentId: { $in: managedUserIds } })
+        .select('studentId fatherName fatherPhone motherName motherPhone')
+        .lean()
+      : [];
 
     const mappingMap = new Map();
     for (const mapping of existingMappings) {
@@ -1138,10 +1342,13 @@ export const uploadBulkStudentsController = async (req, res, next) => {
       }
       mappingMap.get(userIdStr).push(String(mapping.schoolClassId));
     }
+    const parentInfoMap = new Map(existingParentInfos.map((item) => [String(item.studentId), item]));
 
     const createDocs = [];
     const createMeta = [];
     const updateOps = [];
+    const parentInfoOps = [];
+    const createParentInfoDocs = [];
     const updatedUserIds = [];
 
     for (const item of normalizedRows) {
@@ -1174,6 +1381,7 @@ export const uploadBulkStudentsController = async (req, res, next) => {
       }
 
       const currentClassIds = mappingMap.get(String(student._id)) || [];
+      const currentParentInfo = parentInfoMap.get(String(student._id)) || null;
       const classChanged = targetSchoolClassId
         ? !(currentClassIds.length === 1 && currentClassIds[0] === String(targetSchoolClassId))
         : false;
@@ -1192,8 +1400,26 @@ export const uploadBulkStudentsController = async (req, res, next) => {
         updates.address = item.address;
       }
 
+      const parentUpdates = {};
+      if (item.fatherName !== (currentParentInfo?.fatherName ?? null)) {
+        parentUpdates.fatherName = item.fatherName;
+      }
+      if (item.fatherPhone !== (currentParentInfo?.fatherPhone ?? null)) {
+        parentUpdates.fatherPhone = item.fatherPhone;
+      }
+      if (item.motherName !== (currentParentInfo?.motherName ?? null)) {
+        parentUpdates.motherName = item.motherName;
+      }
+      if (item.motherPhone !== (currentParentInfo?.motherPhone ?? null)) {
+        parentUpdates.motherPhone = item.motherPhone;
+      }
+
       const hasFieldChanges = Object.keys(updates).length > 0;
-      if (!hasFieldChanges && !classChanged) {
+      const hasParentChanges = Object.keys(parentUpdates).length > 0;
+      const hasAnyParentValue = [item.fatherName, item.fatherPhone, item.motherName, item.motherPhone]
+        .some((value) => value !== null);
+
+      if (!hasFieldChanges && !classChanged && !hasParentChanges) {
         results.skipped += 1;
         results.details.push({
           row: item.rowIndex,
@@ -1214,6 +1440,19 @@ export const uploadBulkStudentsController = async (req, res, next) => {
         });
       }
 
+      if (hasParentChanges && (currentParentInfo || hasAnyParentValue)) {
+        parentInfoOps.push({
+          updateOne: {
+            filter: { studentId: student._id },
+            update: {
+              $set: parentUpdates,
+              ...(currentParentInfo ? {} : { $setOnInsert: { studentId: student._id } })
+            },
+            ...(currentParentInfo ? {} : { upsert: true })
+          }
+        });
+      }
+
       results.updated += 1;
       updatedUserIds.push(student._id);
       results.details.push({
@@ -1221,7 +1460,11 @@ export const uploadBulkStudentsController = async (req, res, next) => {
         username: item.username,
         action: 'updated',
         studentId: student._id,
-        updates: [...Object.keys(updates), ...(classChanged ? ['schoolClassId'] : [])]
+        updates: [
+          ...Object.keys(updates),
+          ...Object.keys(parentUpdates),
+          ...(classChanged ? ['schoolClassId'] : [])
+        ]
       });
     }
 
@@ -1232,6 +1475,15 @@ export const uploadBulkStudentsController = async (req, res, next) => {
       for (const item of createMeta) {
         const createdUser = createdUserMap.get(item.username);
         if (!createdUser) continue;
+        if ([item.fatherName, item.fatherPhone, item.motherName, item.motherPhone].some((value) => value !== null)) {
+          createParentInfoDocs.push({
+            studentId: createdUser._id,
+            fatherName: item.fatherName,
+            fatherPhone: item.fatherPhone,
+            motherName: item.motherName,
+            motherPhone: item.motherPhone
+          });
+        }
         results.created += 1;
         results.details.push({
           row: item.rowIndex,
@@ -1245,6 +1497,14 @@ export const uploadBulkStudentsController = async (req, res, next) => {
 
     if (updateOps.length) {
       await User.bulkWrite(updateOps, { ordered: false });
+    }
+
+    if (createParentInfoDocs.length) {
+      await ParentInfo.insertMany(createParentInfoDocs, { ordered: false });
+    }
+
+    if (parentInfoOps.length) {
+      await ParentInfo.bulkWrite(parentInfoOps, { ordered: false });
     }
 
     if (targetSchoolClassId && updatedUserIds.length) {
