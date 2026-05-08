@@ -300,3 +300,17 @@ export const notifyUserSessionReplacement = (userId, payload = {}) => {
 
   return { ok: true };
 };
+
+export const emitAuthUserEvent = (userId, eventName, payload = {}) => {
+  if (!authIo || !userId || !eventName) {
+    return { ok: false, skipped: true, reason: 'auth-socket-not-ready' };
+  }
+
+  authIo.to(getUserRoom(userId)).emit(eventName, {
+    userId: String(userId),
+    ...payload,
+    emittedAt: new Date().toISOString()
+  });
+
+  return { ok: true };
+};

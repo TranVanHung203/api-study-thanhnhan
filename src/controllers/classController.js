@@ -3,6 +3,7 @@ import User from '../models/user.schema.js';
 import Chapter from '../models/chapter.schema.js';
 import Lesson from '../models/lesson.schema.js';
 import LessonCompletion from '../models/lessonCompletion.schema.js';
+import ChapterCompletion from '../models/chapterCompletion.schema.js';
 import Progress from '../models/progress.schema.js';
 import QuizAttempt from '../models/quizAttempt.schema.js';
 import mongoose from 'mongoose';
@@ -209,11 +210,19 @@ export const getClassChaptersMapController = async (req, res, next) => {
       userId,
       lessonId: { $in: allLessonIds }
     });
+    const chapterCompletions = await ChapterCompletion.find({
+      userId,
+      chapterId: { $in: chapterIds }
+    });
 
     // Tạo Map để check nhanh completed lessons
     const completedLessonMap = new Map();
     lessonCompletions.forEach(lc => {
       completedLessonMap.set(lc.lessonId.toString(), lc.isCompleted);
+    });
+    const completedChapterMap = new Map();
+    chapterCompletions.forEach(cc => {
+      completedChapterMap.set(cc.chapterId.toString(), cc.isCompleted);
     });
 
     // 5. Tìm lesson đầu tiên chưa hoàn thành trên toàn bộ chapters (chỉ 1 isCurrent toàn cục)
@@ -262,6 +271,10 @@ export const getClassChaptersMapController = async (req, res, next) => {
         chapterName: chapter.chapterName,
         description: chapter.description,
         order: chapter.order,
+        isCompleted:
+          completedChapterMap.get(chapter._id.toString()) ||
+          (chapterLessons.length > 0 &&
+            chapterLessons.every(ls => completedLessonMap.get(ls._id.toString()) || false)),
         lessons: lessonsWithStatus
       };
     });

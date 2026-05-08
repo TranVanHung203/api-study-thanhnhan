@@ -4,6 +4,7 @@ import Video from '../models/video.schema.js';
 import Quiz from '../models/quiz.schema.js';
 import UserActivity from '../models/userActivity.schema.js';
 import LessonCompletion from '../models/lessonCompletion.schema.js';
+import ChapterCompletion from '../models/chapterCompletion.schema.js';
 
 // Helper function: Create slug from text
 const createSlug = (text) => {
@@ -316,14 +317,16 @@ export const completeProgressController = async (req, res, next) => {
 
     await activity.save();
 
-    // Kiểm tra xem có phải là progress cuối cùng của lesson không
+    // Kiem tra xem co phai la progress cuoi cung cua lesson khong
     const allProgresses = await Progress.find({ lessonId: progress.lessonId })
       .sort({ stepNumber: 1 });
     
-    // Lấy stepNumber cao nhất
+    // Lay stepNumber cao nhat
     const maxStepNumber = Math.max(...allProgresses.map(p => p.stepNumber));
     
-    // Nếu progress hiện tại là progress cuối cùng (max stepNumber) → đánh dấu lesson completed
+    // Neu progress hien tai la progress cuoi cung (max stepNumber) -> danh dau lesson completed
+    let lessonCompleted = false;
+    let chapterCompleted = false;
     if (progress.stepNumber === maxStepNumber) {
       let lessonCompletion = await LessonCompletion.findOne({
         userId,
@@ -343,12 +346,41 @@ export const completeProgressController = async (req, res, next) => {
       }
 
       await lessonCompletion.save();
+      lessonCompleted = true;
+
+      // Neu day la lesson cuoi cung cua chapter thi danh dau chapter hoan thanh
+      const lastLessonInChapter = await Lesson.findOne({
+        chapterId: lesson.chapterId
+      }).sort({ order: -1, createdAt: -1 });
+
+      if (lastLessonInChapter && lastLessonInChapter._id.toString() === lesson._id.toString()) {
+        let chapterCompletion = await ChapterCompletion.findOne({
+          userId,
+          chapterId: lesson.chapterId
+        });
+
+        if (!chapterCompletion) {
+          chapterCompletion = new ChapterCompletion({
+            userId,
+            chapterId: lesson.chapterId,
+            isCompleted: true,
+            completedAt: new Date()
+          });
+        } else {
+          chapterCompletion.isCompleted = true;
+          chapterCompletion.completedAt = new Date();
+        }
+
+        await chapterCompletion.save();
+        chapterCompleted = true;
+      }
     }
 
     return res.status(200).json({
       message: 'Đánh dấu hoàn thành thành công',
       activity,
-      lessonCompleted: progress.stepNumber === maxStepNumber
+      lessonCompleted,
+      chapterCompleted
     });
   } catch (error) {
     next(error);

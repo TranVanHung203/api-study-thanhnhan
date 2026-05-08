@@ -28,6 +28,7 @@ import RealtimeBattle from './src/models/realtimeBattle.schema.js';
 import Topic from './src/models/topic.schema.js';
 import PreferenceQuestion from './src/models/preferenceQuestion.schema.js';
 import UserStreak from './src/models/userStreak.schema.js';
+import BulkAvatarUploadJob from './src/models/bulkAvatarUploadJob.schema.js';
 //nhanhmoi
 // Import routes mới
 import authRoutes from './src/routes/authRoutes.js';

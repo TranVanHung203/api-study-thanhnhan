@@ -101,6 +101,11 @@ const UserSchema = new mongoose.Schema({
     type: String,
     required: false
   },
+  avatarUrl: {
+    type: String,
+    required: false,
+    default: null
+  },
   // Selected character id for the user (reference to Character)
   characterId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -155,6 +160,10 @@ const UserSchema = new mongoose.Schema({
     default: Date.now
   }
 });
+
+// Speed up teacher bulk-import lookups (by managed scope + userCode / username).
+UserSchema.index({ schoolId: 1, createdByTeacherId: 1, isGuest: 1, isStatus: 1, userCode: 1 });
+UserSchema.index({ schoolId: 1, createdByTeacherId: 1, isGuest: 1, isStatus: 1, username: 1 });
 
 UserSchema.pre('save', async function (next) {
   if (!this.isNew || this.userCode) return next();

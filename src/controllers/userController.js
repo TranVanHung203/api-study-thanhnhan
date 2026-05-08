@@ -1,8 +1,11 @@
 import bcrypt from 'bcrypt';
 import mongoose from 'mongoose';
 import * as XLSX from 'xlsx';
+import AdmZip from 'adm-zip';
+import { createExtractorFromData } from 'node-unrar-js';
 import path from 'path';
 import fs from 'fs';
+import cloudinary from '../config/cloudinaryConfig.js';
 import User from '../models/user.schema.js';
 import SchoolClass from '../models/schoolClass.schema.js';
 import UserSchoolClass from '../models/userSchoolClass.schema.js';
@@ -15,7 +18,9 @@ import QuizAttempt from '../models/quizAttempt.schema.js';
 import LessonCompletion from '../models/lessonCompletion.schema.js';
 import VideoWatch from '../models/videoWatch.schema.js';
 import QuizSession from '../models/quizSession.schema.js';
+import BulkAvatarUploadJob from '../models/bulkAvatarUploadJob.schema.js';
 import { getOnlineUserIds, getPresenceByUserIds } from '../services/presenceService.js';
+import { emitAuthUserEvent } from '../ws/authSocket.js';
 
 const hasRole = (user, roleName) => {
   if (!Array.isArray(user?.roles)) return false;
@@ -88,6 +93,514 @@ const normalizePhoneFromExcel = (value) => {
   }
 
   return raw;
+};
+
+const normalizeAvatarCode = (value) => {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+
+  const parsedWithoutExt = path.parse(raw).name;
+  const normalized = String(parsedWithoutExt || raw)
+    .trim()
+    .toLowerCase();
+
+  return normalized || null;
+};
+
+const imageExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
+
+const resolveImageExtFromUploadFile = (file) => {
+  if (!file) return null;
+  const nameExt = path.extname(String(file.originalname || '')).toLowerCase();
+  if (imageExtensions.includes(nameExt)) return nameExt;
+
+  const mime = String(file.mimetype || '').toLowerCase();
+  if (mime === 'image/jpeg' || mime === 'image/jpg') return '.jpg';
+  if (mime === 'image/png') return '.png';
+  if (mime === 'image/webp') return '.webp';
+  if (mime === 'image/gif') return '.gif';
+  return null;
+};
+
+const buildAvatarBufferMapFromArchive = async ({
+  archiveBuffer,
+  fileName,
+  mimeType,
+  wantedCodes = null
+}) => {
+  const avatarBufferMap = new Map();
+  if (!archiveBuffer || !Buffer.isBuffer(archiveBuffer)) return avatarBufferMap;
+
+  const lowerName = String(fileName || '').toLowerCase();
+  const lowerMime = String(mimeType || '').toLowerCase();
+  const isRar = lowerName.endsWith('.rar') || lowerMime.includes('rar');
+  const isZip = lowerName.endsWith('.zip') || lowerMime.includes('zip');
+
+  if (isRar) {
+    const arrayBuffer = archiveBuffer.buffer.slice(
+      archiveBuffer.byteOffset,
+      archiveBuffer.byteOffset + archiveBuffer.byteLength
+    );
+
+    const extractor = await createExtractorFromData({ data: arrayBuffer });
+    const extracted = extractor.extract({});
+    const files = [...extracted.files];
+
+    for (const file of files) {
+      if (!file?.fileHeader || file.fileHeader.flags?.directory) continue;
+      const entryName = path.basename(file.fileHeader.name || '').trim();
+      if (!entryName) continue;
+
+      const ext = path.extname(entryName).toLowerCase();
+      if (!imageExtensions.includes(ext)) continue;
+
+      const code = normalizeAvatarCode(entryName);
+      if (!code || avatarBufferMap.has(code)) continue;
+      if (wantedCodes && !wantedCodes.has(code)) continue;
+
+      const extraction = file.extraction ? Buffer.from(file.extraction) : null;
+      if (!extraction || extraction.length === 0) continue;
+
+      avatarBufferMap.set(code, { buffer: extraction, ext });
+    }
+
+    return avatarBufferMap;
+  }
+
+  if (isZip || (!isRar && !isZip)) {
+    const zip = new AdmZip(archiveBuffer);
+    const entries = zip.getEntries();
+
+    for (const entry of entries) {
+      if (entry.isDirectory) continue;
+      const entryName = path.basename(entry.entryName || '').trim();
+      if (!entryName) continue;
+
+      const ext = path.extname(entryName).toLowerCase();
+      if (!imageExtensions.includes(ext)) continue;
+
+      const code = normalizeAvatarCode(entryName);
+      if (!code || avatarBufferMap.has(code)) continue;
+      if (wantedCodes && !wantedCodes.has(code)) continue;
+
+      const buffer = entry.getData();
+      if (!buffer || !Buffer.isBuffer(buffer) || buffer.length === 0) continue;
+
+      avatarBufferMap.set(code, { buffer, ext });
+    }
+  }
+
+  return avatarBufferMap;
+};
+
+const uploadAvatarBufferToCloudinary = async ({ buffer, username, avatarCode, ext }) =>
+  new Promise((resolve, reject) => {
+    const safeUser = String(username || 'student').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const safeCode = String(avatarCode || 'avatar').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const fileExt = String(ext || '').replace('.', '') || 'jpg';
+
+    const uploadStream = cloudinary.uploader.upload_stream(
+      {
+        resource_type: 'image',
+        folder: 'student_avatars',
+        public_id: `${safeUser}_${safeCode}`,
+        overwrite: true,
+        format: fileExt
+      },
+      (error, result) => {
+        if (error) reject(error);
+        else resolve(result);
+      }
+    );
+
+    uploadStream.end(buffer);
+  });
+
+const buildAvatarPublicId = (username, avatarCode) => {
+  const safeUser = String(username || 'student').replace(/[^a-zA-Z0-9_-]/g, '_');
+  const safeCode = String(avatarCode || 'avatar').replace(/[^a-zA-Z0-9_-]/g, '_');
+  return `${safeUser}_${safeCode}`;
+};
+
+const avatarUrlContainsPublicId = (avatarUrl, publicId) => {
+  if (!avatarUrl || !publicId) return false;
+  return String(avatarUrl).includes(`/student_avatars/${publicId}.`);
+};
+
+const runWithConcurrency = async (items, worker, concurrency = 4) => {
+  const safeConcurrency = Math.max(1, Number(concurrency) || 1);
+  if (!Array.isArray(items) || items.length === 0) return [];
+
+  const results = new Array(items.length);
+  let nextIndex = 0;
+
+  const runner = async () => {
+    while (true) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+      if (currentIndex >= items.length) break;
+      results[currentIndex] = await worker(items[currentIndex], currentIndex);
+    }
+  };
+
+  const workers = Array.from({ length: Math.min(safeConcurrency, items.length) }, () => runner());
+  await Promise.all(workers);
+  return results;
+};
+
+const createBulkAvatarJob = async ({ teacherId, schoolClassId, totalAssignments, totalCodes }) => {
+  const job = await BulkAvatarUploadJob.create({
+    teacherId,
+    schoolClassId: schoolClassId || null,
+    status: 'pending',
+    progress: {
+      totalAssignments: Number(totalAssignments) || 0,
+      totalCodes: Number(totalCodes) || 0,
+      processedCodes: 0
+    },
+    result: {
+      avatarUploaded: 0,
+      avatarMissing: 0,
+      avatarCleared: 0,
+      usersUpdated: 0
+    },
+    errors: [],
+    performanceMs: {
+      avatarProcessingMs: 0
+    },
+    startedAt: null,
+    finishedAt: null
+  });
+
+  return job;
+};
+
+const serializeBulkAvatarJob = (jobDoc, options = {}) => {
+  const { includePerformanceMs = false } = options;
+  if (!jobDoc) return null;
+  const job = typeof jobDoc.toObject === 'function' ? jobDoc.toObject() : jobDoc;
+  const serialized = {
+    jobId: String(job._id),
+    status: job.status,
+    createdAt: job.createdAt || null,
+    startedAt: job.startedAt || null,
+    finishedAt: job.finishedAt || null,
+    progress: job.progress || {
+      totalAssignments: 0,
+      totalCodes: 0,
+      processedCodes: 0
+    },
+    result: job.result || {
+      avatarUploaded: 0,
+      avatarMissing: 0,
+      avatarCleared: 0,
+      usersUpdated: 0
+    },
+    errors: job.errors || []
+  };
+
+  if (includePerformanceMs) {
+    serialized.performanceMs = job.performanceMs || { avatarProcessingMs: 0 };
+  }
+
+  return serialized;
+};
+
+const emitBulkAvatarJobRealtime = (teacherId, jobPayload) => {
+  if (!teacherId || !jobPayload?.jobId) return;
+  emitAuthUserEvent(String(teacherId), 'users:bulk-avatar-job', {
+    job: jobPayload
+  });
+};
+
+const processAvatarAssignments = async ({
+  avatarAssignments,
+  avatarBufferMap,
+  avatarUploadConcurrency = 4,
+  onCodeProcessed = null
+}) => {
+  const avatarUpdateOps = [];
+  const uploadedAvatarUrlByCode = new Map();
+  const assignmentsByCode = new Map();
+  const counts = {
+    avatarUploaded: 0,
+    avatarMissing: 0,
+    avatarCleared: 0
+  };
+  const errors = [];
+
+  for (const assignment of avatarAssignments) {
+    if (!assignment.avatarReplaceCode) continue;
+    if (!assignmentsByCode.has(assignment.avatarReplaceCode)) {
+      assignmentsByCode.set(assignment.avatarReplaceCode, []);
+    }
+    assignmentsByCode.get(assignment.avatarReplaceCode).push(assignment);
+  }
+
+  const uniqueAvatarCodes = Array.from(assignmentsByCode.keys());
+
+  await runWithConcurrency(
+    uniqueAvatarCodes,
+    async (replaceCode) => {
+      const codeAssignments = assignmentsByCode.get(replaceCode) || [];
+      const firstAssignment = codeAssignments[0];
+      const reusedUrl = codeAssignments
+        .map((assignment) => {
+          const publicId = buildAvatarPublicId(assignment.username, replaceCode);
+          if (avatarUrlContainsPublicId(assignment.oldAvatarUrl, publicId)) {
+            return assignment.oldAvatarUrl;
+          }
+          return null;
+        })
+        .find(Boolean);
+
+      if (reusedUrl) {
+        uploadedAvatarUrlByCode.set(replaceCode, reusedUrl);
+        if (typeof onCodeProcessed === 'function') await onCodeProcessed(replaceCode);
+        return;
+      }
+
+      if (!avatarBufferMap.has(replaceCode)) {
+        uploadedAvatarUrlByCode.set(replaceCode, null);
+        if (typeof onCodeProcessed === 'function') await onCodeProcessed(replaceCode);
+        return;
+      }
+
+      const avatarAsset = avatarBufferMap.get(replaceCode);
+      try {
+        const uploadResult = await uploadAvatarBufferToCloudinary({
+          buffer: avatarAsset.buffer,
+          username: firstAssignment?.username,
+          avatarCode: replaceCode,
+          ext: avatarAsset.ext
+        });
+        uploadedAvatarUrlByCode.set(replaceCode, uploadResult?.secure_url || null);
+      } catch (avatarErr) {
+        uploadedAvatarUrlByCode.set(replaceCode, null);
+        if (firstAssignment) {
+          errors.push({
+            row: firstAssignment.rowIndex,
+            message: `Khong the upload avatar cho ma '${replaceCode}'`
+          });
+        }
+      }
+
+      if (typeof onCodeProcessed === 'function') await onCodeProcessed(replaceCode);
+    },
+    avatarUploadConcurrency
+  );
+
+  for (const assignment of avatarAssignments) {
+    const replaceCode = assignment.avatarReplaceCode;
+    let finalAvatarUrl = assignment.oldAvatarUrl || null;
+
+    if (replaceCode) {
+      const uploadedUrl = uploadedAvatarUrlByCode.get(replaceCode);
+      if (uploadedUrl) {
+        finalAvatarUrl = uploadedUrl;
+        counts.avatarUploaded += 1;
+      } else {
+        counts.avatarMissing += 1;
+      }
+    }
+
+    if (!finalAvatarUrl && assignment.oldAvatarUrl) {
+      counts.avatarCleared += 1;
+    }
+
+    if ((assignment.oldAvatarUrl || null) !== (finalAvatarUrl || null)) {
+      avatarUpdateOps.push({
+        updateOne: {
+          filter: { _id: assignment.userId },
+          update: { $set: { avatarUrl: finalAvatarUrl || null } }
+        }
+      });
+    }
+  }
+
+  if (avatarUpdateOps.length) {
+    await User.bulkWrite(avatarUpdateOps, { ordered: false });
+  }
+
+  return {
+    ...counts,
+    usersUpdated: avatarUpdateOps.length,
+    totalCodes: uniqueAvatarCodes.length,
+    errors
+  };
+};
+
+const runBulkAvatarJobInBackground = async ({
+  job,
+  avatarAssignments,
+  avatarBufferMap,
+  avatarUploadConcurrency
+}) => {
+  const startedAt = Date.now();
+  const jobId = job?._id;
+  const totalCodes = Number(job?.progress?.totalCodes || 0);
+  const teacherId = String(job?.teacherId || '');
+  const startedAtDate = new Date();
+
+  await BulkAvatarUploadJob.updateOne(
+    { _id: jobId },
+    {
+      $set: {
+        status: 'running',
+        startedAt: startedAtDate
+      }
+    }
+  );
+  emitBulkAvatarJobRealtime(
+    teacherId,
+    serializeBulkAvatarJob({
+      ...job.toObject(),
+      status: 'running',
+      startedAt: startedAtDate
+    })
+  );
+
+  try {
+    let processedCodes = 0;
+    let lastPersistAt = 0;
+    const avatarResult = await processAvatarAssignments({
+      avatarAssignments,
+      avatarBufferMap,
+      avatarUploadConcurrency,
+      onCodeProcessed: async () => {
+        processedCodes += 1;
+        const now = Date.now();
+        const shouldPersist = (
+          processedCodes === totalCodes
+          || processedCodes % 5 === 0
+          || now - lastPersistAt >= 1500
+        );
+        if (shouldPersist) {
+          lastPersistAt = now;
+          await BulkAvatarUploadJob.updateOne(
+            { _id: jobId },
+            { $set: { 'progress.processedCodes': processedCodes } }
+          );
+          emitBulkAvatarJobRealtime(
+            teacherId,
+            serializeBulkAvatarJob({
+              ...job.toObject(),
+              status: 'running',
+              startedAt: startedAtDate,
+              progress: {
+                ...(job.progress || {}),
+                processedCodes
+              }
+            })
+          );
+        }
+      }
+    });
+
+    const finishedAtDate = new Date();
+    await BulkAvatarUploadJob.updateOne(
+      { _id: jobId },
+      {
+        $set: {
+          status: 'completed',
+          finishedAt: finishedAtDate,
+          'progress.processedCodes': totalCodes || processedCodes,
+          result: {
+            avatarUploaded: avatarResult.avatarUploaded,
+            avatarMissing: avatarResult.avatarMissing,
+            avatarCleared: avatarResult.avatarCleared,
+            usersUpdated: avatarResult.usersUpdated
+          },
+          errors: avatarResult.errors || [],
+          performanceMs: {
+            avatarProcessingMs: Date.now() - startedAt
+          }
+        }
+      }
+    );
+    emitBulkAvatarJobRealtime(
+      teacherId,
+      serializeBulkAvatarJob({
+        ...job.toObject(),
+        status: 'completed',
+        startedAt: startedAtDate,
+        finishedAt: finishedAtDate,
+        progress: {
+          ...(job.progress || {}),
+          processedCodes: totalCodes || processedCodes
+        },
+        result: {
+          avatarUploaded: avatarResult.avatarUploaded,
+          avatarMissing: avatarResult.avatarMissing,
+          avatarCleared: avatarResult.avatarCleared,
+          usersUpdated: avatarResult.usersUpdated
+        },
+        errors: avatarResult.errors || [],
+        performanceMs: {
+          avatarProcessingMs: Date.now() - startedAt
+        }
+      })
+    );
+  } catch (error) {
+    const finishedAtDate = new Date();
+    await BulkAvatarUploadJob.updateOne(
+      { _id: jobId },
+      {
+        $set: {
+          status: 'failed',
+          finishedAt: finishedAtDate,
+          errors: [{ message: error?.message || 'Loi xu ly avatar job' }],
+          performanceMs: {
+            avatarProcessingMs: Date.now() - startedAt
+          }
+        }
+      }
+    );
+    emitBulkAvatarJobRealtime(
+      teacherId,
+      serializeBulkAvatarJob({
+        ...job.toObject(),
+        status: 'failed',
+        startedAt: startedAtDate,
+        finishedAt: finishedAtDate,
+        errors: [{ message: error?.message || 'Loi xu ly avatar job' }],
+        performanceMs: {
+          avatarProcessingMs: Date.now() - startedAt
+        }
+      })
+    );
+  }
+};
+
+const enforceTextColumns = (ws, columnIndexes, rowCount, reserveRows = 500) => {
+  if (!ws['!cols']) ws['!cols'] = [];
+  const maxRow = Math.max((rowCount || 0) + 1, reserveRows);
+  const existingRange = ws['!ref']
+    ? XLSX.utils.decode_range(ws['!ref'])
+    : { s: { c: 0, r: 0 }, e: { c: 0, r: 0 } };
+  const targetEndCol = Math.max(existingRange.e.c, ...columnIndexes);
+  const targetEndRow = Math.max(existingRange.e.r, maxRow);
+
+  ws['!ref'] = XLSX.utils.encode_range({
+    s: existingRange.s,
+    e: { c: targetEndCol, r: targetEndRow }
+  });
+
+  for (const colIndex of columnIndexes) {
+    if (!ws['!cols'][colIndex]) ws['!cols'][colIndex] = {};
+    ws['!cols'][colIndex].z = '@';
+
+    for (let r = 1; r <= maxRow; r++) {
+      const cellRef = XLSX.utils.encode_cell({ c: colIndex, r });
+      if (!ws[cellRef]) {
+        ws[cellRef] = { t: 's', v: '', z: '@' };
+      } else {
+        ws[cellRef].t = 's';
+        ws[cellRef].v = ws[cellRef].v == null ? '' : String(ws[cellRef].v);
+        ws[cellRef].z = '@';
+      }
+    }
+  }
 };
 
 const parsePagination = (query) => {
@@ -217,6 +730,18 @@ export const getStudentsController = async (req, res, next) => {
 
 export const createStudentByTeacherController = async (req, res, next) => {
   try {
+    const avatarFile = req.file || null;
+    let avatarExt = null;
+    if (avatarFile) {
+      avatarExt = resolveImageExtFromUploadFile(avatarFile);
+      if (!avatarExt) {
+        return res.status(400).json({ message: 'avatar phai la file anh jpg/jpeg/png/webp/gif' });
+      }
+      if (!avatarFile.buffer || !Buffer.isBuffer(avatarFile.buffer) || avatarFile.buffer.length === 0) {
+        return res.status(400).json({ message: 'File avatar khong hop le' });
+      }
+    }
+
     const teacherContext = await getTeacherContext(req.user?.id);
     if (teacherContext.error) {
       return res.status(teacherContext.error.status).json({ message: teacherContext.error.message });
@@ -278,6 +803,7 @@ export const createStudentByTeacherController = async (req, res, next) => {
     if (existingUsername) {
       return res.status(409).json({ message: 'username da ton tai' });
     }
+
     const passwordHash = await bcrypt.hash(normalizedPassword, 10);
     let user;
     try {
@@ -314,18 +840,40 @@ export const createStudentByTeacherController = async (req, res, next) => {
     const hasParentInfo = Object.values(parentInfoPayload).some((value) => value !== null);
     const createdParentInfo = hasParentInfo
       ? await ParentInfo.create({
-        studentId: user._id,
-        ...parentInfoPayload
-      })
+          studentId: user._id,
+          ...parentInfoPayload
+        })
       : null;
 
+    let avatarUploadError = null;
+    if (avatarFile && avatarExt) {
+      try {
+        const uploadResult = await uploadAvatarBufferToCloudinary({
+          buffer: avatarFile.buffer,
+          username: user.username,
+          avatarCode: 'profile',
+          ext: avatarExt
+        });
+        const avatarUrl = uploadResult?.secure_url || null;
+        if (avatarUrl) {
+          await User.updateOne({ _id: user._id }, { $set: { avatarUrl } });
+          user.avatarUrl = avatarUrl;
+        }
+      } catch (avatarError) {
+        avatarUploadError = 'Khong the upload avatar, tai khoan da tao voi avatarUrl = null';
+      }
+    }
+
     return res.status(201).json({
-      message: 'Giáo viên tạo tài khoản học sinh thành công',
+      message: 'Giao vien tao tai khoan hoc sinh thanh cong',
+      avatarUploadError,
       student: {
         userId: user._id,
+        userCode: user.userCode || null,
         username: user.username,
         fullName: user.fullName,
         email: user.email,
+        avatarUrl: user.avatarUrl || null,
         gender: user.gender ?? null,
         schoolId: user.schoolId,
         schoolClass: {
@@ -336,18 +884,18 @@ export const createStudentByTeacherController = async (req, res, next) => {
         address: user.address || null,
         parentInfo: createdParentInfo
           ? {
-            parentInfoId: createdParentInfo._id,
-            fatherName: createdParentInfo.fatherName || null,
-            fatherPhone: createdParentInfo.fatherPhone || null,
-            motherName: createdParentInfo.motherName || null,
-            motherPhone: createdParentInfo.motherPhone || null
-          }
+              parentInfoId: createdParentInfo._id,
+              fatherName: createdParentInfo.fatherName || null,
+              fatherPhone: createdParentInfo.fatherPhone || null,
+              motherName: createdParentInfo.motherName || null,
+              motherPhone: createdParentInfo.motherPhone || null
+            }
           : null
       }
     });
   } catch (error) {
     if (error?.code === 11000) {
-      return res.status(409).json({ message: 'Dữ liệu bị trùng (username)' });
+      return res.status(409).json({ message: 'Du lieu bi trung (username)' });
     }
     next(error);
   }
@@ -971,7 +1519,7 @@ export const exportStudentsByClassController = async (req, res, next) => {
         isGuest: { $ne: true },
         isStatus: { $ne: 'deleted' }
       })
-        .select('username fullName gender dateOfBirth address')
+        .select('userCode username fullName gender dateOfBirth address avatarUrl')
         .sort({ fullName: 1 })
         .lean()
       : [];
@@ -986,20 +1534,24 @@ export const exportStudentsByClassController = async (req, res, next) => {
     const toExcelText = (value) => normalizePhoneFromExcel(value) || '';
 
     const rows = users.map((user) => ({
+      userCode: user.userCode || '',
       username: user.username || '',
       fullName: user.fullName || '',
-      gender: user.gender === 1 ? 'Nam' : user.gender === 0 ? 'Nữ' : '',
+      gender: user.gender === 1 ? 'Nam' : user.gender === 0 ? 'Nu' : '',
       dateOfBirth: user.dateOfBirth ? new Date(user.dateOfBirth).toISOString().slice(0, 10) : '',
       fatherName: parentInfoMap.get(String(user._id))?.fatherName || '',
       fatherPhone: toExcelText(parentInfoMap.get(String(user._id))?.fatherPhone),
       motherName: parentInfoMap.get(String(user._id))?.motherName || '',
       motherPhone: toExcelText(parentInfoMap.get(String(user._id))?.motherPhone),
       address: user.address || '',
+      avatarUrl: user.avatarUrl || '',
+      avatarReplaceCode: '',
       password: ''
     }));
 
     const ws = XLSX.utils.json_to_sheet(rows, {
       header: [
+        'userCode',
         'username',
         'fullName',
         'gender',
@@ -1009,21 +1561,25 @@ export const exportStudentsByClassController = async (req, res, next) => {
         'motherName',
         'motherPhone',
         'address',
+        'avatarUrl',
+        'avatarReplaceCode',
         'password'
       ]
     });
 
-    // Rename header row to Vietnamese labels for exported file readability.
     const vietnameseHeaders = [
+      'Mã học sinh',
       'Tên đăng nhập',
       'Họ và tên',
       'Giới tính',
       'Ngày sinh',
-      'Tên bố/người giám hộ nam',
+      'Tên bố/ người giám hộ nam',
       'SĐT bố/người giám hộ nam',
-      'Tên mẹ/người giám hộ nữ',
+      'Tên mẹ/ người giám hộ nữ',
       'SĐT mẹ/người giám hộ nữ',
       'Địa chỉ',
+      'Ảnh đại diện (link)',
+      'Ảnh đại diện thay thế (mã ảnh)',
       'Mật khẩu'
     ];
     vietnameseHeaders.forEach((label, colIndex) => {
@@ -1036,16 +1592,18 @@ export const exportStudentsByClassController = async (req, res, next) => {
       }
     });
 
-    // Force phone columns to text to preserve leading zero when opening in Excel.
     rows.forEach((row, rowIndex) => {
-      const excelRowIndex = rowIndex + 1; // row 1 is header
-      const fatherPhoneCell = XLSX.utils.encode_cell({ c: 5, r: excelRowIndex }); // F
-      const motherPhoneCell = XLSX.utils.encode_cell({ c: 7, r: excelRowIndex }); // H
+      const excelRowIndex = rowIndex + 1;
+      const fatherPhoneCell = XLSX.utils.encode_cell({ c: 6, r: excelRowIndex });
+      const motherPhoneCell = XLSX.utils.encode_cell({ c: 8, r: excelRowIndex });
+      const avatarReplaceCodeCell = XLSX.utils.encode_cell({ c: 11, r: excelRowIndex });
       ws[fatherPhoneCell] = { t: 's', v: row.fatherPhone || '' };
       ws[motherPhoneCell] = { t: 's', v: row.motherPhone || '' };
+      ws[avatarReplaceCodeCell] = { t: 's', v: String(row.avatarReplaceCode || '') };
     });
 
     ws['!cols'] = [
+      { wch: 14 },
       { wch: 16 },
       { wch: 24 },
       { wch: 10 },
@@ -1055,11 +1613,15 @@ export const exportStudentsByClassController = async (req, res, next) => {
       { wch: 24 },
       { wch: 16 },
       { wch: 30 },
+      { wch: 45 },
+      { wch: 24 },
       { wch: 14 }
     ];
+    // Keep SDT + avatar code columns in Text format to preserve leading zeros on manual edits.
+    enforceTextColumns(ws, [6, 8, 11], rows.length);
 
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Học sinh');
+    XLSX.utils.book_append_sheet(wb, ws, 'Hoc sinh');
 
     const safeClassName = String(classValidation.schoolClass.className || 'class')
       .replace(/[\\/<>:"|?*]+/g, '-')
@@ -1069,13 +1631,12 @@ export const exportStudentsByClassController = async (req, res, next) => {
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
 
-    const buffer = XLSX.write(wb, { type: 'buffer' });
+    const buffer = XLSX.write(wb, { type: 'buffer', cellStyles: true });
     res.send(buffer);
   } catch (error) {
     next(error);
   }
 };
-
 export const downloadStudentTemplateController = async (req, res, next) => {
   try {
     // Kiểm tra quyền giáo viên
@@ -1089,26 +1650,28 @@ export const downloadStudentTemplateController = async (req, res, next) => {
     const templateData = [
       {
         username: 'student_01',
-        fullName: 'Nguyễn Văn A',
+        fullName: 'Nguyen Van A',
         gender: 'Nam',
         dateOfBirth: '2010-01-15',
         fatherName: 'Nguyen Van B',
         fatherPhone: '0901234567',
         motherName: 'Tran Thi C',
         motherPhone: '0912345678',
-        address: '123 Đường ABC, Hà Nội',
+        address: '123 Duong ABC, Ha Noi',
+        avatarCode: '001',
         password: '123456'
       },
       {
         username: 'student_02',
-        fullName: 'Trần Thị B',
-        gender: 'Nữ',
+        fullName: 'Tran Thi B',
+        gender: 'Nu',
         dateOfBirth: '2010-06-20',
         fatherName: '',
         fatherPhone: '',
         motherName: '',
         motherPhone: '',
-        address: '456 Đường XYZ, Hà Nội',
+        address: '456 Duong XYZ, Ha Noi',
+        avatarCode: '',
         password: '123456'
       }
     ];
@@ -1124,6 +1687,7 @@ export const downloadStudentTemplateController = async (req, res, next) => {
         'motherName',
         'motherPhone',
         'address',
+        'avatarCode',
         'password'
       ]
     });
@@ -1131,13 +1695,14 @@ export const downloadStudentTemplateController = async (req, res, next) => {
     const templateVietnameseHeaders = [
       'Tên đăng nhập (Bắt buộc nhập)',
       'Họ và tên (Bắt buộc nhập)',
-      'Giới tính (Nam/Nữ)',
+      'Giới tính (Nam/Nu)',
       'Ngày sinh',
-      'Tên bố/người giám hộ nam',
-      'SĐT bố/người giám hộ nam',
-      'Tên mẹ/người giám hộ nữ',
-      'SĐT mẹ/người giám hộ nữ',
+      'Tên bố/ người giám hộ nam',
+      'SĐT bố/ người giám hộ nam',
+      'Tên mẹ/ người giám hộ nữ',
+      'SĐT mẹ/ người giám hộ nữ',
       'Địa chỉ',
+      'Ảnh đại diện (mã ảnh)',
       'Mật khẩu (Bắt buộc khi tạo mới)'
     ];
     templateVietnameseHeaders.forEach((label, colIndex) => {
@@ -1150,13 +1715,15 @@ export const downloadStudentTemplateController = async (req, res, next) => {
       }
     });
 
-    // Preserve leading zero in phone samples.
+    // Preserve leading zero in phone and avatar-code samples.
     templateData.forEach((row, rowIndex) => {
       const excelRowIndex = rowIndex + 1; // row 1 is header
       const fatherPhoneCell = XLSX.utils.encode_cell({ c: 5, r: excelRowIndex }); // F
       const motherPhoneCell = XLSX.utils.encode_cell({ c: 7, r: excelRowIndex }); // H
+      const avatarCodeCell = XLSX.utils.encode_cell({ c: 9, r: excelRowIndex }); // J
       ws[fatherPhoneCell] = { t: 's', v: String(row.fatherPhone || '') };
       ws[motherPhoneCell] = { t: 's', v: String(row.motherPhone || '') };
+      ws[avatarCodeCell] = { t: 's', v: String(row.avatarCode || '') };
     });
 
     // Đặt độ rộng cột
@@ -1170,8 +1737,11 @@ export const downloadStudentTemplateController = async (req, res, next) => {
       { wch: 16 },
       { wch: 20 },
       { wch: 16 },
+      { wch: 18 },
       { wch: 12 }
     ];
+    // Keep SDT + avatar code columns in Text format to preserve leading zeros on manual edits.
+    enforceTextColumns(ws, [5, 7, 9], templateData.length);
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Học sinh');
@@ -1186,6 +1756,7 @@ export const downloadStudentTemplateController = async (req, res, next) => {
       ['Giới tính (Nam/Nữ)', 'Tùy chọn', 'Nhập Nam hoặc Nữ (chấp nhận cả 1/0)'],
       ['Ngày sinh', 'Tùy chọn', 'Định dạng YYYY-MM-DD'],
       ['Địa chỉ', 'Tùy chọn', 'Địa chỉ của học sinh'],
+      ['Ảnh đại diện (mã ảnh)', 'Tùy chọn', 'Nhập mã ảnh (ví dụ 001), upload kèm file ZIP chứa ảnh 001.jpg/png'],
       ['Mật khẩu (Bắt buộc khi tạo mới)', 'Bắt buộc khi tạo mới', 'Tối thiểu 6 ký tự']
     ];
 
@@ -1206,7 +1777,7 @@ export const downloadStudentTemplateController = async (req, res, next) => {
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', 'attachment; filename="Student_Template.xlsx"');
 
-    const buffer = XLSX.write(wb, { type: 'buffer' });
+    const buffer = XLSX.write(wb, { type: 'buffer', cellStyles: true });
     res.send(buffer);
   } catch (error) {
     next(error);
@@ -1215,12 +1786,27 @@ export const downloadStudentTemplateController = async (req, res, next) => {
 
 export const uploadBulkStudentsController = async (req, res, next) => {
   try {
-    // Kiểm tra file
-    if (!req.file) {
-      return res.status(400).json({ message: 'Vui lòng chọn file để upload' });
+    const requestStartedAt = Date.now();
+    const perf = {};
+    let stageStartedAt = Date.now();
+    const markStage = (name) => {
+      perf[name] = Date.now() - stageStartedAt;
+      stageStartedAt = Date.now();
+    };
+    const showPerformanceMs = String(req.query?.showPerformanceMs || '').toLowerCase() === '1';
+
+    const excelFile = req.files?.file?.[0] || req.file || null;
+    const avatarZipFile = req.files?.avatarZip?.[0] || null;
+    const maxImportRows = Math.max(
+      100,
+      Number.parseInt(process.env.BULK_IMPORT_MAX_ROWS || '2000', 10) || 2000
+    );
+    const sheetRowsLimit = maxImportRows + 1; // +1 for header row
+
+    if (!excelFile) {
+      return res.status(400).json({ message: 'Vui long chon file Excel de upload' });
     }
 
-    // Kiểm tra quyền giáo viên
     const teacherId = req.user?.id;
     const teacherContext = await getTeacherContext(teacherId);
     if (teacherContext.error) {
@@ -1228,8 +1814,6 @@ export const uploadBulkStudentsController = async (req, res, next) => {
     }
 
     const { schoolClassId } = req.params;
-
-    // Kiểm tra lớp học nếu có chỉ định
     let targetSchoolClassId = null;
     if (schoolClassId) {
       const classValidation = await validateManagedSchoolClass(teacherContext, schoolClassId);
@@ -1239,36 +1823,51 @@ export const uploadBulkStudentsController = async (req, res, next) => {
       targetSchoolClassId = classValidation.schoolClass._id;
     }
 
-    // Đọc file Excel. Multer đang dùng disk storage nên ưu tiên đọc từ path,
-    // nếu môi trường khác dùng memory storage thì fallback sang buffer.
     let workbook;
     try {
-      if (req.file?.path) {
-        workbook = XLSX.readFile(req.file.path);
-      } else if (req.file?.buffer) {
-        workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
+      if (excelFile?.path) {
+        workbook = XLSX.readFile(excelFile.path, {
+          dense: true,
+          cellStyles: false,
+          cellHTML: false,
+          cellNF: false,
+          sheetRows: sheetRowsLimit
+        });
+      } else if (excelFile?.buffer) {
+        workbook = XLSX.read(excelFile.buffer, {
+          type: 'buffer',
+          dense: true,
+          cellStyles: false,
+          cellHTML: false,
+          cellNF: false,
+          sheetRows: sheetRowsLimit
+        });
       } else {
-        return res.status(400).json({ message: 'File không hợp lệ hoặc không phải file Excel' });
+        return res.status(400).json({ message: 'File Excel khong hop le' });
       }
     } catch (err) {
-      return res.status(400).json({ message: 'File không hợp lệ hoặc không phải file Excel' });
+      return res.status(400).json({ message: 'File Excel khong hop le' });
     }
 
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     if (!sheet) {
-      return res.status(400).json({ message: 'File Excel không có dữ liệu' });
+      return res.status(400).json({ message: 'File Excel khong co du lieu' });
     }
+    markStage('readWorkbookMs');
+
+    let avatarBufferMap = new Map();
 
     const normalizeHeaderKey = (key) => {
       const normalized = String(key || '')
         .trim()
         .toLowerCase()
-        .replace(/[đ]/g, 'd')
+        .replace(/[\u0111]/g, 'd')
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
         .replace(/[^a-z0-9]/g, '');
 
       if (!normalized) return '';
+      if (normalized.startsWith('usercode') || normalized.startsWith('mahocsinh')) return 'userCode';
       if (normalized.startsWith('username') || normalized.startsWith('tendangnhap')) return 'username';
       if (normalized.startsWith('fullname') || normalized.startsWith('hovaten')) return 'fullName';
       if (normalized.startsWith('gender') || normalized.startsWith('gioitinh')) return 'gender';
@@ -1290,38 +1889,85 @@ export const uploadBulkStudentsController = async (req, res, next) => {
       ) {
         return 'motherPhone';
       }
+      if (normalized.startsWith('avatarurl') || normalized.startsWith('anhdaidienlink')) return 'avatarUrl';
+      if (
+        normalized.startsWith('avatarreplacecode') ||
+        normalized.startsWith('avatarcode') ||
+        normalized.startsWith('anhdaidienthaythe') ||
+        normalized.startsWith('anhdaidienma') ||
+        normalized.startsWith('maanh') ||
+        normalized.startsWith('anhdaidien')
+      ) {
+        return 'avatarReplaceCode';
+      }
       if (normalized.startsWith('password') || normalized.startsWith('matkhau')) return 'password';
       return '';
     };
 
-    const rawRows = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false });
-    const rows = rawRows
-      .map((raw) => {
-        const normalized = {};
-        for (const [key, value] of Object.entries(raw)) {
-          const mappedKey = normalizeHeaderKey(key);
-          if (mappedKey) {
-            normalized[mappedKey] = value;
-          }
-        }
-        return normalized;
-      })
-      .filter((row) => Object.keys(row).length > 0);
-    if (!rows || rows.length === 0) {
-      return res.status(400).json({ message: 'File không chứa dữ liệu học sinh' });
+    const matrixRows = XLSX.utils.sheet_to_json(sheet, {
+      header: 1,
+      raw: false,
+      defval: '',
+      blankrows: false
+    });
+
+    if (!Array.isArray(matrixRows) || matrixRows.length === 0) {
+      return res.status(400).json({ message: 'File khong chua du lieu hoc sinh' });
     }
 
-    // Xử lý từng dòng dữ liệu theo lô để giảm round-trip MongoDB
+    const headerRow = Array.isArray(matrixRows[0]) ? matrixRows[0] : [];
+    const mappedColumns = headerRow
+      .map((headerValue, colIndex) => ({
+        colIndex,
+        mappedKey: normalizeHeaderKey(headerValue)
+      }))
+      .filter((item) => item.mappedKey);
+
+    const rows = [];
+    for (let r = 1; r < matrixRows.length; r++) {
+      const currentRow = Array.isArray(matrixRows[r]) ? matrixRows[r] : [];
+      const normalizedRow = {};
+      let hasMeaningfulValue = false;
+
+      for (const col of mappedColumns) {
+        const value = currentRow[col.colIndex];
+        normalizedRow[col.mappedKey] = value;
+
+        if (!hasMeaningfulValue) {
+          if (value !== null && value !== undefined) {
+            if (typeof value === 'string') {
+              if (value.trim() !== '') hasMeaningfulValue = true;
+            } else {
+              hasMeaningfulValue = true;
+            }
+          }
+        }
+      }
+
+      if (hasMeaningfulValue) {
+        rows.push(normalizedRow);
+      }
+    }
+
+    if (!rows || rows.length === 0) {
+      return res.status(400).json({ message: 'File khong chua du lieu hoc sinh' });
+    }
+    markStage('parseRowsMs');
+
     const results = {
       total: rows.length,
       created: 0,
       updated: 0,
       skipped: 0,
+      avatarUploaded: 0,
+      avatarMissing: 0,
+      avatarCleared: 0,
       errors: [],
       details: []
     };
 
     const normalizedRows = [];
+    const seenCodes = new Set();
     const seenUsernames = new Set();
 
     for (let i = 0; i < rows.length; i++) {
@@ -1329,37 +1975,41 @@ export const uploadBulkStudentsController = async (req, res, next) => {
       const rowIndex = i + 2;
 
       try {
+        const userCode = String(row.userCode || '').trim();
         const username = String(row.username || '').trim();
         const fullName = String(row.fullName || '').trim();
         const password = String(row.password || '').trim();
 
-        if (!username) {
-          results.errors.push({ row: rowIndex, message: 'username không được để trống' });
-          continue;
+        if (userCode) {
+          const codeKey = userCode.toLowerCase();
+          if (seenCodes.has(codeKey)) {
+            results.errors.push({ row: rowIndex, message: `Ma hoc sinh '${userCode}' bi trung trong file` });
+            continue;
+          }
+          seenCodes.add(codeKey);
         }
-        if (seenUsernames.has(username)) {
-          results.errors.push({ row: rowIndex, message: `username '${username}' bị trùng trong file` });
-          continue;
-        }
-        if (!fullName) {
-          results.errors.push({ row: rowIndex, message: 'fullName không được để trống' });
-          continue;
-        }
-        const genderResult = parseGenderValue(row.gender);
-        const gender = genderResult.hasValue ? genderResult.value : undefined;
-        const dateOfBirth = row.dateOfBirth || undefined;
-        const address = normalizeOptionalText(row.address);
-        const fatherName = normalizeOptionalText(row.fatherName);
-        const fatherPhone = normalizePhoneFromExcel(row.fatherPhone);
-        const motherName = normalizeOptionalText(row.motherName);
-        const motherPhone = normalizePhoneFromExcel(row.motherPhone);
 
+        if (!userCode && !username) {
+          results.errors.push({ row: rowIndex, message: 'Thieu username hoac ma hoc sinh' });
+          continue;
+        }
+
+        if (username) {
+          const unameKey = username.toLowerCase();
+          if (seenUsernames.has(unameKey)) {
+            results.errors.push({ row: rowIndex, message: `username '${username}' bi trung trong file` });
+            continue;
+          }
+          seenUsernames.add(unameKey);
+        }
+
+        const genderResult = parseGenderValue(row.gender);
         if (genderResult.error) {
           results.errors.push({ row: rowIndex, message: genderResult.error });
           continue;
         }
 
-        const dobResult = normalizeDateOfBirth(dateOfBirth);
+        const dobResult = normalizeDateOfBirth(row.dateOfBirth || undefined);
         if (dobResult.error) {
           results.errors.push({ row: rowIndex, message: dobResult.error });
           continue;
@@ -1367,54 +2017,112 @@ export const uploadBulkStudentsController = async (req, res, next) => {
 
         normalizedRows.push({
           rowIndex,
-          username,
-          fullName,
-          password,
-          gender,
+          userCode: userCode || null,
+          username: username || null,
+          fullName: fullName || null,
+          password: password || null,
+          gender: genderResult.hasValue ? genderResult.value : undefined,
+          hasGenderValue: genderResult.hasValue,
           dobValue: dobResult.value,
           hasDobValue: dobResult.hasValue,
-          address,
-          fatherName,
-          fatherPhone,
-          motherName,
-          motherPhone
+          address: normalizeOptionalText(row.address),
+          fatherName: normalizeOptionalText(row.fatherName),
+          fatherPhone: normalizePhoneFromExcel(row.fatherPhone),
+          motherName: normalizeOptionalText(row.motherName),
+          motherPhone: normalizePhoneFromExcel(row.motherPhone),
+          avatarReplaceCode: normalizeAvatarCode(row.avatarReplaceCode)
         });
-        seenUsernames.add(username);
       } catch (rowError) {
         results.errors.push({
           row: rowIndex,
-          message: rowError.message || 'Lỗi xử lý dòng dữ liệu'
+          message: rowError.message || 'Loi xu ly dong du lieu'
         });
       }
     }
 
     if (!normalizedRows.length) {
-      return res.status(200).json({
-        message: 'Import hoàn tất',
+      const responsePayload = {
+        message: 'Import hoan tat',
         ...results
-      });
+      };
+      if (showPerformanceMs) {
+        responsePayload.performanceMs = {
+          ...perf,
+          normalizeRowsMs: Date.now() - stageStartedAt,
+          totalMs: Date.now() - requestStartedAt
+        };
+      }
+      return res.status(200).json(responsePayload);
     }
+    markStage('normalizeRowsMs');
 
-    const usernames = normalizedRows.map((item) => item.username);
-    const [globalExistingUsers, managedExistingUsers] = await Promise.all([
-      User.find({ username: { $in: usernames } })
-        .select('_id username schoolId createdByTeacherId fullName gender dateOfBirth address roles isGuest')
-        .lean(),
-      User.find({
-        username: { $in: usernames },
-        schoolId: teacherContext.teacher.schoolId,
-        createdByTeacherId: teacherContext.teacher._id,
-        roles: { $in: ['student'] },
-        isGuest: { $ne: true }
-      })
-        .select('_id username schoolId createdByTeacherId fullName gender dateOfBirth address roles isGuest')
+    const neededAvatarCodes = new Set(normalizedRows.map((item) => item.avatarReplaceCode).filter(Boolean));
+    if (avatarZipFile && neededAvatarCodes.size > 0) {
+      try {
+        let zipBuffer = avatarZipFile.buffer;
+        if (!zipBuffer && avatarZipFile.path) {
+          zipBuffer = fs.readFileSync(avatarZipFile.path);
+        }
+        if (!zipBuffer) {
+          return res.status(400).json({ message: 'File archive avatar khong hop le' });
+        }
+        avatarBufferMap = await buildAvatarBufferMapFromArchive({
+          archiveBuffer: zipBuffer,
+          fileName: avatarZipFile.originalname,
+          mimeType: avatarZipFile.mimetype,
+          wantedCodes: neededAvatarCodes
+        });
+      } catch (zipError) {
+        return res.status(400).json({ message: 'Khong the doc file avatar (.zip/.rar)' });
+      }
+    }
+    markStage('readAvatarArchiveMs');
+
+    const incomingCodes = Array.from(new Set(normalizedRows.map((r) => r.userCode).filter(Boolean)));
+    const incomingUsernames = Array.from(new Set(normalizedRows.map((r) => r.username).filter(Boolean)));
+
+    const managedUsersQuery = {
+      schoolId: teacherContext.teacher.schoolId,
+      createdByTeacherId: teacherContext.teacher._id,
+      roles: { $in: ['student'] },
+      isGuest: { $ne: true },
+      isStatus: { $ne: 'deleted' }
+    };
+
+    const orConditions = [];
+    if (incomingCodes.length) orConditions.push({ userCode: { $in: incomingCodes } });
+    if (incomingUsernames.length) orConditions.push({ username: { $in: incomingUsernames } });
+
+    const managedExistingUsers = orConditions.length
+      ? await User.find({ ...managedUsersQuery, $or: orConditions })
+        .select('_id userCode username fullName gender dateOfBirth address avatarUrl')
         .lean()
-    ]);
+      : [];
 
-    const globalUserMap = new Map(globalExistingUsers.map((user) => [user.username, user]));
-    const managedUserMap = new Map(managedExistingUsers.map((user) => [user.username, user]));
+    const managedByCode = new Map(
+      managedExistingUsers
+        .filter((u) => u.userCode)
+        .map((u) => [String(u.userCode).toLowerCase(), u])
+    );
+    const managedByUsername = new Map(
+      managedExistingUsers
+        .filter((u) => u.username)
+        .map((u) => [String(u.username).toLowerCase(), u])
+    );
+
+    const allCandidateUsernames = Array.from(new Set(normalizedRows.map((r) => r.username).filter(Boolean)));
+    const usersWithSameUsernames = allCandidateUsernames.length
+      ? await User.find({ username: { $in: allCandidateUsernames } })
+        .select('_id username')
+        .lean()
+      : [];
+    const usernameOwnerMap = new Map(
+      usersWithSameUsernames
+        .filter((u) => u.username)
+        .map((u) => [String(u.username).toLowerCase(), String(u._id)])
+    );
+
     const managedUserIds = managedExistingUsers.map((user) => user._id);
-
     const existingMappings = managedUserIds.length
       ? await UserSchoolClass.find({ userId: { $in: managedUserIds } })
         .select('userId schoolClassId')
@@ -1429,12 +2137,11 @@ export const uploadBulkStudentsController = async (req, res, next) => {
     const mappingMap = new Map();
     for (const mapping of existingMappings) {
       const userIdStr = String(mapping.userId);
-      if (!mappingMap.has(userIdStr)) {
-        mappingMap.set(userIdStr, []);
-      }
+      if (!mappingMap.has(userIdStr)) mappingMap.set(userIdStr, []);
       mappingMap.get(userIdStr).push(String(mapping.schoolClassId));
     }
     const parentInfoMap = new Map(existingParentInfos.map((item) => [String(item.studentId), item]));
+    markStage('loadExistingDataMs');
 
     const createDocs = [];
     const createMeta = [];
@@ -1442,35 +2149,75 @@ export const uploadBulkStudentsController = async (req, res, next) => {
     const parentInfoOps = [];
     const createParentInfoDocs = [];
     const updatedUserIds = [];
+    const avatarAssignments = [];
+    const passwordHashCache = new Map();
+    const getPasswordHash = async (plainPassword) => {
+      if (!passwordHashCache.has(plainPassword)) {
+        passwordHashCache.set(plainPassword, bcrypt.hash(plainPassword, 10));
+      }
+      return passwordHashCache.get(plainPassword);
+    };
 
     for (const item of normalizedRows) {
-      const globalExisting = globalUserMap.get(item.username);
-      const student = managedUserMap.get(item.username);
+      const codeKey = item.userCode ? item.userCode.toLowerCase() : null;
+      const usernameKey = item.username ? item.username.toLowerCase() : null;
 
-      if (!student && globalExisting) {
-        results.errors.push({
-          row: item.rowIndex,
-          message: `username '${item.username}' đã tồn tại`
-        });
-        continue;
+      let student = null;
+      if (codeKey) {
+        student = managedByCode.get(codeKey) || null;
+        if (!student) {
+          results.errors.push({
+            row: item.rowIndex,
+            message: `Khong tim thay hoc sinh voi ma '${item.userCode}'`
+          });
+          continue;
+        }
+      } else if (usernameKey && managedByUsername.has(usernameKey)) {
+        student = managedByUsername.get(usernameKey);
       }
 
       if (!student) {
+        if (!item.username) {
+          results.errors.push({
+            row: item.rowIndex,
+            message: 'Tao moi bat buoc co username'
+          });
+          continue;
+        }
+        if (!item.fullName) {
+          results.errors.push({
+            row: item.rowIndex,
+            message: 'Tao moi bat buoc co fullName'
+          });
+          continue;
+        }
         if (!item.password || item.password.length < 6) {
           results.errors.push({
             row: item.rowIndex,
-            message: 'Mật khẩu là bắt buộc khi tạo mới và phải tối thiểu 6 ký tự'
+            message: 'Mat khau la bat buoc khi tao moi va phai toi thieu 6 ky tu'
           });
           continue;
         }
 
+        const usernameOwner = usernameOwnerMap.get(item.username.toLowerCase());
+        if (usernameOwner) {
+          results.errors.push({
+            row: item.rowIndex,
+            message: `username '${item.username}' da ton tai`
+          });
+          continue;
+        }
+        // Reserve username in this batch to avoid late conflicts.
+        usernameOwnerMap.set(item.username.toLowerCase(), `new:${item.rowIndex}`);
+
         createDocs.push({
           username: item.username,
-          passwordHash: await bcrypt.hash(item.password, 10),
+          passwordHash: await getPasswordHash(item.password),
           fullName: item.fullName,
-          gender: item.gender,
+          gender: item.hasGenderValue ? item.gender : undefined,
           dateOfBirth: item.hasDobValue ? item.dobValue : null,
           address: item.address,
+          avatarUrl: null,
           roles: ['student'],
           schoolId: teacherContext.teacher.schoolId,
           createdByTeacherId: teacherId,
@@ -1480,17 +2227,33 @@ export const uploadBulkStudentsController = async (req, res, next) => {
         continue;
       }
 
-      const currentClassIds = mappingMap.get(String(student._id)) || [];
-      const currentParentInfo = parentInfoMap.get(String(student._id)) || null;
-      const classChanged = targetSchoolClassId
-        ? !(currentClassIds.length === 1 && currentClassIds[0] === String(targetSchoolClassId))
-        : false;
-
       const updates = {};
-      if (item.fullName !== student.fullName) {
+
+      if (item.username && item.username !== student.username) {
+        const nextUsernameKey = item.username.toLowerCase();
+        const currentUsernameKey = student.username ? student.username.toLowerCase() : null;
+        const ownerUserId = usernameOwnerMap.get(nextUsernameKey);
+
+        if (ownerUserId && ownerUserId !== String(student._id)) {
+          results.errors.push({
+            row: item.rowIndex,
+            message: `username '${item.username}' da ton tai`
+          });
+          continue;
+        }
+
+        // Move ownership in memory so later rows validate against updated state.
+        if (currentUsernameKey && usernameOwnerMap.get(currentUsernameKey) === String(student._id)) {
+          usernameOwnerMap.delete(currentUsernameKey);
+        }
+        usernameOwnerMap.set(nextUsernameKey, String(student._id));
+        updates.username = item.username;
+      }
+
+      if (item.fullName && item.fullName !== student.fullName) {
         updates.fullName = item.fullName;
       }
-      if (item.gender !== student.gender) {
+      if (item.hasGenderValue && item.gender !== student.gender) {
         updates.gender = item.gender;
       }
       if (item.hasDobValue && item.dobValue?.toString() !== student.dateOfBirth?.toString()) {
@@ -1500,19 +2263,28 @@ export const uploadBulkStudentsController = async (req, res, next) => {
         updates.address = item.address;
       }
 
+      if (item.password) {
+        if (item.password.length < 6) {
+          results.errors.push({
+            row: item.rowIndex,
+            message: 'Mat khau phai toi thieu 6 ky tu'
+          });
+          continue;
+        }
+        updates.passwordHash = await getPasswordHash(item.password);
+      }
+
+      const currentParentInfo = parentInfoMap.get(String(student._id)) || null;
       const parentUpdates = {};
-      if (item.fatherName !== (currentParentInfo?.fatherName ?? null)) {
-        parentUpdates.fatherName = item.fatherName;
-      }
-      if (item.fatherPhone !== (currentParentInfo?.fatherPhone ?? null)) {
-        parentUpdates.fatherPhone = item.fatherPhone;
-      }
-      if (item.motherName !== (currentParentInfo?.motherName ?? null)) {
-        parentUpdates.motherName = item.motherName;
-      }
-      if (item.motherPhone !== (currentParentInfo?.motherPhone ?? null)) {
-        parentUpdates.motherPhone = item.motherPhone;
-      }
+      if (item.fatherName !== (currentParentInfo?.fatherName ?? null)) parentUpdates.fatherName = item.fatherName;
+      if (item.fatherPhone !== (currentParentInfo?.fatherPhone ?? null)) parentUpdates.fatherPhone = item.fatherPhone;
+      if (item.motherName !== (currentParentInfo?.motherName ?? null)) parentUpdates.motherName = item.motherName;
+      if (item.motherPhone !== (currentParentInfo?.motherPhone ?? null)) parentUpdates.motherPhone = item.motherPhone;
+
+      const currentClassIds = mappingMap.get(String(student._id)) || [];
+      const classChanged = targetSchoolClassId
+        ? !(currentClassIds.length === 1 && currentClassIds[0] === String(targetSchoolClassId))
+        : false;
 
       const hasFieldChanges = Object.keys(updates).length > 0;
       const hasParentChanges = Object.keys(parentUpdates).length > 0;
@@ -1523,48 +2295,57 @@ export const uploadBulkStudentsController = async (req, res, next) => {
         results.skipped += 1;
         results.details.push({
           row: item.rowIndex,
-          username: item.username,
+          userCode: student.userCode || null,
+          username: student.username,
           action: 'skipped',
           studentId: student._id,
-          reason: 'Không có thay đổi'
+          reason: 'Khong co thay doi'
         });
-        continue;
+      } else {
+        if (hasFieldChanges) {
+          updateOps.push({
+            updateOne: {
+              filter: { _id: student._id },
+              update: { $set: updates }
+            }
+          });
+        }
+
+        if (hasParentChanges && (currentParentInfo || hasAnyParentValue)) {
+          parentInfoOps.push({
+            updateOne: {
+              filter: { studentId: student._id },
+              update: {
+                $set: parentUpdates,
+                ...(currentParentInfo ? {} : { $setOnInsert: { studentId: student._id } })
+              },
+              ...(currentParentInfo ? {} : { upsert: true })
+            }
+          });
+        }
+
+        results.updated += 1;
+        updatedUserIds.push(student._id);
+        results.details.push({
+          row: item.rowIndex,
+          userCode: student.userCode || null,
+          username: item.username || student.username,
+          action: 'updated',
+          studentId: student._id,
+          updates: [
+            ...Object.keys(updates),
+            ...Object.keys(parentUpdates),
+            ...(classChanged ? ['schoolClassId'] : [])
+          ]
+        });
       }
 
-      if (hasFieldChanges) {
-        updateOps.push({
-          updateOne: {
-            filter: { _id: student._id },
-            update: { $set: updates }
-          }
-        });
-      }
-
-      if (hasParentChanges && (currentParentInfo || hasAnyParentValue)) {
-        parentInfoOps.push({
-          updateOne: {
-            filter: { studentId: student._id },
-            update: {
-              $set: parentUpdates,
-              ...(currentParentInfo ? {} : { $setOnInsert: { studentId: student._id } })
-            },
-            ...(currentParentInfo ? {} : { upsert: true })
-          }
-        });
-      }
-
-      results.updated += 1;
-      updatedUserIds.push(student._id);
-      results.details.push({
-        row: item.rowIndex,
-        username: item.username,
-        action: 'updated',
-        studentId: student._id,
-        updates: [
-          ...Object.keys(updates),
-          ...Object.keys(parentUpdates),
-          ...(classChanged ? ['schoolClassId'] : [])
-        ]
+      avatarAssignments.push({
+        rowIndex: item.rowIndex,
+        username: item.username || student.username,
+        userId: student._id,
+        oldAvatarUrl: student.avatarUrl || null,
+        avatarReplaceCode: item.avatarReplaceCode
       });
     }
 
@@ -1575,6 +2356,7 @@ export const uploadBulkStudentsController = async (req, res, next) => {
       for (const item of createMeta) {
         const createdUser = createdUserMap.get(item.username);
         if (!createdUser) continue;
+
         if ([item.fatherName, item.fatherPhone, item.motherName, item.motherPhone].some((value) => value !== null)) {
           createParentInfoDocs.push({
             studentId: createdUser._id,
@@ -1584,13 +2366,24 @@ export const uploadBulkStudentsController = async (req, res, next) => {
             motherPhone: item.motherPhone
           });
         }
+
         results.created += 1;
         results.details.push({
           row: item.rowIndex,
-          username: item.username,
+          userCode: createdUser.userCode || null,
+          username: createdUser.username,
           action: 'created',
           studentId: createdUser._id
         });
+
+        avatarAssignments.push({
+          rowIndex: item.rowIndex,
+          username: createdUser.username,
+          userId: createdUser._id,
+          oldAvatarUrl: null,
+          avatarReplaceCode: item.avatarReplaceCode
+        });
+
         updatedUserIds.push(createdUser._id);
       }
     }
@@ -1606,6 +2399,7 @@ export const uploadBulkStudentsController = async (req, res, next) => {
     if (parentInfoOps.length) {
       await ParentInfo.bulkWrite(parentInfoOps, { ordered: false });
     }
+    markStage('writeUsersAndParentsMs');
 
     if (targetSchoolClassId && updatedUserIds.length) {
       const affectedUserIds = Array.from(new Set(updatedUserIds.map((id) => String(id))));
@@ -1618,29 +2412,136 @@ export const uploadBulkStudentsController = async (req, res, next) => {
         { ordered: false }
       );
     }
+    markStage('writeClassMappingsMs');
 
-    // Xóa file upload
-    if (req.file?.path) {
-      fs.unlink(req.file.path, (err) => {
-        if (err) console.error('Lỗi xóa file:', err);
+    const avatarUploadConcurrency = Math.max(
+      1,
+      Number.parseInt(process.env.BULK_AVATAR_UPLOAD_CONCURRENCY || '4', 10) || 4
+    );
+    const avatarAssignmentsWithCode = avatarAssignments.filter((assignment) => assignment.avatarReplaceCode);
+    const asyncAvatarQuery = String(req.query?.asyncAvatar ?? '1').toLowerCase();
+    const shouldProcessAvatarAsync = (
+      asyncAvatarQuery !== '0'
+      && asyncAvatarQuery !== 'false'
+      && avatarAssignmentsWithCode.length > 0
+      && avatarBufferMap.size > 0
+    );
+
+    let avatarJobPayload = null;
+    if (shouldProcessAvatarAsync) {
+      const uniqueAvatarCodes = new Set(
+        avatarAssignmentsWithCode.map((assignment) => assignment.avatarReplaceCode).filter(Boolean)
+      );
+      const avatarJob = await createBulkAvatarJob({
+        teacherId,
+        schoolClassId: targetSchoolClassId,
+        totalAssignments: avatarAssignmentsWithCode.length,
+        totalCodes: uniqueAvatarCodes.size
+      });
+
+      const serializedAvatarJob = serializeBulkAvatarJob(avatarJob);
+      avatarJobPayload = {
+        ...serializedAvatarJob,
+        statusEndpoint: `/users/teacher/students/bulk/upload/jobs/${serializedAvatarJob.jobId}`
+      };
+      emitBulkAvatarJobRealtime(String(teacherContext.teacher._id), avatarJobPayload);
+
+      // Fire-and-forget background avatar processing so import can return immediately.
+      runBulkAvatarJobInBackground({
+        job: avatarJob,
+        avatarAssignments,
+        avatarBufferMap,
+        avatarUploadConcurrency
+      }).catch((jobError) => {
+        console.error('[Bulk Avatar Job] Unhandled background error:', jobError);
+      });
+      markStage('avatarProcessingMs');
+    } else {
+      const avatarResult = await processAvatarAssignments({
+        avatarAssignments,
+        avatarBufferMap,
+        avatarUploadConcurrency
+      });
+      results.avatarUploaded = avatarResult.avatarUploaded;
+      results.avatarMissing = avatarResult.avatarMissing;
+      results.avatarCleared = avatarResult.avatarCleared;
+      if (avatarResult.errors?.length) {
+        results.errors.push(...avatarResult.errors);
+      }
+      markStage('avatarProcessingMs');
+    }
+
+    if (excelFile?.path) {
+      fs.unlink(excelFile.path, (err) => {
+        if (err) console.error('Loi xoa file:', err);
+      });
+    }
+    if (avatarZipFile?.path) {
+      fs.unlink(avatarZipFile.path, (err) => {
+        if (err) console.error('Loi xoa file:', err);
       });
     }
 
-    return res.status(200).json({
-      message: 'Import hoàn tất',
-      ...results
-    });
+    const responsePayload = {
+      message: 'Import hoan tat',
+      ...results,
+      avatarDeferred: Boolean(avatarJobPayload),
+      avatarJob: avatarJobPayload
+    };
+    if (showPerformanceMs) {
+      responsePayload.performanceMs = {
+        ...perf,
+        cleanupMs: Date.now() - stageStartedAt,
+        totalMs: Date.now() - requestStartedAt
+      };
+    }
+    return res.status(200).json(responsePayload);
   } catch (error) {
-    // Xóa file upload nếu có lỗi
-    if (req.file?.path) {
-      fs.unlink(req.file.path, (err) => {
-        if (err) console.error('Lỗi xóa file:', err);
+    const excelFile = req.files?.file?.[0] || req.file || null;
+    const avatarZipFile = req.files?.avatarZip?.[0] || null;
+    if (excelFile?.path) {
+      fs.unlink(excelFile.path, (err) => {
+        if (err) console.error('Loi xoa file:', err);
+      });
+    }
+    if (avatarZipFile?.path) {
+      fs.unlink(avatarZipFile.path, (err) => {
+        if (err) console.error('Loi xoa file:', err);
       });
     }
     next(error);
   }
 };
 
+export const getBulkUploadAvatarJobStatusController = async (req, res, next) => {
+  try {
+    const teacherId = req.user?.id;
+    const teacherContext = await getTeacherContext(teacherId);
+    if (teacherContext.error) {
+      return res.status(teacherContext.error.status).json({ message: teacherContext.error.message });
+    }
+
+    const { jobId } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(jobId)) {
+      return res.status(404).json({ message: 'Khong tim thay avatar upload job' });
+    }
+
+    const job = await BulkAvatarUploadJob.findOne({
+      _id: jobId,
+      teacherId: teacherContext.teacher._id
+    }).lean();
+    if (!job) {
+      return res.status(404).json({ message: 'Khong tim thay avatar upload job' });
+    }
+
+    return res.status(200).json({
+      message: 'Lay trang thai avatar job thanh cong',
+      job: serializeBulkAvatarJob(job)
+    });
+  } catch (error) {
+    next(error);
+  }
+};
 export default {
   getStudentsController,
   createStudentByTeacherController,
@@ -1648,5 +2549,10 @@ export default {
   updateTeacherManagedStudentController,
   resetTeacherStudentPasswordController,
   downloadStudentTemplateController,
-  uploadBulkStudentsController
+  uploadBulkStudentsController,
+  getBulkUploadAvatarJobStatusController
 };
+
+
+
+

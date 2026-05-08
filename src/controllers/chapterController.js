@@ -5,6 +5,7 @@ import UserActivity from '../models/userActivity.schema.js';
 import Video from '../models/video.schema.js';
 import Quiz from '../models/quiz.schema.js';
 import LessonCompletion from '../models/lessonCompletion.schema.js';
+import ChapterCompletion from '../models/chapterCompletion.schema.js';
 
 // Tạo chapter mới
 export const createChapterController = async (req, res, next) => {
@@ -140,11 +141,19 @@ export const getChapterMapController = async (req, res, next) => {
       userId,
       lessonId: { $in: allLessonIds }
     });
+    const chapterCompletions = await ChapterCompletion.find({
+      userId,
+      chapterId: { $in: chapterIds }
+    });
 
     // Tạo Map để check nhanh completed lessons
     const completedLessonMap = new Map();
     lessonCompletions.forEach(lc => {
       completedLessonMap.set(lc.lessonId.toString(), lc.isCompleted);
+    });
+    const completedChapterMap = new Map();
+    chapterCompletions.forEach(cc => {
+      completedChapterMap.set(cc.chapterId.toString(), cc.isCompleted);
     });
 
     // 4. Build response: mỗi chapter bọc lessons của nó
@@ -184,6 +193,10 @@ export const getChapterMapController = async (req, res, next) => {
         chapterName: chapter.chapterName,
         description: chapter.description,
         order: chapter.order,
+        isCompleted:
+          completedChapterMap.get(chapter._id.toString()) ||
+          (chapterLessons.length > 0 &&
+            chapterLessons.every(ls => completedLessonMap.get(ls._id.toString()) || false)),
         lessons: lessonsWithStatus
       };
     });

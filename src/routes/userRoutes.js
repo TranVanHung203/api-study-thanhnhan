@@ -9,7 +9,8 @@ import {
   removeStudentFromManagedClassController,
   exportStudentsByClassController,
   downloadStudentTemplateController,
-  uploadBulkStudentsController
+  uploadBulkStudentsController,
+  getBulkUploadAvatarJobStatusController
 } from '../controllers/userController.js';
 import { authToken } from '../middlewares/authMiddleware.js';
 import upload from '../middlewares/upload.js';
@@ -77,7 +78,7 @@ router.get('/students', getStudentsController);
  *     requestBody:
  *       required: true
  *       content:
- *         application/json:
+ *         multipart/form-data:
  *           schema:
  *             type: object
  *             required:
@@ -128,6 +129,10 @@ router.get('/students', getStudentsController);
  *                 type: string
  *                 nullable: true
  *                 example: 0912345678
+ *               avatar:
+ *                 type: string
+ *                 format: binary
+ *                 description: Anh dai dien (optional), ho tro jpg/jpeg/png/webp/gif
  *     responses:
  *       201:
  *         description: Tao tai khoan hoc sinh thanh cong
@@ -140,7 +145,7 @@ router.get('/students', getStudentsController);
  *       401:
  *         description: Chua xac thuc
  */
-router.post('/teacher/students', createStudentByTeacherController);
+router.post('/teacher/students', upload.single('avatar'), createStudentByTeacherController);
 
 /**
  * @swagger
@@ -254,6 +259,56 @@ router.get('/teacher/students', getTeacherManagedStudentsController);
  *                 type: string
  *                 nullable: true
  *                 example: 0912345678
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               username:
+ *                 type: string
+ *                 example: student_a01_new
+ *               password:
+ *                 type: string
+ *                 example: 12345678
+ *               fullName:
+ *                 type: string
+ *                 example: Nguyen Van A Update
+ *               gender:
+ *                 type: integer
+ *                 nullable: true
+ *                 enum: [0, 1]
+ *                 example: 0
+ *               schoolClassId:
+ *                 type: string
+ *                 example: 680627760d7f1dc29b04c1da
+ *               dateOfBirth:
+ *                 type: string
+ *                 format: date
+ *                 nullable: true
+ *                 example: 2010-10-10
+ *               address:
+ *                 type: string
+ *                 nullable: true
+ *                 example: 99 Le Loi, Da Nang
+ *               fatherName:
+ *                 type: string
+ *                 nullable: true
+ *                 example: Nguyen Van B
+ *               fatherPhone:
+ *                 type: string
+ *                 nullable: true
+ *                 example: 0901234567
+ *               motherName:
+ *                 type: string
+ *                 nullable: true
+ *                 example: Tran Thi C
+ *               motherPhone:
+ *                 type: string
+ *                 nullable: true
+ *                 example: 0912345678
+ *               avatar:
+ *                 type: string
+ *                 format: binary
+ *                 description: Anh dai dien moi (optional), ho tro jpg/jpeg/png/webp/gif
  *     responses:
  *       200:
  *         description: Cap nhat hoc sinh thanh cong
@@ -268,7 +323,7 @@ router.get('/teacher/students', getTeacherManagedStudentsController);
  *       401:
  *         description: Chua xac thuc
  */
-router.patch('/teacher/students/:studentId', updateTeacherManagedStudentController);
+router.patch('/teacher/students/:studentId', upload.single('avatar'), updateTeacherManagedStudentController);
 
 /**
  * @swagger
@@ -368,7 +423,7 @@ router.get('/teacher/students/export', exportStudentsByClassController);
  * @swagger
  * /users/teacher/students/template/download:
  *   get:
- *     summary: Tải file mẫu Excel để import học sinh
+ *     summary: Tai file mau Excel de import hoc sinh (co cot avatarCode)
  *     tags: [Users]
  *     security:
  *       - bearerAuth: []
@@ -384,8 +439,13 @@ router.get('/teacher/students/template/download', downloadStudentTemplateControl
  * @swagger
  * /users/teacher/students/bulk/upload/{schoolClassId}:
  *   post:
- *     summary: Upload file Excel để tạo/cập nhật học sinh hàng loạt
+ *     summary: Upload Excel + (tuy chon) ZIP avatar de tao/cap nhat hoc sinh hang loat
  *     tags: [Users]
+ *     description: |
+ *       Excel co the khai bao cot `avatarCode` (vi du `001`).
+ *       Neu upload them `avatarZip`, he thong se tim anh theo ten file trung ma (vi du `001.jpg`, `001.png`),
+ *       upload len Cloudinary va luu vao `avatarUrl`.
+ *       Neu khong co `avatarZip` hoac khong tim thay anh tuong ung, `avatarUrl` se duoc dat `null`.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -394,7 +454,7 @@ router.get('/teacher/students/template/download', downloadStudentTemplateControl
  *         required: true
  *         schema:
  *           type: string
- *         description: ID của lớp học để gán học sinh
+ *         description: ID cua lop hoc de gan hoc sinh
  *     requestBody:
  *       required: true
  *       content:
@@ -407,16 +467,73 @@ router.get('/teacher/students/template/download', downloadStudentTemplateControl
  *               file:
  *                 type: string
  *                 format: binary
+ *                 description: File Excel danh sach hoc sinh
+ *               avatarZip:
+ *                 type: string
+ *                 format: binary
+ *                 description: File archive anh dai dien (optional, ho tro .zip/.rar), ten file trung ma anh trong Excel (vi du 001.jpg)
  *     responses:
  *       200:
- *         description: Import thành công, trả về kết quả chi tiết
+ *         description: Import thanh cong, tra ve ket qua chi tiet va thong ke avatar
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 total:
+ *                   type: integer
+ *                 created:
+ *                   type: integer
+ *                 updated:
+ *                   type: integer
+ *                 skipped:
+ *                   type: integer
+ *                 avatarUploaded:
+ *                   type: integer
+ *                 avatarMissing:
+ *                   type: integer
+ *                 avatarCleared:
+ *                   type: integer
  *       400:
- *         description: File không hợp lệ hoặc dữ liệu không hợp lệ
+ *         description: File khong hop le hoac du lieu khong hop le
  *       403:
- *         description: Giáo viên không được quản lý lớp được chỉ định
+ *         description: Giao vien khong duoc quan ly lop duoc chi dinh
  *       401:
  *         description: Chua xac thuc
  */
-router.post('/teacher/students/bulk/upload/:schoolClassId', upload.single('file'), uploadBulkStudentsController);
+router.post(
+  '/teacher/students/bulk/upload/:schoolClassId',
+  upload.fields([
+    { name: 'file', maxCount: 1 },
+    { name: 'avatarZip', maxCount: 1 }
+  ]),
+  uploadBulkStudentsController
+);
+
+/**
+ * @swagger
+ * /users/teacher/students/bulk/upload/jobs/{jobId}:
+ *   get:
+ *     summary: Lay trang thai xu ly avatar job cua import bulk hoc sinh
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: jobId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Trang thai job hien tai
+ *       404:
+ *         description: Khong tim thay job
+ *       401:
+ *         description: Chua xac thuc
+ */
+router.get('/teacher/students/bulk/upload/jobs/:jobId', getBulkUploadAvatarJobStatusController);
 
 export default router;
