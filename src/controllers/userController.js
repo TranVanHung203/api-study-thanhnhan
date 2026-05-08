@@ -122,6 +122,41 @@ const resolveImageExtFromUploadFile = (file) => {
   return null;
 };
 
+const generateStudentUserCodesForBulkInsert = async (count) => {
+  const total = Number(count) || 0;
+  if (total <= 0) return [];
+
+  const year = new Date().getFullYear();
+  const codePrefix = `HS${year}_`;
+  const escapedPrefix = codePrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  const latestRows = await User.aggregate([
+    { $match: { userCode: { $regex: `^${escapedPrefix}` } } },
+    {
+      $project: {
+        sequence: {
+          $convert: {
+            input: { $arrayElemAt: [{ $split: ['$userCode', '_'] }, 1] },
+            to: 'int',
+            onError: 0,
+            onNull: 0
+          }
+        }
+      }
+    },
+    { $sort: { sequence: -1 } },
+    { $limit: 1 }
+  ]);
+
+  let nextSequence = (latestRows?.[0]?.sequence || 0) + 1;
+  const userCodes = [];
+  for (let i = 0; i < total; i++) {
+    userCodes.push(`${codePrefix}${nextSequence}`);
+    nextSequence += 1;
+  }
+  return userCodes;
+};
+
 const buildAvatarBufferMapFromArchive = async ({
   archiveBuffer,
   fileName,
@@ -2350,6 +2385,12 @@ export const uploadBulkStudentsController = async (req, res, next) => {
     }
 
     if (createDocs.length) {
+      // insertMany does not trigger pre('save'), so we generate student userCode explicitly.
+      const generatedUserCodes = await generateStudentUserCodesForBulkInsert(createDocs.length);
+      createDocs.forEach((doc, index) => {
+        doc.userCode = generatedUserCodes[index] || null;
+      });
+
       const createdUsers = await User.insertMany(createDocs, { ordered: false });
       const createdUserMap = new Map(createdUsers.map((user) => [user.username, user]));
 
