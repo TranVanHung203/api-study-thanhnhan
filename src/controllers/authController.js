@@ -1,5 +1,6 @@
 import User from '../models/user.schema.js';
 import Reward from '../models/reward.schema.js';
+import UserStreak from '../models/userStreak.schema.js';
 import UserActivity from '../models/userActivity.schema.js';
 import RefreshToken from '../models/refreshToken.schema.js';
 import OTPVerification from '../models/otpVerification.schema.js';
@@ -541,9 +542,15 @@ export const refreshTokenController = async (req, res, next) => {
 export const getUserController = async (req, res, next) => {
   try {
     const userId = req.user.id;
-    const user = await User.findOne({ _id: userId, isStatus: { $ne: 'deleted' } })
-      .select('_id userCode fullName email classId characterId preferredTopicId avatarUrl isGuest roles isShowCaseView')
-      .populate('preferredTopicId', '_id slug name description');
+    const [user, reward, streak] = await Promise.all([
+      User.findOne({ _id: userId, isStatus: { $ne: 'deleted' } })
+        .select('_id userCode fullName email classId characterId preferredTopicId avatarUrl isGuest roles isShowCaseView')
+        .populate('preferredTopicId', '_id slug name description'),
+      Reward.findOne({ userId }).select('totalPoints').lean(),
+      UserStreak.findOne({ userId })
+        .select('currentStreak longestStreak lastActiveDate streakStartDate timezone')
+        .lean()
+    ]);
 
     const preferredTopic =
       user?.preferredTopicId && typeof user.preferredTopicId === 'object'
@@ -562,6 +569,22 @@ export const getUserController = async (req, res, next) => {
       fullName: user.fullName,
       email: user.email,
       avatarUrl: user.avatarUrl || null,
+      rewardPoint: reward?.totalPoints || 0,
+      streak: streak
+        ? {
+            currentStreak: streak.currentStreak || 0,
+            longestStreak: streak.longestStreak || 0,
+            lastActiveDate: streak.lastActiveDate || null,
+            streakStartDate: streak.streakStartDate || null,
+            timezone: streak.timezone || 'UTC'
+          }
+        : {
+            currentStreak: 0,
+            longestStreak: 0,
+            lastActiveDate: null,
+            streakStartDate: null,
+            timezone: 'UTC'
+          },
       classId: user.classId || null,
       characterId: user.characterId || null,
       slugTopic: preferredTopic?.slug || null,

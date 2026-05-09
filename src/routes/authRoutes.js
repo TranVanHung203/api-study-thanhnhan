@@ -297,6 +297,23 @@ router.post('/reset-password', resetPasswordController);
  *                 avatarUrl:
  *                   type: string
  *                   nullable: true
+ *                 rewardPoint:
+ *                   type: number
+ *                 streak:
+ *                   type: object
+ *                   properties:
+ *                     currentStreak:
+ *                       type: number
+ *                     longestStreak:
+ *                       type: number
+ *                     lastActiveDate:
+ *                       type: string
+ *                       nullable: true
+ *                     streakStartDate:
+ *                       type: string
+ *                       nullable: true
+ *                     timezone:
+ *                       type: string
  *                 classId:
  *                   type: string
  *                   nullable: true
