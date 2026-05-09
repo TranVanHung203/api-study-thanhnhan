@@ -1013,7 +1013,7 @@ export const getTeacherManagedStudentsController = async (req, res, next) => {
     if (searchQuery) {
       const normalizedSearch = normalizeSearchText(searchQuery);
       const allUsers = await User.find(userFilter)
-        .select('_id userCode username fullName email gender schoolId dateOfBirth address createdAt isOnline onlineAt lastSeenAt')
+        .select('_id userCode username fullName email gender schoolId dateOfBirth address avatarUrl createdAt isOnline onlineAt lastSeenAt')
         .sort({ createdAt: -1 })
         .lean();
 
@@ -1037,7 +1037,7 @@ export const getTeacherManagedStudentsController = async (req, res, next) => {
       [total, users] = await Promise.all([
         User.countDocuments(userFilter),
         User.find(userFilter)
-          .select('_id userCode username fullName email gender schoolId dateOfBirth address createdAt isOnline onlineAt lastSeenAt')
+          .select('_id userCode username fullName email gender schoolId dateOfBirth address avatarUrl createdAt isOnline onlineAt lastSeenAt')
           .sort({ createdAt: -1 })
           .skip(skip)
           .limit(limit)
@@ -1094,6 +1094,7 @@ export const getTeacherManagedStudentsController = async (req, res, next) => {
         username: user.username,
         fullName: user.fullName,
         email: user.email,
+        avatarUrl: user.avatarUrl || null,
         gender: user.gender ?? null,
         schoolId: user.schoolId,
         schoolClasses: classList,

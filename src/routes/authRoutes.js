@@ -294,6 +294,9 @@ router.post('/reset-password', resetPasswordController);
  *                 email:
  *                   type: string
  *                   nullable: true
+ *                 avatarUrl:
+ *                   type: string
+ *                   nullable: true
  *                 classId:
  *                   type: string
  *                   nullable: true

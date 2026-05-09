@@ -542,7 +542,7 @@ export const getUserController = async (req, res, next) => {
   try {
     const userId = req.user.id;
     const user = await User.findOne({ _id: userId, isStatus: { $ne: 'deleted' } })
-      .select('_id userCode fullName email classId characterId preferredTopicId isGuest roles isShowCaseView')
+      .select('_id userCode fullName email classId characterId preferredTopicId avatarUrl isGuest roles isShowCaseView')
       .populate('preferredTopicId', '_id slug name description');
 
     const preferredTopic =
@@ -561,6 +561,7 @@ export const getUserController = async (req, res, next) => {
       userCode: user.userCode || null,
       fullName: user.fullName,
       email: user.email,
+      avatarUrl: user.avatarUrl || null,
       classId: user.classId || null,
       characterId: user.characterId || null,
       slugTopic: preferredTopic?.slug || null,
