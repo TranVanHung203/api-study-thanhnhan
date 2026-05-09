@@ -44,6 +44,7 @@ const buildPublicSocketUser = (user, decoded) => ({
   username: user.username || decoded.username || null,
   email: user.email || decoded.email || null,
   fullName: user.fullName || decoded.fullName || null,
+  avatar: user.avatar || null,
   roles: user.roles || []
 });
 
@@ -136,7 +137,7 @@ export const initAuthSocket = (io) => {
 
       const [user, refreshToken] = await Promise.all([
         User.findOne({ _id: decoded.id, isStatus: { $ne: 'deleted' } })
-          .select('_id userCode username email fullName roles')
+          .select('_id userCode username email fullName avatar roles')
           .lean(),
         RefreshToken.findOne({
           _id: decoded.refreshTokenId,
@@ -213,8 +214,10 @@ export const initAuthSocket = (io) => {
       user: socket.data.user || null,
       presence: userId
         ? buildSocketPresencePayload({
+          userId,
           isOnline: true,
-          onlineAt: new Date().toISOString()
+          onlineAt: new Date().toISOString(),
+          lastSeenAt: new Date().toISOString()
         })
         : null
     });
@@ -262,6 +265,7 @@ export const initAuthSocket = (io) => {
     socket.on('disconnect', async () => {
       const disconnectedUserId = socket.data.user?.id;
       if (!disconnectedUserId) return;
+      const disconnectedUser = socket.data.user || null;
 
       const now = new Date();
       const presenceResult = await markUserOffline(disconnectedUserId, socket.id);
@@ -276,6 +280,7 @@ export const initAuthSocket = (io) => {
 
         emitPresenceEvent('presence:user-offline', {
           userId: disconnectedUserId,
+          user: disconnectedUser,
           presence: buildSocketPresencePayload(
             presenceResult.presence || {
               userId: disconnectedUserId,
