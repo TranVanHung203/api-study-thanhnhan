@@ -18,7 +18,7 @@ import Topic from '../models/topic.schema.js';
 import PreferenceQuestion from '../models/preferenceQuestion.schema.js';
 import { generateOTP, sendOTPEmail, sendPasswordResetOTPEmail } from '../config/emailConfig.js';
 import { deleteUserSessionKey, setCurrentSessionId } from '../services/sessionService.js';
-import { notifyUserSessionReplacement } from '../ws/authSocket.js';
+import { terminateUserAuthSessions } from '../ws/authSocket.js';
 
 const SECRET_KEY = process.env.SECRET_KEY || 'your-secret-key';
 const ACCESS_TOKEN_EXPIRY = process.env.ACCESS_TOKEN_EXPIRY || '15m';
@@ -451,7 +451,7 @@ export const loginController = async (req, res, next) => {
     const accessToken = createAccessToken(user, refreshTokenId);
 
     if (hadPreviousSessions) {
-      notifyUserSessionReplacement(user._id, {
+      terminateUserAuthSessions(user._id, {
         reason: 'new-login',
         message: 'Tài khoản đã được đăng nhập ở một thiết bị khác',
         refreshTokenId: String(refreshTokenId),
@@ -769,7 +769,7 @@ export const resetPasswordController = async (req, res, next) => {
     await RefreshToken.updateMany({ userId: user._id }, { isRevoked: true });
     await deleteUserSessionKey(user._id);
 
-    notifyUserSessionReplacement(user._id, {
+    terminateUserAuthSessions(user._id, {
       reason: 'password-reset',
       message: 'Mật khẩu đã được thay đổi, vui lòng đăng nhập lại'
     });
@@ -801,7 +801,7 @@ export const logoutController = async (req, res, next) => {
 
     if (userId) {
       await deleteUserSessionKey(userId);
-      notifyUserSessionReplacement(userId, {
+      terminateUserAuthSessions(userId, {
         reason: 'logout',
         message: 'Phiên đăng nhập đã kết thúc'
       });

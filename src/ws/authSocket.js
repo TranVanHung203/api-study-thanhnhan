@@ -47,6 +47,28 @@ const buildPublicSocketUser = (user, decoded) => ({
   roles: user.roles || []
 });
 
+const getMinutesAgo = (dateValue, now = new Date()) => {
+  if (!dateValue) return null;
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return null;
+  return Math.max(0, Math.floor((now.getTime() - date.getTime()) / 60000));
+};
+
+const buildSocketPresencePayload = (presence, now = new Date()) => {
+  const isOnline = presence?.isOnline === true;
+  const onlineAt = presence?.onlineAt || null;
+  const lastSeenAt = presence?.lastSeenAt || null;
+
+  return {
+    ...presence,
+    isOnline,
+    onlineAt,
+    lastSeenAt,
+    onlineForMinutes: isOnline ? getMinutesAgo(onlineAt, now) : null,
+    lastSeenMinutesAgo: lastSeenAt ? getMinutesAgo(lastSeenAt, now) : null
+  };
+};
+
 const getOnlineUsersPayload = async () => {
   const onlineResult = await getPresenceOnlineUserIds();
   const userIds = onlineResult.userIds;
@@ -78,12 +100,14 @@ const getOnlineUsersPayload = async () => {
       email: user.email || null,
       avatar: user.avatar || null,
       roles: user.roles || [],
-      presence: presenceResult.presenceByUserId.get(String(user._id)) || {
-        userId: String(user._id),
-        isOnline: true,
-        onlineAt: null,
-        lastSeenAt: null
-      }
+      presence: buildSocketPresencePayload(
+        presenceResult.presenceByUserId.get(String(user._id)) || {
+          userId: String(user._id),
+          isOnline: true,
+          onlineAt: null,
+          lastSeenAt: null
+        }
+      )
     }))
   };
 };
@@ -163,12 +187,15 @@ export const initAuthSocket = (io) => {
       const onlinePresencePayload = {
         userId,
         user: socket.data.user,
-        presence: presenceResult.presence || {
-          userId,
-          isOnline: true,
-          onlineAt: onlineAt.toISOString(),
-          lastSeenAt: now.toISOString()
-        }
+        presence: buildSocketPresencePayload(
+          presenceResult.presence || {
+            userId,
+            isOnline: true,
+            onlineAt: onlineAt.toISOString(),
+            lastSeenAt: now.toISOString()
+          },
+          now
+        )
       };
 
       // Always emit user-online when a socket successfully connects so admin clients
@@ -185,10 +212,10 @@ export const initAuthSocket = (io) => {
       message: 'Connected to auth realtime channel',
       user: socket.data.user || null,
       presence: userId
-        ? {
+        ? buildSocketPresencePayload({
           isOnline: true,
           onlineAt: new Date().toISOString()
-        }
+        })
         : null
     });
 
@@ -249,12 +276,15 @@ export const initAuthSocket = (io) => {
 
         emitPresenceEvent('presence:user-offline', {
           userId: disconnectedUserId,
-          presence: presenceResult.presence || {
-            userId: disconnectedUserId,
-            isOnline: false,
-            onlineAt: null,
-            lastSeenAt: now.toISOString()
-          }
+          presence: buildSocketPresencePayload(
+            presenceResult.presence || {
+              userId: disconnectedUserId,
+              isOnline: false,
+              onlineAt: null,
+              lastSeenAt: now.toISOString()
+            },
+            now
+          )
         });
         return;
       }
@@ -299,6 +329,34 @@ export const notifyUserSessionReplacement = (userId, payload = {}) => {
   });
 
   return { ok: true };
+};
+
+export const terminateUserAuthSessions = (userId, payload = {}) => {
+  if (!authIo || !userId) {
+    return { ok: false, skipped: true, reason: 'auth-socket-not-ready', disconnected: 0 };
+  }
+
+  const roomName = getUserRoom(userId);
+  const room = authIo.sockets.adapter.rooms.get(roomName);
+  const socketIds = room ? Array.from(room) : [];
+
+  if (!socketIds.length) {
+    return { ok: false, skipped: true, reason: 'user-offline', disconnected: 0 };
+  }
+
+  authIo.to(roomName).emit('auth:session-replaced', {
+    userId: String(userId),
+    ...payload,
+    emittedAt: new Date().toISOString()
+  });
+
+  socketIds.forEach((socketId) => {
+    const socket = authIo.sockets.sockets.get(socketId);
+    if (!socket) return;
+    socket.disconnect(true);
+  });
+
+  return { ok: true, disconnected: socketIds.length };
 };
 
 export const emitAuthUserEvent = (userId, eventName, payload = {}) => {
