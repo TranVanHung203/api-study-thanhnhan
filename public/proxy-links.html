@@ -1,0 +1,477 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Proxy Links Dashboard</title>
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --card: #ffffff;
+      --text: #0f172a;
+      --muted: #5b667a;
+      --border: #d7deea;
+      --brand: #0059c9;
+      --brand-dark: #0048a2;
+      --ok: #0f7f4f;
+      --bad: #c92f2f;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Tahoma, Verdana, sans-serif;
+      color: var(--text);
+      background: radial-gradient(circle at top right, #dcecff 0%, var(--bg) 42%);
+    }
+
+    .wrap {
+      max-width: 1060px;
+      margin: 0 auto;
+      padding: 20px 14px 28px;
+      display: grid;
+      gap: 14px;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+      box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+    }
+
+    h1, h2 { margin: 0 0 10px; }
+    h1 { font-size: 23px; }
+    h2 { font-size: 18px; }
+    p { margin: 6px 0; line-height: 1.45; }
+
+    .muted {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .row {
+      display: grid;
+      gap: 10px;
+      margin-bottom: 12px;
+      padding-bottom: 12px;
+      border-bottom: 1px dashed var(--border);
+    }
+
+    .row:last-child {
+      border-bottom: none;
+      margin-bottom: 0;
+      padding-bottom: 0;
+    }
+
+    .name {
+      font-weight: 600;
+    }
+
+    .url {
+      padding: 10px 11px;
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      background: #f9fbff;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 12px;
+      word-break: break-all;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .grid-two {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .grid-three {
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr;
+      gap: 10px;
+    }
+
+    @media (max-width: 760px) {
+      .grid-two,
+      .grid-three {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    label {
+      display: block;
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    input {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 9px 10px;
+      font-size: 13px;
+      font-family: Consolas, "Courier New", monospace;
+    }
+
+    button,
+    a.btn {
+      appearance: none;
+      border: 1px solid var(--brand);
+      background: var(--brand);
+      color: #fff;
+      border-radius: 8px;
+      padding: 8px 11px;
+      font-size: 13px;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    button:hover,
+    a.btn:hover {
+      background: var(--brand-dark);
+      border-color: var(--brand-dark);
+    }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: wait;
+    }
+
+    .btn.ghost {
+      background: #fff;
+      color: var(--brand);
+    }
+
+    .badge {
+      display: inline-block;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--ok);
+      background: #e9fbf3;
+      border: 1px solid #b6f0d0;
+      border-radius: 999px;
+      padding: 3px 8px;
+      margin-left: 8px;
+      vertical-align: middle;
+    }
+
+    .status-ok {
+      color: var(--ok);
+      font-weight: 600;
+    }
+
+    .status-bad {
+      color: var(--bad);
+      font-weight: 600;
+    }
+
+    pre {
+      margin: 8px 0 0;
+      background: #0b1220;
+      color: #d8e7ff;
+      border-radius: 10px;
+      padding: 10px;
+      overflow: auto;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+      font-size: 13px;
+    }
+
+    th, td {
+      border: 1px solid var(--border);
+      padding: 8px;
+      text-align: left;
+      vertical-align: top;
+      word-break: break-all;
+    }
+
+    th {
+      background: #f5f9ff;
+      font-size: 12px;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="card">
+      <h1>Proxy Links Dashboard</h1>
+      <p>Test nhanh proxy de lay IP VN cho Zalo login backend.</p>
+      <p class="muted">Free proxy doi lien tuc, hay test lai truoc khi dung.</p>
+    </section>
+
+    <section class="card">
+      <h2>1) Test One Proxy</h2>
+      <div class="grid-three">
+        <div>
+          <label for="proxy-input">Proxy URL</label>
+          <input id="proxy-input" type="text" placeholder="http://113.160.132.26:8080 or socks5://ip:port" />
+        </div>
+        <div>
+          <label for="timeout-input">Timeout (ms)</label>
+          <input id="timeout-input" type="number" value="9000" min="1000" max="25000" />
+        </div>
+        <div>
+          <label for="test-link-output">Direct test link</label>
+          <input id="test-link-output" type="text" readonly />
+        </div>
+      </div>
+      <div class="actions" style="margin-top:10px;">
+        <button type="button" id="test-one-btn">Test now</button>
+        <button type="button" id="copy-test-link" class="ghost">Copy test link</button>
+        <button type="button" id="copy-proxy-url" class="ghost">Copy as ZALO_PROXY_URL</button>
+        <button type="button" id="copy-env-one" class="ghost">Copy .env snippet</button>
+      </div>
+      <pre id="test-one-result">No test yet.</pre>
+    </section>
+
+    <section class="card">
+      <h2>2) Auto Scan VN Proxies <span class="badge">server-side</span></h2>
+      <div class="grid-two">
+        <div>
+          <label for="scan-limit-input">How many proxies to scan</label>
+          <input id="scan-limit-input" type="number" value="20" min="1" max="60" />
+        </div>
+        <div>
+          <label for="scan-timeout-input">Timeout each proxy (ms)</label>
+          <input id="scan-timeout-input" type="number" value="7000" min="1000" max="25000" />
+        </div>
+      </div>
+      <div class="actions" style="margin-top:10px;">
+        <button type="button" id="scan-btn">Scan now</button>
+      </div>
+      <pre id="scan-summary">No scan yet.</pre>
+      <div id="scan-table-wrap"></div>
+    </section>
+
+    <section class="card">
+      <h2>VN Proxy Sources</h2>
+      <div class="row" data-url="https://api.proxyscrape.com/v4/free-proxy-list/get?request=display_proxies&proxy_format=protocolipport&format=text&country=vn">
+        <div class="name">ProxyScrape V4 - VN all protocols (protocol://ip:port)</div>
+        <div class="url">https://api.proxyscrape.com/v4/free-proxy-list/get?request=display_proxies&amp;proxy_format=protocolipport&amp;format=text&amp;country=vn</div>
+        <div class="actions">
+          <a class="btn" target="_blank" rel="noopener noreferrer" href="https://api.proxyscrape.com/v4/free-proxy-list/get?request=display_proxies&proxy_format=protocolipport&format=text&country=vn">Open</a>
+          <button type="button" class="copy-url">Copy URL</button>
+        </div>
+      </div>
+      <div class="row" data-url="https://api.proxyscrape.com/v4/free-proxy-list/get?request=display_proxies&proxy_format=ipport&format=text&country=vn">
+        <div class="name">ProxyScrape V4 - VN ip:port</div>
+        <div class="url">https://api.proxyscrape.com/v4/free-proxy-list/get?request=display_proxies&amp;proxy_format=ipport&amp;format=text&amp;country=vn</div>
+        <div class="actions">
+          <a class="btn" target="_blank" rel="noopener noreferrer" href="https://api.proxyscrape.com/v4/free-proxy-list/get?request=display_proxies&proxy_format=ipport&format=text&country=vn">Open</a>
+          <button type="button" class="copy-url">Copy URL</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const proxyInput = document.getElementById("proxy-input");
+    const timeoutInput = document.getElementById("timeout-input");
+    const testLinkOutput = document.getElementById("test-link-output");
+    const testOneBtn = document.getElementById("test-one-btn");
+    const testOneResult = document.getElementById("test-one-result");
+    const copyTestLinkBtn = document.getElementById("copy-test-link");
+    const copyProxyUrlBtn = document.getElementById("copy-proxy-url");
+    const copyEnvOneBtn = document.getElementById("copy-env-one");
+
+    const scanBtn = document.getElementById("scan-btn");
+    const scanLimitInput = document.getElementById("scan-limit-input");
+    const scanTimeoutInput = document.getElementById("scan-timeout-input");
+    const scanSummary = document.getElementById("scan-summary");
+    const scanTableWrap = document.getElementById("scan-table-wrap");
+
+    const defaultProxy = localStorage.getItem("last_proxy_url") || "http://113.160.132.26:8080";
+    proxyInput.value = defaultProxy;
+
+    const showToast = (text) => {
+      const toast = document.createElement("div");
+      toast.textContent = text;
+      toast.style.position = "fixed";
+      toast.style.right = "12px";
+      toast.style.bottom = "12px";
+      toast.style.background = "#0f172a";
+      toast.style.color = "#fff";
+      toast.style.padding = "8px 10px";
+      toast.style.borderRadius = "8px";
+      toast.style.fontSize = "12px";
+      toast.style.zIndex = "9999";
+      document.body.appendChild(toast);
+      setTimeout(() => toast.remove(), 1200);
+    };
+
+    const copyText = async (text) => {
+      if (!text) return;
+      try {
+        await navigator.clipboard.writeText(text);
+        showToast("Copied");
+      } catch (error) {
+        showToast("Copy failed");
+      }
+    };
+
+    const buildTestLink = () => {
+      const proxy = (proxyInput.value || "").trim();
+      const timeout = Number.parseInt(timeoutInput.value || "9000", 10) || 9000;
+      const params = new URLSearchParams();
+      params.set("proxyUrl", proxy);
+      params.set("timeoutMs", String(timeout));
+      return `${window.location.origin}/proxy-tools/test?${params.toString()}`;
+    };
+
+    const renderTestLink = () => {
+      testLinkOutput.value = buildTestLink();
+    };
+
+    const buildEnvSnippet = (proxyUrl) =>
+      `ZALO_PROXY_ENABLED=true\nZALO_PROXY_URL=${proxyUrl}\nZALO_PROXY_TIMEOUT_MS=${Number.parseInt(timeoutInput.value || "15000", 10) || 15000}`;
+
+    const testOneProxy = async () => {
+      const proxy = (proxyInput.value || "").trim();
+      const timeout = Number.parseInt(timeoutInput.value || "9000", 10) || 9000;
+      if (!proxy) {
+        testOneResult.textContent = "Please enter proxy URL.";
+        return;
+      }
+
+      localStorage.setItem("last_proxy_url", proxy);
+      testOneBtn.disabled = true;
+      testOneResult.textContent = "Testing...";
+      try {
+        const url = `/proxy-tools/test?proxyUrl=${encodeURIComponent(proxy)}&timeoutMs=${encodeURIComponent(timeout)}`;
+        const response = await fetch(url);
+        const payload = await response.json();
+        testOneResult.textContent = JSON.stringify(payload, null, 2);
+      } catch (error) {
+        testOneResult.textContent = JSON.stringify({ ok: false, message: error.message }, null, 2);
+      } finally {
+        testOneBtn.disabled = false;
+      }
+    };
+
+    const renderScanTable = (aliveList) => {
+      if (!Array.isArray(aliveList) || aliveList.length === 0) {
+        scanTableWrap.innerHTML = '<p class="muted">No alive proxy found in this scan.</p>';
+        return;
+      }
+
+      const rows = aliveList.map((item, index) => {
+        const safeProxy = item.proxyUrl || "";
+        const safeIp = item.ip || "";
+        const safeCountry = item.country || "";
+        const safeCountryIso = item.countryIso || "";
+        return `
+          <tr>
+            <td>${index + 1}</td>
+            <td><code>${safeProxy}</code></td>
+            <td>${safeIp}</td>
+            <td>${safeCountry} ${safeCountryIso ? `(${safeCountryIso})` : ""}</td>
+            <td>
+              <div class="actions">
+                <button type="button" class="use-proxy-btn" data-proxy="${encodeURIComponent(safeProxy)}">Use this</button>
+                <button type="button" class="copy-proxy-btn" data-proxy="${encodeURIComponent(safeProxy)}">Copy URL</button>
+                <button type="button" class="copy-env-btn" data-proxy="${encodeURIComponent(safeProxy)}">Copy .env</button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join("");
+
+      scanTableWrap.innerHTML = `
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Proxy URL</th>
+              <th>Exit IP</th>
+              <th>Country</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      `;
+
+      scanTableWrap.querySelectorAll(".use-proxy-btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const proxy = decodeURIComponent(btn.getAttribute("data-proxy") || "");
+          if (!proxy) return;
+          proxyInput.value = proxy;
+          renderTestLink();
+          showToast("Proxy moved to input");
+        });
+      });
+
+      scanTableWrap.querySelectorAll(".copy-proxy-btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const proxy = decodeURIComponent(btn.getAttribute("data-proxy") || "");
+          copyText(proxy);
+        });
+      });
+
+      scanTableWrap.querySelectorAll(".copy-env-btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const proxy = decodeURIComponent(btn.getAttribute("data-proxy") || "");
+          copyText(buildEnvSnippet(proxy));
+        });
+      });
+    };
+
+    const scanAliveVnProxies = async () => {
+      const limit = Number.parseInt(scanLimitInput.value || "20", 10) || 20;
+      const timeout = Number.parseInt(scanTimeoutInput.value || "7000", 10) || 7000;
+      scanBtn.disabled = true;
+      scanSummary.textContent = "Scanning...";
+      scanTableWrap.innerHTML = "";
+      try {
+        const url = `/proxy-tools/scan-vn?limit=${encodeURIComponent(limit)}&timeoutMs=${encodeURIComponent(timeout)}`;
+        const response = await fetch(url);
+        const payload = await response.json();
+        scanSummary.textContent = JSON.stringify(payload, null, 2);
+        renderScanTable(payload.alive || []);
+      } catch (error) {
+        scanSummary.textContent = JSON.stringify({ ok: false, message: error.message }, null, 2);
+      } finally {
+        scanBtn.disabled = false;
+      }
+    };
+
+    proxyInput.addEventListener("input", renderTestLink);
+    timeoutInput.addEventListener("input", renderTestLink);
+
+    testOneBtn.addEventListener("click", testOneProxy);
+    copyTestLinkBtn.addEventListener("click", () => copyText(testLinkOutput.value));
+    copyProxyUrlBtn.addEventListener("click", () => copyText((proxyInput.value || "").trim()));
+    copyEnvOneBtn.addEventListener("click", () => copyText(buildEnvSnippet((proxyInput.value || "").trim())));
+    scanBtn.addEventListener("click", scanAliveVnProxies);
+
+    document.querySelectorAll(".copy-url").forEach((button) => {
+      button.addEventListener("click", () => {
+        const row = button.closest(".row");
+        const url = row ? row.getAttribute("data-url") : "";
+        if (!url) return;
+        copyText(url);
+      });
+    });
+
+    renderTestLink();
+  </script>
+</body>
+</html>

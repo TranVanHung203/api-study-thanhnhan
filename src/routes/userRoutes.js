@@ -129,7 +129,7 @@ router.get('/students', getStudentsController);
  *                 type: string
  *                 nullable: true
  *                 example: 0912345678
- *               avatar:
+ *               imageFile:
  *                 type: string
  *                 format: binary
  *                 description: Anh dai dien (optional), ho tro jpg/jpeg/png/webp/gif
@@ -145,7 +145,7 @@ router.get('/students', getStudentsController);
  *       401:
  *         description: Chua xac thuc
  */
-router.post('/teacher/students', upload.single('avatar'), createStudentByTeacherController);
+router.post('/teacher/students', upload.single('imageFile'), createStudentByTeacherController);
 
 /**
  * @swagger

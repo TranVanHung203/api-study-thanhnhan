@@ -3,6 +3,7 @@ import Question from '../models/question.schema.js';
 import QuizAssignment from '../models/quizAssignment.schema.js';
 import AssignmentAttempt from '../models/assignmentAttempt.schema.js';
 import QuizSession from '../models/quizSession.schema.js';
+import mongoose from 'mongoose';
 
 // Lấy danh sách quizzes
 export const getQuizzesController = async (req, res, next) => {
@@ -68,13 +69,18 @@ export const getQuizzesController = async (req, res, next) => {
 // Tạo quiz
 export const createQuizController = async (req, res, next) => {
   try {
-    const { title, description, bonusPoints } = req.body;
+    const { title, description, bonusPoints, classId } = req.body;
+
+    if (classId && !mongoose.Types.ObjectId.isValid(classId)) {
+      return res.status(400).json({ message: 'classId khong hop le' });
+    }
 
     const quiz = new Quiz({
       title,
       description,
       totalQuestions: 0,
       bonusPoints: bonusPoints || 100,
+      classId: classId || null,
       createdBy: req.user.id
     });
 
@@ -118,11 +124,20 @@ export const getQuizDetailController = async (req, res, next) => {
 export const updateQuizController = async (req, res, next) => {
   try {
     const { quizId } = req.params;
-    const { title, description, totalQuestions, bonusPoints } = req.body;
+    const { title, description, totalQuestions, bonusPoints, classId } = req.body;
+
+    if (classId !== undefined && classId !== null && classId !== '' && !mongoose.Types.ObjectId.isValid(classId)) {
+      return res.status(400).json({ message: 'classId khong hop le' });
+    }
+
+    const updatePayload = { title, description, totalQuestions, bonusPoints };
+    if (classId !== undefined) {
+      updatePayload.classId = classId || null;
+    }
 
     const quiz = await Quiz.findOneAndUpdate(
       { _id: quizId, createdBy: req.user.id },
-      { title, description, totalQuestions, bonusPoints },
+      updatePayload,
       { new: true }
     );
 

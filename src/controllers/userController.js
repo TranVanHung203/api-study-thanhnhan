@@ -770,10 +770,10 @@ export const createStudentByTeacherController = async (req, res, next) => {
     if (avatarFile) {
       avatarExt = resolveImageExtFromUploadFile(avatarFile);
       if (!avatarExt) {
-        return res.status(400).json({ message: 'avatar phai la file anh jpg/jpeg/png/webp/gif' });
+        return res.status(400).json({ message: 'imageFile phai la file anh jpg/jpeg/png/webp/gif' });
       }
       if (!avatarFile.buffer || !Buffer.isBuffer(avatarFile.buffer) || avatarFile.buffer.length === 0) {
-        return res.status(400).json({ message: 'File avatar khong hop le' });
+        return res.status(400).json({ message: 'File imageFile khong hop le' });
       }
     }
 

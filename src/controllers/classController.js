@@ -289,24 +289,102 @@ export const selectClassController = async (req, res, next) => {
     await user.save();
 
     // Find all classes with order less than selected class order
-    const previousClasses = await Class.find({ order: { $lt: cls.order } }).sort({ order: 1 });
+    const previousClasses = await Class.find({ order: { $lt: cls.order } })
+      .select('_id')
+      .sort({ order: 1 });
+    const previousClassIds = previousClasses.map((item) => item._id);
 
-    let marked = 0;
-    for (const prev of previousClasses) {
-      let cc = await ClassCompletion.findOne({ userId, classId: prev._id });
-      if (!cc) {
-        cc = new ClassCompletion({ userId, classId: prev._id, isCompleted: true, completedAt: new Date() });
-      } else {
-        if (!cc.isCompleted) {
-          cc.isCompleted = true;
-          cc.completedAt = new Date();
-        }
+    const now = new Date();
+    let chapterIds = [];
+    let lessonIds = [];
+    let progressIds = [];
+
+    if (previousClassIds.length > 0) {
+      const previousChapters = await Chapter.find({ classId: { $in: previousClassIds } })
+        .select('_id')
+        .lean();
+      chapterIds = previousChapters.map((item) => item._id);
+
+      if (chapterIds.length > 0) {
+        const previousLessons = await Lesson.find({ chapterId: { $in: chapterIds } })
+          .select('_id')
+          .lean();
+        lessonIds = previousLessons.map((item) => item._id);
       }
-      await cc.save();
-      marked += 1;
+
+      if (lessonIds.length > 0) {
+        const previousProgresses = await Progress.find({ lessonId: { $in: lessonIds } })
+          .select('_id')
+          .lean();
+        progressIds = previousProgresses.map((item) => item._id);
+      }
+
+      const classOps = previousClassIds.map((id) => ({
+        updateOne: {
+          filter: { userId, classId: id },
+          update: {
+            $set: { isCompleted: true, completedAt: now },
+            $setOnInsert: { createdAt: now }
+          },
+          upsert: true
+        }
+      }));
+      await ClassCompletion.bulkWrite(classOps, { ordered: false });
+
+      if (chapterIds.length > 0) {
+        const chapterOps = chapterIds.map((id) => ({
+          updateOne: {
+            filter: { userId, chapterId: id },
+            update: {
+              $set: { isCompleted: true, completedAt: now },
+              $setOnInsert: { createdAt: now }
+            },
+            upsert: true
+          }
+        }));
+        await ChapterCompletion.bulkWrite(chapterOps, { ordered: false });
+      }
+
+      if (lessonIds.length > 0) {
+        const lessonOps = lessonIds.map((id) => ({
+          updateOne: {
+            filter: { userId, lessonId: id },
+            update: {
+              $set: { isCompleted: true, completedAt: now },
+              $setOnInsert: { createdAt: now }
+            },
+            upsert: true
+          }
+        }));
+        await LessonCompletion.bulkWrite(lessonOps, { ordered: false });
+      }
+
+      if (progressIds.length > 0) {
+        const activityOps = progressIds.map((id) => ({
+          updateOne: {
+            filter: { userId, progressId: id },
+            update: {
+              $set: { isCompleted: true, completedAt: now },
+              $setOnInsert: {
+                score: 0,
+                bonusEarned: 0,
+                createdAt: now
+              }
+            },
+            upsert: true
+          }
+        }));
+        await UserActivity.bulkWrite(activityOps, { ordered: false });
+      }
     }
 
-    return res.status(200).json({ message: 'Chọn lớp thành công', markedPreviousClasses: marked });
+    return res.status(200).json({
+      message: 'Chon lop thanh cong',
+      markedPreviousClasses: previousClassIds.length,
+      markedPreviousChapters: chapterIds.length,
+      markedPreviousLessons: lessonIds.length,
+      markedPreviousProgresses: progressIds.length
+    });
   } catch (error) {
     next(error);
   }
@@ -386,6 +464,27 @@ export const getClassChaptersMapController = async (req, res, next) => {
     // 3. Lấy tất cả lessons của các chapters này
     const chapterIds = chapters.map(c => c._id);
     const allLessons = await Lesson.find({ chapterId: { $in: chapterIds } }).sort({ order: 1 });
+    // Normalize ordering: chapter.order -> lesson.order (fallback by _id for stability)
+    const lessonsByChapter = new Map(chapters.map((chapter) => [String(chapter._id), []]));
+    for (const lesson of allLessons) {
+      const key = String(lesson.chapterId);
+      if (!lessonsByChapter.has(key)) {
+        lessonsByChapter.set(key, []);
+      }
+      lessonsByChapter.get(key).push(lesson);
+    }
+    for (const list of lessonsByChapter.values()) {
+      list.sort((a, b) => {
+        const orderDiff = (a.order || 0) - (b.order || 0);
+        if (orderDiff !== 0) return orderDiff;
+        return String(a._id).localeCompare(String(b._id));
+      });
+    }
+    const orderedLessons = [];
+    for (const chapter of chapters) {
+      const chapterLessons = lessonsByChapter.get(String(chapter._id)) || [];
+      orderedLessons.push(...chapterLessons);
+    }
     
     // 4. Lấy tất cả lesson completions của user
     const allLessonIds = allLessons.map(l => l._id);
@@ -412,9 +511,8 @@ export const getClassChaptersMapController = async (req, res, next) => {
     // Nếu tất cả đã hoàn thành, giữ isCurrent = true tại lesson cuối cùng
     let currentLessonId = null;
     outer: for (const chapter of chapters) {
-      const chapterLessons = allLessons.filter(
-        lesson => lesson.chapterId.toString() === chapter._id.toString()
-      );
+      const chapterLessons = lessonsByChapter.get(String(chapter._id)) || [];
+
       for (const lesson of chapterLessons) {
         const isCompleted = completedLessonMap.get(lesson._id.toString()) || false;
         if (!isCompleted) {
@@ -423,16 +521,15 @@ export const getClassChaptersMapController = async (req, res, next) => {
         }
       }
     }
-    if (currentLessonId === null && allLessons.length > 0) {
-      currentLessonId = allLessons[allLessons.length - 1]._id.toString();
+    if (currentLessonId === null && orderedLessons.length > 0) {
+      currentLessonId = orderedLessons[orderedLessons.length - 1]._id.toString();
     }
 
     // Build response: mỗi chapter bọc lessons của nó
     const chaptersWithLessons = chapters.map(chapter => {
       // Lấy lessons của chapter này
-      const chapterLessons = allLessons.filter(
-        lesson => lesson.chapterId.toString() === chapter._id.toString()
-      );
+      const chapterLessons = lessonsByChapter.get(String(chapter._id)) || [];
+
 
       // Build lessons với status
       const lessonsWithStatus = chapterLessons.map(lesson => {

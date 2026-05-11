@@ -59,6 +59,9 @@ import swaggerJsdoc from 'swagger-jsdoc';
 import path from 'path';
 import expressStatic from 'express';
 import os from 'os';
+import axios from 'axios';
+import { HttpsProxyAgent } from 'https-proxy-agent';
+import { SocksProxyAgent } from 'socks-proxy-agent';
 
 // Lấy IP LAN thật — loại bỏ adapter ảo theo tên VÀ dải IP VPN đã biết
 function getLocalIP() {
@@ -120,6 +123,8 @@ databaseConfig.connect();
 const PORT = process.env.PORT || 5000;
 const HOST = process.env.HOST || '0.0.0.0';
 const LOCAL_IP = getLocalIP();
+const PROXY_TEST_TARGET_URL = 'https://ifconfig.co/json';
+const PROXY_SCAN_SOURCE_VN_ALL = 'https://api.proxyscrape.com/v4/free-proxy-list/get?request=display_proxies&proxy_format=protocolipport&format=text&country=vn';
 const ZALO_CALLBACK_SCHEME = (process.env.ZALO_CALLBACK_SCHEME || 'easymathzalo').trim();
 const ZALO_CALLBACK_PATH = (process.env.ZALO_CALLBACK_PATH || 'zalo-callback').trim().replace(/^\/+/, '');
 const ZALO_MOBILE_DEEP_LINK =
@@ -127,6 +132,132 @@ const ZALO_MOBILE_DEEP_LINK =
   `${ZALO_CALLBACK_SCHEME}://${ZALO_CALLBACK_PATH}`;
 const ZALO_WEB_REDIRECT_URL = (process.env.ZALO_WEB_REDIRECT_URL || '').trim();
 const ZALO_CALLBACK_DEFAULT_TARGET = (process.env.ZALO_CALLBACK_DEFAULT_TARGET || 'auto').trim();
+
+const clampInt = (value, fallback, min, max) => {
+  const parsed = Number.parseInt(String(value ?? ''), 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  if (parsed < min) return min;
+  if (parsed > max) return max;
+  return parsed;
+};
+
+const normalizeProxyUrl = (value) => {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  const candidate = raw.includes('://') ? raw : `http://${raw}`;
+  let parsed;
+  try {
+    parsed = new URL(candidate);
+  } catch (error) {
+    return '';
+  }
+
+  const allowedProtocols = new Set([
+    'http:',
+    'https:',
+    'socks:',
+    'socks4:',
+    'socks4a:',
+    'socks5:',
+    'socks5h:'
+  ]);
+  if (!allowedProtocols.has(parsed.protocol)) {
+    return '';
+  }
+  if (!parsed.hostname || !parsed.port) {
+    return '';
+  }
+
+  return parsed.toString();
+};
+
+const createProxyAgent = (proxyUrl) => {
+  const lowered = String(proxyUrl || '').toLowerCase();
+  if (
+    lowered.startsWith('socks://') ||
+    lowered.startsWith('socks4://') ||
+    lowered.startsWith('socks4a://') ||
+    lowered.startsWith('socks5://') ||
+    lowered.startsWith('socks5h://')
+  ) {
+    return new SocksProxyAgent(proxyUrl);
+  }
+  return new HttpsProxyAgent(proxyUrl);
+};
+
+const parseObjectSafe = (value) => {
+  if (value && typeof value === 'object') return value;
+  if (typeof value !== 'string') return null;
+  try {
+    return JSON.parse(value);
+  } catch (error) {
+    return null;
+  }
+};
+
+const getIpInfoFromPayload = (payload) => {
+  const data = parseObjectSafe(payload) || {};
+  const ip = data.ip || data.query || null;
+  const country = data.country || data.country_name || null;
+  const countryIso = data.country_iso || data.country_code || null;
+  return {
+    ip,
+    country,
+    countryIso
+  };
+};
+
+const testProxy = async (proxyUrl, timeoutMs = 9000) => {
+  const safeProxyUrl = normalizeProxyUrl(proxyUrl);
+  if (!safeProxyUrl) {
+    return {
+      ok: false,
+      proxyUrl: String(proxyUrl || ''),
+      message: 'Invalid proxy URL. Use format http://ip:port or socks5://ip:port'
+    };
+  }
+
+  try {
+    const agent = createProxyAgent(safeProxyUrl);
+    const response = await axios.get(PROXY_TEST_TARGET_URL, {
+      timeout: timeoutMs,
+      validateStatus: () => true,
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': 'ProxyTester/1.0'
+      },
+      httpAgent: agent,
+      httpsAgent: agent,
+      proxy: false
+    });
+
+    const body = parseObjectSafe(response.data);
+    const info = getIpInfoFromPayload(body);
+    if (response.status < 200 || response.status >= 300) {
+      return {
+        ok: false,
+        proxyUrl: safeProxyUrl,
+        status: response.status,
+        message: body?.message || 'Proxy request failed'
+      };
+    }
+
+    return {
+      ok: true,
+      proxyUrl: safeProxyUrl,
+      status: response.status,
+      ip: info.ip,
+      country: info.country,
+      countryIso: info.countryIso
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      proxyUrl: safeProxyUrl,
+      message: error?.code || error?.message || 'Proxy request failed'
+    };
+  }
+};
 
 const normalizeZaloCallbackTarget = (value) => {
   if (typeof value !== 'string') return '';
@@ -284,6 +415,61 @@ app.get('/facebook-test', (req, res) => {
 });
 app.get('/zalo-test', (req, res) => {
   res.sendFile(path.join(process.cwd(), 'public', 'zalo-test.html'));
+});
+app.get('/proxy-links', (req, res) => {
+  res.sendFile(path.join(process.cwd(), 'public', 'proxy-links.html'));
+});
+app.get('/proxy-tools/test', async (req, res) => {
+  const proxyUrl = req.query.proxyUrl || req.query.proxy || '';
+  const timeoutMs = clampInt(req.query.timeoutMs, 9000, 1000, 25000);
+  const result = await testProxy(proxyUrl, timeoutMs);
+  res.set('Cache-Control', 'no-store');
+  return res.status(result.ok ? 200 : 400).json(result);
+});
+app.get('/proxy-tools/scan-vn', async (req, res) => {
+  const limit = clampInt(req.query.limit, 20, 1, 60);
+  const timeoutMs = clampInt(req.query.timeoutMs, 7000, 1000, 25000);
+
+  try {
+    const sourceResponse = await axios.get(PROXY_SCAN_SOURCE_VN_ALL, {
+      timeout: 12000,
+      responseType: 'text',
+      validateStatus: () => true
+    });
+
+    if (sourceResponse.status < 200 || sourceResponse.status >= 300) {
+      return res.status(502).json({
+        ok: false,
+        message: 'Cannot fetch proxy source list',
+        sourceStatus: sourceResponse.status
+      });
+    }
+
+    const raw = typeof sourceResponse.data === 'string' ? sourceResponse.data : '';
+    const candidates = Array.from(new Set(
+      raw
+        .split('\n')
+        .map((line) => normalizeProxyUrl(line))
+        .filter(Boolean)
+    )).slice(0, limit);
+
+    const tests = await Promise.all(candidates.map((proxy) => testProxy(proxy, timeoutMs)));
+    const alive = tests.filter((item) => item.ok);
+
+    res.set('Cache-Control', 'no-store');
+    return res.status(200).json({
+      ok: true,
+      source: PROXY_SCAN_SOURCE_VN_ALL,
+      scanned: candidates.length,
+      aliveCount: alive.length,
+      alive
+    });
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      message: error?.message || 'Failed to scan proxies'
+    });
+  }
 });
 app.get('/zalo_verifierFuMt3RYq6nfnehmCcg4M4NsrbnsHmqD1CJan.html', (req, res) => {
   res.sendFile(path.join(process.cwd(), 'public', 'zalo_verifierFuMt3RYq6nfnehmCcg4M4NsrbnsHmqD1CJan.html'));
