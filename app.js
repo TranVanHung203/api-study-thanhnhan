@@ -410,7 +410,7 @@ app.use(errorHandler);
 // startCleanupJob();        // Xóa dữ liệu orphan mỗi giờ
 // startExpiredGuestCleanup(); // Xóa guest hết hạn mỗi ngày lúc 3:00 AM
 
-startDailyDatabaseBackupOverwriteJob();
+//startDailyDatabaseBackupOverwriteJob();
 
 const server = http.createServer(app);
 
