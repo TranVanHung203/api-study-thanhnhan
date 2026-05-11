@@ -27,6 +27,10 @@ const UserStreakSchema = new mongoose.Schema({
   streakStartDate: {
     type: String,
     default: null
+  },
+  recentCheckins: {
+    type: [String],
+    default: []
   }
 }, { timestamps: true });
 

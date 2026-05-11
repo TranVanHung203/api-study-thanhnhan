@@ -30,6 +30,31 @@ const shiftDateByDays = (date, days) => {
   return shifted;
 };
 
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+const sanitizeRecentCheckins = (checkedInDates, timezone) => {
+  if (!Array.isArray(checkedInDates)) return null;
+
+  const now = new Date();
+  const today = formatDateInTimezone(now, timezone);
+  const oldestAllowed = formatDateInTimezone(shiftDateByDays(now, -29), timezone);
+
+  return Array.from(new Set(
+    checkedInDates
+      .filter((value) => typeof value === 'string')
+      .map((value) => value.trim())
+      .filter((value) => DATE_PATTERN.test(value))
+      .filter((value) => value >= oldestAllowed && value <= today)
+  )).sort();
+};
+
+const addCheckinDateAndTrim = (recentCheckins, dateKey) => {
+  const source = Array.isArray(recentCheckins) ? recentCheckins : [];
+  const next = new Set(source);
+  next.add(dateKey);
+  return Array.from(next).sort().slice(-30);
+};
+
 export const getMyStreakController = async (req, res, next) => {
   try {
     const userId = req.user?.id;
@@ -90,7 +115,8 @@ export const checkInStreakController = async (req, res, next) => {
         currentStreak: 1,
         longestStreak: 1,
         lastActiveDate: today,
-        streakStartDate: today
+        streakStartDate: today,
+        recentCheckins: [today]
       });
 
       return res.status(200).json({
@@ -112,6 +138,7 @@ export const checkInStreakController = async (req, res, next) => {
     const yesterday = formatDateInTimezone(shiftDateByDays(now, -1), timezone);
 
     if (streak.lastActiveDate === today) {
+      streak.recentCheckins = addCheckinDateAndTrim(streak.recentCheckins, today);
       await streak.save();
       return res.status(200).json({
         currentStreak: streak.currentStreak,
@@ -135,6 +162,7 @@ export const checkInStreakController = async (req, res, next) => {
     }
 
     streak.lastActiveDate = today;
+    streak.recentCheckins = addCheckinDateAndTrim(streak.recentCheckins, today);
     await streak.save();
 
     return res.status(200).json({
@@ -144,6 +172,54 @@ export const checkInStreakController = async (req, res, next) => {
       streakStartDate: streak.streakStartDate,
       timezone: streak.timezone,
       alreadyCheckedIn: false
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const saveRecent30DaysCheckinsController = async (req, res, next) => {
+  try {
+    const userId = req.user?.id;
+    const user = await User.findOne({ _id: userId, isStatus: { $ne: 'deleted' } })
+      .select('_id')
+      .lean();
+
+    if (!user) {
+      return res.status(404).json({ message: 'User không tìm thấy' });
+    }
+
+    const inputTimezone = req.body?.timezone;
+    let streak = await UserStreak.findOne({ userId: user._id });
+    const fallbackTimezone = streak?.timezone || 'UTC';
+    const timezone = normalizeTimezone(inputTimezone, fallbackTimezone);
+
+    if (!streak) {
+      streak = new UserStreak({
+        userId: user._id,
+        timezone
+      });
+    } else if (timezone !== streak.timezone) {
+      streak.timezone = timezone;
+    }
+
+    const checkedInDates = req.body?.checkedInDates;
+    const sanitizedDates = sanitizeRecentCheckins(checkedInDates, timezone);
+
+    if (sanitizedDates === null) {
+      return res.status(400).json({
+        message: 'checkedInDates phải là mảng ngày dạng YYYY-MM-DD trong 30 ngày gần nhất'
+      });
+    }
+
+    streak.recentCheckins = sanitizedDates;
+    await streak.save();
+
+    return res.status(200).json({
+      message: 'Lưu lịch sử điểm danh 30 ngày thành công',
+      timezone: streak.timezone,
+      recentCheckins: streak.recentCheckins,
+      totalCheckedInDays: streak.recentCheckins.length
     });
   } catch (error) {
     next(error);
