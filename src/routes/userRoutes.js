@@ -305,7 +305,7 @@ router.get('/teacher/students', getTeacherManagedStudentsController);
  *                 type: string
  *                 nullable: true
  *                 example: 0912345678
- *               avatar:
+ *               imageFile:
  *                 type: string
  *                 format: binary
  *                 description: Anh dai dien moi (optional), ho tro jpg/jpeg/png/webp/gif
@@ -323,7 +323,7 @@ router.get('/teacher/students', getTeacherManagedStudentsController);
  *       401:
  *         description: Chua xac thuc
  */
-router.patch('/teacher/students/:studentId', upload.single('avatar'), updateTeacherManagedStudentController);
+router.patch('/teacher/students/:studentId', upload.single('imageFile'), updateTeacherManagedStudentController);
 
 /**
  * @swagger

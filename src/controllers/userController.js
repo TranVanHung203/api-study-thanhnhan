@@ -1180,6 +1180,18 @@ export const getOnlineUsersController = async (req, res, next) => {
 
 export const updateTeacherManagedStudentController = async (req, res, next) => {
   try {
+    const avatarFile = req.file || null;
+    let avatarExt = null;
+    if (avatarFile) {
+      avatarExt = resolveImageExtFromUploadFile(avatarFile);
+      if (!avatarExt) {
+        return res.status(400).json({ message: 'imageFile phai la file anh jpg/jpeg/png/webp/gif' });
+      }
+      if (!avatarFile.buffer || !Buffer.isBuffer(avatarFile.buffer) || avatarFile.buffer.length === 0) {
+        return res.status(400).json({ message: 'File imageFile khong hop le' });
+      }
+    }
+
     const teacherContext = await getTeacherContext(req.user?.id);
     if (teacherContext.error) {
       return res.status(teacherContext.error.status).json({ message: teacherContext.error.message });
@@ -1303,6 +1315,25 @@ export const updateTeacherManagedStudentController = async (req, res, next) => {
 
     await student.save();
 
+    let avatarUploadError = null;
+    if (avatarFile && avatarExt) {
+      try {
+        const uploadResult = await uploadAvatarBufferToCloudinary({
+          buffer: avatarFile.buffer,
+          username: student.username,
+          avatarCode: 'profile',
+          ext: avatarExt
+        });
+        const avatarUrl = uploadResult?.secure_url || null;
+        if (avatarUrl) {
+          await User.updateOne({ _id: student._id }, { $set: { avatarUrl } });
+          student.avatarUrl = avatarUrl;
+        }
+      } catch (avatarError) {
+        avatarUploadError = 'Khong the upload imageFile, giu avatar hien tai';
+      }
+    }
+
     const parentInfoUpdate = {};
     if (fatherName !== undefined) {
       parentInfoUpdate.fatherName = normalizeOptionalText(fatherName);
@@ -1346,11 +1377,13 @@ export const updateTeacherManagedStudentController = async (req, res, next) => {
 
     return res.status(200).json({
       message: 'Cập nhật học sinh thành công',
+      avatarUploadError,
       student: {
         userId: student._id,
         username: student.username,
         fullName: student.fullName,
         email: student.email,
+        avatarUrl: student.avatarUrl || null,
         gender: student.gender ?? null,
         schoolId: student.schoolId,
         schoolClasses: classList,
