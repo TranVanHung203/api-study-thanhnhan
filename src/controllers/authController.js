@@ -8,6 +8,7 @@ import PasswordResetOTP from '../models/passwordResetOtp.schema.js';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
+import crypto from 'crypto';
 import BadRequestError from '../errors/badRequestError.js';
 import NotFoundError from '../errors/notFoundError.js';
 import UnauthorizedError from '../errors/unauthorizedError.js';
@@ -1240,13 +1241,23 @@ export const facebookTokenController = async (req, res, next) => {
 
 const fetchZaloProfile = async (token) => {
   try {
+    if (!ZALO_APP_SECRET) {
+      throw new BadRequestError('Missing ZALO_APP_SECRET in server config');
+    }
+
+    const appsecretProof = crypto
+      .createHmac('sha256', ZALO_APP_SECRET)
+      .update(token)
+      .digest('hex');
+
     const meUrl = new URL('https://graph.zalo.me/v2.0/me');
     meUrl.searchParams.set('fields', 'id,name,picture');
-    meUrl.searchParams.set('access_token', token);
 
     const response = await fetch(meUrl.toString(), {
       headers: {
-        Accept: 'application/json'
+        Accept: 'application/json',
+        access_token: token,
+        appsecret_proof: appsecretProof
       }
     });
 
@@ -1254,7 +1265,14 @@ const fetchZaloProfile = async (token) => {
       throw new Error('Failed to fetch Zalo user info');
     }
 
-    const payload = await response.json();
+    const rawPayload = await response.text();
+    let payload = null;
+    try {
+      payload = JSON.parse(rawPayload);
+    } catch (parseError) {
+      throw new Error('Failed to parse Zalo user info');
+    }
+
     if (payload?.error) {
       throw new UnauthorizedError(payload?.message || 'Invalid Zalo accessToken');
     }
@@ -1265,6 +1283,9 @@ const fetchZaloProfile = async (token) => {
 
     return payload;
   } catch (err) {
+    if (err instanceof BadRequestError) {
+      throw err;
+    }
     if (err instanceof UnauthorizedError) {
       throw err;
     }
