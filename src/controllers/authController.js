@@ -9,6 +9,9 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
 import crypto from 'crypto';
+import axios from 'axios';
+import { HttpsProxyAgent } from 'https-proxy-agent';
+import { SocksProxyAgent } from 'socks-proxy-agent';
 import BadRequestError from '../errors/badRequestError.js';
 import NotFoundError from '../errors/notFoundError.js';
 import UnauthorizedError from '../errors/unauthorizedError.js';
@@ -31,10 +34,62 @@ const FACEBOOK_APP_SECRET = process.env.FACEBOOK_APP_SECRET || '';
 const ZALO_APP_ID = process.env.ZALO_APP_ID || '';
 const ZALO_APP_SECRET = process.env.ZALO_APP_SECRET || '';
 const ZALO_REDIRECT_URI = process.env.ZALO_REDIRECT_URI || '';
+const ZALO_PROFILE_RELAY_URL = process.env.ZALO_PROFILE_RELAY_URL || '';
+const ZALO_PROFILE_RELAY_SECRET = process.env.ZALO_PROFILE_RELAY_SECRET || '';
+const ZALO_PROXY_ENABLED = ['1', 'true', 'yes', 'on'].includes(String(process.env.ZALO_PROXY_ENABLED || '').trim().toLowerCase());
+const ZALO_PROXY_URL = String(process.env.ZALO_PROXY_URL || '').trim();
+const ZALO_PROXY_TIMEOUT_MS_RAW = Number.parseInt(process.env.ZALO_PROXY_TIMEOUT_MS || '15000', 10);
+const ZALO_PROXY_TIMEOUT_MS =
+  Number.isFinite(ZALO_PROXY_TIMEOUT_MS_RAW) && ZALO_PROXY_TIMEOUT_MS_RAW > 0
+    ? ZALO_PROXY_TIMEOUT_MS_RAW
+    : 15000;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
 const GEMINI_TOPIC_MODEL = process.env.GEMINI_TOPIC_MODEL || process.env.GEMINI_TEXT_MODEL || 'gemini-2.5-flash';
 const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const createZaloProxyAgent = () => {
+  if (!ZALO_PROXY_ENABLED) {
+    return null;
+  }
+
+  if (!ZALO_PROXY_URL) {
+    console.warn('ZALO_PROXY_ENABLED is true but ZALO_PROXY_URL is empty. Fallback to direct network for Zalo requests.');
+    return null;
+  }
+
+  try {
+    const normalizedProxyUrl = ZALO_PROXY_URL.toLowerCase();
+    if (
+      normalizedProxyUrl.startsWith('socks://') ||
+      normalizedProxyUrl.startsWith('socks4://') ||
+      normalizedProxyUrl.startsWith('socks4a://') ||
+      normalizedProxyUrl.startsWith('socks5://') ||
+      normalizedProxyUrl.startsWith('socks5h://')
+    ) {
+      return new SocksProxyAgent(ZALO_PROXY_URL);
+    }
+
+    return new HttpsProxyAgent(ZALO_PROXY_URL);
+  } catch (error) {
+    console.error('Failed to initialize Zalo proxy agent. Fallback to direct network.', error);
+    return null;
+  }
+};
+
+const zaloProxyAgent = createZaloProxyAgent();
+
+const getZaloHttpConfig = () => {
+  if (!zaloProxyAgent) {
+    return {};
+  }
+
+  return {
+    httpAgent: zaloProxyAgent,
+    httpsAgent: zaloProxyAgent,
+    proxy: false
+  };
+};
 
 const normalizeTopicSlug = (value) => {
   return String(value || '').trim().toLowerCase();
@@ -1240,57 +1295,110 @@ export const facebookTokenController = async (req, res, next) => {
 
 
 const fetchZaloProfile = async (token) => {
-  try {
-    if (!ZALO_APP_SECRET) {
-      throw new BadRequestError('Missing ZALO_APP_SECRET in server config');
-    }
+  if (!ZALO_APP_SECRET) {
+    throw new BadRequestError('Missing ZALO_APP_SECRET in server config');
+  }
 
+  const normalizePayload = (value) => {
+    if (value && typeof value === 'object') {
+      return value;
+    }
+    if (typeof value === 'string') {
+      try {
+        return JSON.parse(value);
+      } catch (error) {
+        return null;
+      }
+    }
+    return null;
+  };
+
+  const isVietnamIpRestrictionMessage = (message) => {
+    const normalized = String(message || '').toLowerCase();
+    return normalized.includes('ip address not inside vietnam');
+  };
+
+  const assertZaloAppId = (payload) => {
+    if (ZALO_APP_ID && payload?.app_id && String(payload.app_id) !== String(ZALO_APP_ID)) {
+      throw new UnauthorizedError('Zalo token does not belong to this app');
+    }
+  };
+
+  const fetchDirectlyFromZalo = async () => {
     const appsecretProof = crypto
       .createHmac('sha256', ZALO_APP_SECRET)
       .update(token)
       .digest('hex');
 
-    const meUrl = new URL('https://graph.zalo.me/v2.0/me');
-    meUrl.searchParams.set('fields', 'id,name,picture');
-
-    const response = await fetch(meUrl.toString(), {
+    const response = await axios.get('https://graph.zalo.me/v2.0/me', {
+      params: {
+        fields: 'id,name,picture'
+      },
       headers: {
         Accept: 'application/json',
         access_token: token,
         appsecret_proof: appsecretProof
-      }
+      },
+      timeout: ZALO_PROXY_TIMEOUT_MS,
+      validateStatus: () => true,
+      ...getZaloHttpConfig()
     });
 
-    if (!response.ok) {
-      throw new Error('Failed to fetch Zalo user info');
-    }
-
-    const rawPayload = await response.text();
-    let payload = null;
-    try {
-      payload = JSON.parse(rawPayload);
-    } catch (parseError) {
-      throw new Error('Failed to parse Zalo user info');
-    }
-
-    if (payload?.error) {
+    const payload = normalizePayload(response?.data);
+    if (response.status < 200 || response.status >= 300 || payload?.error) {
       throw new UnauthorizedError(payload?.message || 'Invalid Zalo accessToken');
     }
 
-    if (ZALO_APP_ID && payload?.app_id && String(payload.app_id) !== String(ZALO_APP_ID)) {
-      throw new UnauthorizedError('Zalo token does not belong to this app');
+    assertZaloAppId(payload);
+    return payload;
+  };
+
+  const fetchViaRelayInVietnam = async () => {
+    if (!ZALO_PROFILE_RELAY_URL) {
+      throw new UnauthorizedError('Zalo profile relay is not configured');
     }
 
+    const response = await axios.post(ZALO_PROFILE_RELAY_URL, { token }, {
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        ...(ZALO_PROFILE_RELAY_SECRET ? { 'x-relay-secret': ZALO_PROFILE_RELAY_SECRET } : {})
+      },
+      timeout: ZALO_PROXY_TIMEOUT_MS,
+      validateStatus: () => true,
+      ...getZaloHttpConfig()
+    });
+
+    const payload = normalizePayload(response?.data);
+    if (response.status < 200 || response.status >= 300 || !payload || payload?.error) {
+      throw new UnauthorizedError(payload?.message || 'Failed to fetch Zalo profile from Vietnam relay');
+    }
+
+    assertZaloAppId(payload);
     return payload;
-  } catch (err) {
-    if (err instanceof BadRequestError) {
-      throw err;
+  };
+
+  try {
+    return await fetchDirectlyFromZalo();
+  } catch (directError) {
+    if (!(directError instanceof UnauthorizedError)) {
+      console.error('Error fetching Zalo user info:', directError);
+      throw new UnauthorizedError('Invalid Zalo accessToken');
     }
-    if (err instanceof UnauthorizedError) {
-      throw err;
+
+    if (!isVietnamIpRestrictionMessage(directError.message)) {
+      throw directError;
     }
-    console.error('Error fetching Zalo user info:', err);
-    throw new UnauthorizedError('Invalid Zalo accessToken');
+
+    try {
+      return await fetchViaRelayInVietnam();
+    } catch (relayError) {
+      if (relayError instanceof UnauthorizedError) {
+        throw relayError;
+      }
+      console.error('Error fetching Zalo profile via Vietnam relay:', relayError);
+      throw new UnauthorizedError('Failed to fetch Zalo profile from Vietnam relay');
+    }
   }
 };
 
@@ -1451,16 +1559,24 @@ export const zaloCodeController = async (req, res, next) => {
 
     let tokenPayload;
     try {
-      const response = await fetch('https://oauth.zaloapp.com/v4/access_token', {
-        method: 'POST',
+      const response = await axios.post('https://oauth.zaloapp.com/v4/access_token', body.toString(), {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
           secret_key: ZALO_APP_SECRET
         },
-        body: body.toString()
+        timeout: ZALO_PROXY_TIMEOUT_MS,
+        validateStatus: () => true,
+        ...getZaloHttpConfig()
       });
 
-      tokenPayload = await response.json();
+      tokenPayload = response?.data;
+      if (typeof tokenPayload === 'string') {
+        try {
+          tokenPayload = JSON.parse(tokenPayload);
+        } catch (error) {
+          tokenPayload = null;
+        }
+      }
     } catch (err) {
       console.error('Error exchanging Zalo code:', err);
       throw new UnauthorizedError('Invalid Zalo OAuth code');
