@@ -5,6 +5,7 @@ import Quiz from '../models/quiz.schema.js';
 import UserActivity from '../models/userActivity.schema.js';
 import LessonCompletion from '../models/lessonCompletion.schema.js';
 import ChapterCompletion from '../models/chapterCompletion.schema.js';
+import ClassCompletion from '../models/classCompletion.schema.js';
 
 // Helper function: Create slug from text
 const createSlug = (text) => {
@@ -373,6 +374,35 @@ export const completeProgressController = async (req, res, next) => {
 
         await chapterCompletion.save();
         chapterCompleted = true;
+
+        const chapter = await Chapter.findById(lesson.chapterId);
+
+        if (chapter) {
+          const lastChapterInClass = await Chapter.findOne({
+            classId: chapter.classId
+          }).sort({ order: -1, createdAt: -1 });
+
+          if (lastChapterInClass && lastChapterInClass._id.toString() === chapter._id.toString()) {
+            let classCompletion = await ClassCompletion.findOne({
+              userId,
+              classId: chapter.classId
+            });
+
+            if (!classCompletion) {
+              classCompletion = new ClassCompletion({
+                userId,
+                classId: chapter.classId,
+                isCompleted: true,
+                completedAt: new Date()
+              });
+            } else {
+              classCompletion.isCompleted = true;
+              classCompletion.completedAt = new Date();
+            }
+
+            await classCompletion.save();
+          }
+        }
       }
     }
 

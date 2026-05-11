@@ -4,6 +4,8 @@ import Chapter from '../models/chapter.schema.js';
 import Lesson from '../models/lesson.schema.js';
 import LessonCompletion from '../models/lessonCompletion.schema.js';
 import ChapterCompletion from '../models/chapterCompletion.schema.js';
+import ClassCompletion from '../models/classCompletion.schema.js';
+import UserActivity from '../models/userActivity.schema.js';
 import Progress from '../models/progress.schema.js';
 import QuizAttempt from '../models/quizAttempt.schema.js';
 import mongoose from 'mongoose';
@@ -11,11 +13,119 @@ import mongoose from 'mongoose';
 // Lấy tất cả classes
 export const getAllClassesController = async (req, res, next) => {
   try {
-    const classes = await Class.find();
-    return res.status(200).json({
-      message: 'Lấy danh sách lớp thành công',
-      data: classes
+    const userId = req.user && (req.user.id || req.user._id);
+
+    // Get classes ordered
+    const classes = await Class.find().sort({ order: 1, createdAt: 1, _id: 1 }).select('-description -createdAt -__v').lean();
+
+    if (!userId) {
+      // If no user (shouldn't happen due to auth), return classes without user-specific fields
+      return res.status(200).json({ message: 'Lấy danh sách lớp thành công', data: classes });
+    }
+
+    // Collect ids
+    const classIds = classes.map(c => c._id);
+
+    // Load chapters, lessons, progresses and completions in bulk
+    const chapters = await Chapter.find({ classId: { $in: classIds } }).sort({ order: 1 }).lean();
+    const chapterIds = chapters.map(ch => ch._id);
+    const lessons = await Lesson.find({ chapterId: { $in: chapterIds } }).sort({ order: 1 }).lean();
+    const lessonIds = lessons.map(l => l._id);
+    const progresses = await Progress.find({ lessonId: { $in: lessonIds } }).select('_id lessonId').lean();
+
+    // User completion/activity data
+    const userActivities = await UserActivity.find({ userId, progressId: { $in: progresses.map(p => p._id) } }).select('progressId isCompleted').lean();
+    const lessonCompletions = await LessonCompletion.find({ userId, lessonId: { $in: lessonIds } }).lean();
+    const chapterCompletions = await ChapterCompletion.find({ userId, chapterId: { $in: chapterIds } }).lean();
+    const classCompletions = await ClassCompletion.find({ userId, classId: { $in: classIds } }).lean();
+
+    const completedProgressSet = new Set(userActivities.filter(a => a.isCompleted).map(a => String(a.progressId)));
+    const lessonCompletionMap = new Map(lessonCompletions.map(lc => [String(lc.lessonId), lc.isCompleted]));
+    const chapterCompletionMap = new Map(chapterCompletions.map(cc => [String(cc.chapterId), cc.isCompleted]));
+    const classCompletionMap = new Map(classCompletions.map(cc => [String(cc.classId), cc.isCompleted]));
+
+    // helpers
+    const progressesByLesson = new Map();
+    progresses.forEach(p => {
+      const key = String(p.lessonId);
+      if (!progressesByLesson.has(key)) progressesByLesson.set(key, []);
+      progressesByLesson.get(key).push(String(p._id));
     });
+
+    const lessonsByChapter = new Map();
+    lessons.forEach(l => {
+      const key = String(l.chapterId);
+      if (!lessonsByChapter.has(key)) lessonsByChapter.set(key, []);
+      lessonsByChapter.get(key).push(l);
+    });
+
+    const chaptersByClass = new Map();
+    chapters.forEach(ch => {
+      const key = String(ch.classId);
+      if (!chaptersByClass.has(key)) chaptersByClass.set(key, []);
+      chaptersByClass.get(key).push(ch);
+    });
+
+    // compute per-lesson percent
+    const lessonPercentMap = new Map();
+    lessons.forEach(lesson => {
+      const pids = progressesByLesson.get(String(lesson._id)) || [];
+      if (pids.length === 0) {
+        const lc = lessonCompletionMap.get(String(lesson._id));
+        lessonPercentMap.set(String(lesson._id), lc ? 100 : 0);
+      } else {
+        const done = pids.filter(pid => completedProgressSet.has(pid)).length;
+        lessonPercentMap.set(String(lesson._id), Math.round((done / pids.length) * 10000) / 100);
+      }
+    });
+
+    // compute per-chapter percent (average of its lessons)
+    const chapterPercentMap = new Map();
+    chapters.forEach(ch => {
+      const ls = lessonsByChapter.get(String(ch._id)) || [];
+      if (ls.length === 0) {
+        const cc = chapterCompletionMap.get(String(ch._id));
+        chapterPercentMap.set(String(ch._id), cc ? 100 : 0);
+      } else {
+        const avg = ls.reduce((s, l) => s + (lessonPercentMap.get(String(l._id)) || 0), 0) / ls.length;
+        chapterPercentMap.set(String(ch._id), Math.round(avg * 100) / 100);
+      }
+    });
+
+    // compute per-class percent (average of its chapters)
+    const classPercentMap = new Map();
+    classes.forEach(cls => {
+      const chs = chaptersByClass.get(String(cls._id)) || [];
+      if (chs.length === 0) {
+        const cc = classCompletionMap.get(String(cls._id));
+        classPercentMap.set(String(cls._id), cc ? 100 : 0);
+      } else {
+        const avg = chs.reduce((s, ch) => s + (chapterPercentMap.get(String(ch._id)) || 0), 0) / chs.length;
+        classPercentMap.set(String(cls._id), Math.round(avg * 100) / 100);
+      }
+    });
+
+    // determine current class: first class (by order) with percent < 100 and without classCompletion
+    let currentClassId = null;
+    for (const cls of classes) {
+      const clsId = String(cls._id);
+      const isComplete = !!classCompletionMap.get(clsId) || (classPercentMap.get(clsId) || 0) >= 100;
+      if (!isComplete) { currentClassId = clsId; break; }
+    }
+
+    const out = classes.map(cls => {
+      const cid = String(cls._id);
+      const completedPercent = classCompletionMap.get(cid) ? 100 : (classPercentMap.get(cid) || 0);
+      const isComplete = !!classCompletionMap.get(cid) || completedPercent >= 100;
+      return {
+        ...cls,
+        isComplete,
+        isCurrent: currentClassId === cid,
+        completedPercent
+      };
+    });
+
+    return res.status(200).json({ message: 'Lấy danh sách lớp thành công', data: out });
   } catch (error) {
     next(error);
   }
@@ -48,7 +158,7 @@ export const getClassByIdController = async (req, res, next) => {
 // Tạo class mới (chỉ giáo viên)
 export const createClassController = async (req, res, next) => {
   try {
-    const { name, description, level } = req.body;
+    const { name, description, level, order } = req.body;
 
     if (!name) {
       return res.status(400).json({ message: 'Vui lòng nhập tên lớp' });
@@ -56,6 +166,7 @@ export const createClassController = async (req, res, next) => {
 
     const newClass = new Class({
       name,
+      order: order !== undefined ? order : 0,
       description,
       level
     });
@@ -75,11 +186,16 @@ export const createClassController = async (req, res, next) => {
 export const updateClassController = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { name, description, level } = req.body;
+    const { name, description, level, order } = req.body;
 
     const classData = await Class.findByIdAndUpdate(
       id,
-      { name, description, level },
+      {
+        name,
+        description,
+        level,
+        ...(order !== undefined ? { order } : {})
+      },
       { new: true }
     );
 
@@ -150,6 +266,52 @@ export const addStudentToClassController = async (req, res, next) => {
   }
 };
 
+// Chọn class cho user (gán classId cho user) và đánh completed cho các class trước đó
+export const selectClassController = async (req, res, next) => {
+  try {
+    const { classId } = req.params;
+    const userId = req.user && (req.user.id || req.user._id);
+
+    if (!userId) return res.status(401).json({ message: 'Không xác định được user' });
+
+    if (!mongoose.Types.ObjectId.isValid(classId)) {
+      return res.status(400).json({ message: 'classId không hợp lệ' });
+    }
+
+    const cls = await Class.findById(classId);
+    if (!cls) return res.status(404).json({ message: 'Lớp không tồn tại' });
+
+    // Update user's classId
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ message: 'Người dùng không tồn tại' });
+
+    user.classId = cls._id;
+    await user.save();
+
+    // Find all classes with order less than selected class order
+    const previousClasses = await Class.find({ order: { $lt: cls.order } }).sort({ order: 1 });
+
+    let marked = 0;
+    for (const prev of previousClasses) {
+      let cc = await ClassCompletion.findOne({ userId, classId: prev._id });
+      if (!cc) {
+        cc = new ClassCompletion({ userId, classId: prev._id, isCompleted: true, completedAt: new Date() });
+      } else {
+        if (!cc.isCompleted) {
+          cc.isCompleted = true;
+          cc.completedAt = new Date();
+        }
+      }
+      await cc.save();
+      marked += 1;
+    }
+
+    return res.status(200).json({ message: 'Chọn lớp thành công', markedPreviousClasses: marked });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // Xóa học viên khỏi class
 export const removeStudentFromClassController = async (req, res, next) => {
   try {
@@ -179,6 +341,8 @@ export const removeStudentFromClassController = async (req, res, next) => {
 // =====================================================
 // Lấy tất cả chapters với lessons và trạng thái học của user
 // =====================================================
+const roundPercent = (value) => Number(Number(value || 0).toFixed(2));
+
 export const getClassChaptersMapController = async (req, res, next) => {
   try {
     const { classId } = req.params;
@@ -188,6 +352,25 @@ export const getClassChaptersMapController = async (req, res, next) => {
     const classData = await Class.findById(classId);
     if (!classData) {
       return res.status(404).json({ message: 'Lớp không tồn tại' });
+    }
+
+    // 1.1. Chỉ cho phép xem class này khi class trước đó đã hoàn thành
+    const orderedClasses = await Class.find().sort({ order: 1, createdAt: 1, _id: 1 });
+    const currentClassIndex = orderedClasses.findIndex((item) => item._id.toString() === classId);
+
+    if (currentClassIndex > 0) {
+      const previousClass = orderedClasses[currentClassIndex - 1];
+      const previousClassCompletion = await ClassCompletion.findOne({
+        userId,
+        classId: previousClass._id,
+        isCompleted: true
+      });
+
+      if (!previousClassCompletion) {
+        return res.status(400).json({
+          message: 'Bạn phải hoàn thành lớp trước đó trước khi xem nội dung lớp này'
+        });
+      }
     }
 
     // 2. Lấy tất cả chapters của class, sắp xếp theo order

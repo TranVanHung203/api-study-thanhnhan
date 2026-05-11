@@ -7,6 +7,7 @@ import {
   deleteClassController,
   addStudentToClassController,
   removeStudentFromClassController,
+  selectClassController,
   getClassChaptersMapController,
   getClassChaptersPracticeMapController
 } from '../controllers/classController.js';
@@ -282,37 +283,77 @@ router.get('/', getAllClassesController);
  */
 router.get('/:classId/chapters', getClassChaptersMapController);
 
+// Select a class for current user and mark previous classes completed
 /**
  * @swagger
- * /classes/{classId}/chapters/{userId}:
- *   get:
- *     summary: Lay chapters va lessons theo trang thai lam bai luyen tap cua user
- *     description: |
- *       Tra ve danh sach chapters boc lessons.
- *       Khong co truong isCurrent.
- *       isCompleted = true khi user da tung co quiz attempt o progress "Luyen tap" cua lesson.
+ * /classes/{classId}/select:
+ *   post:
+ *     summary: Chọn lớp cho user hiện tại và đánh hoàn thành các lớp trước đó
  *     tags: [Class]
- *     security:
- *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: classId
  *         required: true
+ *         description: ID của lớp cần chọn
  *         schema:
  *           type: string
- *       - in: path
- *         name: userId
- *         required: true
- *         schema:
- *           type: string
+ *     security:
+ *       - bearerAuth: []
  *     responses:
  *       200:
- *         description: Danh sach chapters voi lessons va isCompleted
+ *         description: Chọn lớp thành công
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 user:
+ *                   type: object
+ *                 markedPreviousClasses:
+ *                   type: integer
+ *                   description: Số lớp trước đó đã được đánh completed
  *       400:
- *         description: userId khong hop le
+ *         description: classId không hợp lệ hoặc yêu cầu không hợp lệ
+ *       401:
+ *         description: Không xác thực
  *       404:
- *         description: Lop khong ton tai
+ *         description: Lớp hoặc user không tồn tại
  */
-router.get('/:classId/chapters/:userId', getClassChaptersPracticeMapController);
+router.post('/:classId/select', selectClassController);
+
+// /**
+//  * @swagger
+//  * /classes/{classId}/chapters/{userId}:
+//  *   get:
+//  *     summary: Lay chapters va lessons theo trang thai lam bai luyen tap cua user
+//  *     description: |
+//  *       Tra ve danh sach chapters boc lessons.
+//  *       Khong co truong isCurrent.
+//  *       isCompleted = true khi user da tung co quiz attempt o progress "Luyen tap" cua lesson.
+//  *     tags: [Class]
+//  *     security:
+//  *       - bearerAuth: []
+//  *     parameters:
+//  *       - in: path
+//  *         name: classId
+//  *         required: true
+//  *         schema:
+//  *           type: string
+//  *       - in: path
+//  *         name: userId
+//  *         required: true
+//  *         schema:
+//  *           type: string
+//  *     responses:
+//  *       200:
+//  *         description: Danh sach chapters voi lessons va isCompleted
+//  *       400:
+//  *         description: userId khong hop le
+//  *       404:
+//  *         description: Lop khong ton tai
+//  */
+// router.get('/:classId/chapters/:userId', getClassChaptersPracticeMapController);
 
 export default router;

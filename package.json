@@ -10,7 +10,8 @@
     "migrate:preference-image": "node ./scripts/addPreferenceQuestionImageCodeNull.js",
     "sample:preference": "node ./scripts/addPreferenceQuestionSample.js",
     "grant:admin": "node ./scripts/grantAdminRole.js",
-    "backfill:user-code": "node ./scripts/backfillUserCode.js"
+    "backfill:user-code": "node ./scripts/backfillUserCode.js",
+    "backfill:class-order": "node ./scripts/backfillClassOrder.js"
   },
   "author": "",
   "license": "ISC",
