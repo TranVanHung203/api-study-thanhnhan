@@ -6,6 +6,10 @@ import {
   updateQuizController,
   deleteQuizController
 } from '../controllers/quizNewController.js';
+import {
+  getAdvancedLearningQuestionsController,
+  submitAdvancedLearningController
+} from '../controllers/advancedLearningController.js';
 import { authToken } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
@@ -133,6 +137,120 @@ router.patch('/:quizId', updateQuizController);
  *         description: Xóa thành công
  */
 router.delete('/:quizId', deleteQuizController);
+
+/**
+ * @swagger
+ * /quizzes/overstudy/questions:
+ *   get:
+ *     summary: Lay toan bo cau hoi hoc vuot theo classId
+ *     description: Tim cac quiz co classId duoc truyen vao, sau do tra ve toan bo cau hoi thuoc cac quiz do.
+ *     tags: [Quizzes]
+ *     parameters:
+ *       - in: query
+ *         name: classId
+ *         required: true
+ *         description: Class ID can lay bo cau hoi hoc vuot
+ *         schema:
+ *           type: string
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Danh sach quiz va cau hoi hoc vuot
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 classId:
+ *                   type: string
+ *                 classInfo:
+ *                   type: object
+ *                 totalQuizzes:
+ *                   type: integer
+ *                 totalQuestions:
+ *                   type: integer
+ *                 quizzes:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 questions:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *       400:
+ *         description: Missing classId hoac classId khong hop le
+ *       404:
+ *         description: Lop khong ton tai
+ */
+router.get('/overstudy/questions', getAdvancedLearningQuestionsController);
+
+/**
+ * @swagger
+ * /quizzes/overstudy/submit:
+ *   post:
+ *     summary: Nop bai hoc vuot va tu dong gan class khi dat >= 80%
+ *     description: Cham diem tren toan bo cau hoi cua class. Neu dung tu 80 phantram tro len, he thong goi selectClassController de gan classId cho user.
+ *     tags: [Quizzes]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - classId
+ *               - answers
+ *             properties:
+ *               classId:
+ *                 type: string
+ *               answers:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   required:
+ *                     - questionId
+ *                   properties:
+ *                     questionId:
+ *                       type: string
+ *                     userAnswer:
+ *                       description: Dap an cua hoc sinh (number/string/array tuy loai cau hoi)
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Ket qua cham bai hoc vuot
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 classId:
+ *                   type: string
+ *                 totalQuestions:
+ *                   type: integer
+ *                 correctCount:
+ *                   type: integer
+ *                 percentCorrect:
+ *                   type: number
+ *                 passPercent:
+ *                   type: number
+ *                 passed:
+ *                   type: boolean
+ *                 classSelected:
+ *                   type: boolean
+ *                 selectClassResult:
+ *                   type: object
+ *                 details:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *       400:
+ *         description: Du lieu khong hop le hoac khong the gan class
+ *       404:
+ *         description: Lop khong ton tai
+ */
+router.post('/overstudy/submit', submitAdvancedLearningController);
 
 
 
