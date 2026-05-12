@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import Quiz from '../models/quiz.schema.js';
 import Question from '../models/question.schema.js';
 import Class from '../models/class.schema.js';
+import User from '../models/user.schema.js';
 import BadRequestError from '../errors/badRequestError.js';
 import NotFoundError from '../errors/notFoundError.js';
 import { selectClassController } from './classController.js';
@@ -85,6 +86,7 @@ const invokeSelectClassController = ({ req, classId }) => {
 export const getAdvancedLearningQuestionsController = async (req, res, next) => {
   try {
     const classId = String(req.query.classId || '').trim();
+    const userId = req.user?.id || req.user?._id;
     if (!classId) {
       throw new BadRequestError('Missing classId');
     }
@@ -97,6 +99,25 @@ export const getAdvancedLearningQuestionsController = async (req, res, next) => 
       throw new NotFoundError('Lớp không tồn tại');
     }
 
+    if (userId) {
+      const userDoc = await User.findById(userId).select('_id classId').lean();
+      if (!userDoc) {
+        throw new NotFoundError('Không tìm thấy người dùng');
+      }
+
+      if (userDoc.classId && mongoose.Types.ObjectId.isValid(String(userDoc.classId))) {
+        const currentClassDoc = await Class.findById(userDoc.classId).select('_id order').lean();
+        if (currentClassDoc && Number(classDoc.order) <= Number(currentClassDoc.order)) {
+          return res.status(200).json({
+            classId,
+            alreadyUnlocked: true,
+            message: 'Bạn đã mở khóa lớp học này rồi',
+            totalQuestions: 0,
+            questions: []
+          });
+        }
+      }
+    }
     const quizzes = await Quiz.find({ classId })
       .select('_id title description classId bonusPoints totalQuestions createdAt')
       .sort({ createdAt: 1, _id: 1 })
@@ -135,7 +156,7 @@ export const submitAdvancedLearningController = async (req, res, next) => {
     const userId = req.user?.id || req.user?._id;
 
     if (!userId) {
-      throw new BadRequestError('Không xác định được user');
+      throw new BadRequestError('Không thể xác định được user');
     }
     if (!classId) {
       throw new BadRequestError('Missing classId');
@@ -147,6 +168,25 @@ export const submitAdvancedLearningController = async (req, res, next) => {
     const classDoc = await Class.findById(classId).select('_id name order').lean();
     if (!classDoc) {
       throw new NotFoundError('Lớp không tồn tại');
+    }
+
+    const userDoc = await User.findById(userId).select('_id classId').lean();
+    if (!userDoc) {
+      throw new NotFoundError('Không tìm thấy người dùng');
+    }
+
+    if (userDoc.classId && mongoose.Types.ObjectId.isValid(String(userDoc.classId))) {
+      const currentClassDoc = await Class.findById(userDoc.classId).select('_id order').lean();
+      if (currentClassDoc && Number(classDoc.order) <= Number(currentClassDoc.order)) {
+        return res.status(200).json({
+          classId,
+          alreadyUnlocked: true,
+          passed: false,
+          classSelected: false,
+          score: null,
+          message: 'Bạn đã mở khóa lớp học này rồi'
+        });
+      }
     }
 
     const quizzes = await Quiz.find({ classId }).select('_id classId').lean();
@@ -171,8 +211,6 @@ export const submitAdvancedLearningController = async (req, res, next) => {
     }
 
     let correctCount = 0;
-    const details = [];
-
     for (const question of questions) {
       const qid = String(question._id);
       const userAnswer = answerByQuestionId.get(qid);
@@ -180,39 +218,38 @@ export const submitAdvancedLearningController = async (req, res, next) => {
       if (isCorrect) {
         correctCount += 1;
       }
-      details.push({
-        questionId: qid,
-        isCorrect
-      });
     }
 
     const totalQuestions = questions.length;
     const percentCorrect = (correctCount / totalQuestions) * 100;
     const passed = percentCorrect >= PASS_PERCENT;
 
-    let selectClassResult = null;
+    let classSelected = false;
     if (passed) {
       const selected = await invokeSelectClassController({ req, classId });
       if (!selected || selected.statusCode >= 400) {
-        throw new BadRequestError(selected?.payload?.message || 'Khong the gan classId cho user');
+        throw new BadRequestError(selected?.payload?.message || 'Không thể gán classId cho user');
       }
-      selectClassResult = selected.payload || null;
+      classSelected = true;
     }
 
     return res.status(200).json({
       classId,
-      classInfo: classDoc,
-      totalQuestions,
-      answeredQuestions: answerByQuestionId.size,
-      correctCount,
-      percentCorrect: Number(percentCorrect.toFixed(2)),
-      passPercent: PASS_PERCENT,
+      alreadyUnlocked: false,
       passed,
-      classSelected: !!selectClassResult,
-      selectClassResult,
-      details
+      classSelected,
+      score: {
+        correct: correctCount,
+        total: totalQuestions,
+        percent: Number(percentCorrect.toFixed(2)),
+        requiredPercent: PASS_PERCENT
+      },
+      message: passed ? 'Học vượt thành công' : 'Chưa đạt 80% để học vượt'
     });
   } catch (error) {
     next(error);
   }
 };
+
+
+
