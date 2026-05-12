@@ -17,7 +17,7 @@ const normalizeRewardPoints = (value, fallback = null) => {
 export const createCharacterController = async (req, res, next) => {
   try {
     const userId = req.user.id;
-    const { name, url, rewardPoints } = req.body;
+    const { name, url, rewardPoints, staticImageUrl } = req.body;
 
     if (!name || !url) {
       throw new BadRequestError('name và url là bắt buộc');
@@ -31,6 +31,7 @@ export const createCharacterController = async (req, res, next) => {
     const character = new Character({
       name: String(name).trim(),
       url: String(url).trim(),
+      staticImageUrl: staticImageUrl || null,
       rewardPoints: parsedRewardPoints,
       createdBy: userId
     });
@@ -47,7 +48,7 @@ export const updateCharacterController = async (req, res, next) => {
   try {
     const userId = req.user.id;
     const { id } = req.params;
-    const { name, url, rewardPoints } = req.body;
+    const { name, url, rewardPoints, staticImageUrl } = req.body;
 
     const character = await Character.findById(id);
     if (!character) throw new NotFoundError('Không tìm thấy character');
@@ -58,6 +59,7 @@ export const updateCharacterController = async (req, res, next) => {
 
     if (name) character.name = String(name).trim();
     if (url) character.url = String(url).trim();
+    if (staticImageUrl !== undefined) character.staticImageUrl = staticImageUrl || null;
     if (rewardPoints !== undefined) {
       const parsedRewardPoints = normalizeRewardPoints(rewardPoints);
       if (parsedRewardPoints === null) {
@@ -177,7 +179,7 @@ export const getCharacterByIdController = async (req, res, next) => {
 export const buyCharacterController = async (req, res, next) => {
   try {
     const userId = req.user.id;
-    const { characterId } = req.body;
+    const characterId = req.params.characterId || req.body.characterId;
 
     if (!characterId) throw new BadRequestError('characterId là bắt buộc');
 
@@ -239,7 +241,7 @@ export const buyCharacterController = async (req, res, next) => {
 export const selectCharacterController = async (req, res, next) => {
   try {
     const userId = req.user.id;
-    const { characterId } = req.body;
+    const characterId = req.params.characterId || req.body.characterId;
 
     if (!characterId) throw new BadRequestError('characterId là bắt buộc');
 

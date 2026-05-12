@@ -42,59 +42,49 @@ router.get('/store', authToken, listCharacterStoreController);
 
 /**
  * @swagger
- * /characters/purchase:
+ * /characters/purchase/{characterId}:
  *   post:
  *     summary: Mua character bang reward points va gan luon character do cho user
  *     tags: [Characters]
  *     security:
  *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - characterId
- *             properties:
- *               characterId:
- *                 type: string
- *                 example: "63f1a2b4e1d2f3a4b5c6d7e8"
+ *     parameters:
+ *       - in: path
+ *         name: characterId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Character id
  *     responses:
  *       200:
  *         description: Mua thanh cong
  *       400:
  *         description: Khong du diem hoac du lieu khong hop le
  */
-router.post('/purchase', authToken, buyCharacterController);
+router.post('/purchase/:characterId', authToken, buyCharacterController);
 
 /**
  * @swagger
- * /characters/select:
+ * /characters/select/{characterId}:
  *   post:
  *     summary: Chon (doi) character cho user, chi duoc chon character da mua
  *     tags: [Characters]
  *     security:
  *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - characterId
- *             properties:
- *               characterId:
- *                 type: string
- *                 example: "63f1a2b4e1d2f3a4b5c6d7e8"
+ *     parameters:
+ *       - in: path
+ *         name: characterId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Character id
  *     responses:
  *       200:
  *         description: Chon character thanh cong
  *       403:
  *         description: Chua mua character nen khong duoc chon
  */
-router.post('/select', authToken, selectCharacterController);
+router.post('/select/:characterId', authToken, selectCharacterController);
 
 /**
  * @swagger
