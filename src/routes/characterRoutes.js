@@ -1,10 +1,10 @@
 import express from 'express';
 import {
-  createCharacterController,
-  updateCharacterController,
-  deleteCharacterController,
   listCharactersController,
+  listCharacterStoreController,
   getCharacterByIdController,
+  buyCharacterController,
+  selectCharacterController,
   attachCharacterToUserController,
   detachCharacterFromUserController
 } from '../controllers/characterController.js';
@@ -12,55 +12,145 @@ import { authToken } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
 
-// /**
-//  * @swagger
-//  * /characters:
-//  *   post:
-//  *     summary: Tạo một character mới
-//  *     tags: [Characters]
-//  *     security:
-//  *       - bearerAuth: []
-//  *     requestBody:
-//  *       required: true
-//  *       content:
-//  *         application/json:
-//  *           schema:
-//  *             type: object
-//  *             required:
-//  *               - name
-//  *               - url
-//  *             properties:
-//  *               name:
-//  *                 type: string
-//  *                 example: "Mascot A"
-//  *               url:
-//  *                 type: string
-//  *                 example: "https://cdn.example.com/mascot-a.png"
-//  *     responses:
-//  *       201:
-//  *         description: Created
-//  */
-// router.post('/', authToken, createCharacterController);
-
 /**
  * @swagger
  * /characters:
  *   get:
- *     summary: Lấy danh sách tất cả characters
+ *     summary: Lay danh sach character mien phi (rewardPoints = 0)
  *     tags: [Characters]
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       200:
- *         description: Danh sách characters
+ *         description: Danh sach character mien phi
  */
 router.get('/', authToken, listCharactersController);
 
 /**
  * @swagger
+ * /characters/store:
+ *   get:
+ *     summary: Lay danh sach tat ca character trong cua hang kem trang thai mua
+ *     tags: [Characters]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Danh sach character store
+ */
+router.get('/store', authToken, listCharacterStoreController);
+
+/**
+ * @swagger
+ * /characters/purchase:
+ *   post:
+ *     summary: Mua character bang reward points va gan luon character do cho user
+ *     tags: [Characters]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - characterId
+ *             properties:
+ *               characterId:
+ *                 type: string
+ *                 example: "63f1a2b4e1d2f3a4b5c6d7e8"
+ *     responses:
+ *       200:
+ *         description: Mua thanh cong
+ *       400:
+ *         description: Khong du diem hoac du lieu khong hop le
+ */
+router.post('/purchase', authToken, buyCharacterController);
+
+/**
+ * @swagger
+ * /characters/select:
+ *   post:
+ *     summary: Chon (doi) character cho user, chi duoc chon character da mua
+ *     tags: [Characters]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - characterId
+ *             properties:
+ *               characterId:
+ *                 type: string
+ *                 example: "63f1a2b4e1d2f3a4b5c6d7e8"
+ *     responses:
+ *       200:
+ *         description: Chon character thanh cong
+ *       403:
+ *         description: Chua mua character nen khong duoc chon
+ */
+router.post('/select', authToken, selectCharacterController);
+
+/**
+ * @swagger
+ * /characters/attach:
+ *   post:
+ *     summary: Route tuong thich cu, hanh vi nhu /characters/select (yeu cau da mua)
+ *     tags: [Characters]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - characterId
+ *             properties:
+ *               characterId:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Gan character thanh cong
+ */
+router.post('/attach', authToken, attachCharacterToUserController);
+
+/**
+ * @swagger
+ * /characters/detach:
+ *   post:
+ *     summary: Bo character dang gan khoi user hien tai
+ *     tags: [Characters]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - characterId
+ *             properties:
+ *               characterId:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Bo gan character thanh cong
+ */
+router.post('/detach', authToken, detachCharacterFromUserController);
+
+/**
+ * @swagger
  * /characters/{id}:
  *   get:
- *     summary: Lấy thông tin một character theo id
+ *     summary: Lay chi tiet mot character theo id
  *     tags: [Characters]
  *     security:
  *       - bearerAuth: []
@@ -73,120 +163,10 @@ router.get('/', authToken, listCharactersController);
  *         description: Character id
  *     responses:
  *       200:
- *         description: Thông tin character
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 character:
- *                   $ref: '#/components/schemas/Character'
+ *         description: Thong tin character
  *       404:
- *         description: Character không tìm thấy
+ *         description: Khong tim thay character
  */
 router.get('/:id', authToken, getCharacterByIdController);
-
-// /**
-//  * @swagger
-//  * /characters/{id}:
-//  *   put:
-//  *     summary: Cập nhật character (chỉ owner)
-//  *     tags: [Characters]
-//  *     security:
-//  *       - bearerAuth: []
-//  *     parameters:
-//  *       - in: path
-//  *         name: id
-//  *         required: true
-//  *         schema:
-//  *           type: string
-//  *     requestBody:
-//  *       required: false
-//  *       content:
-//  *         application/json:
-//  *           schema:
-//  *             type: object
-//  *             properties:
-//  *               name:
-//  *                 type: string
-//  *               url:
-//  *                 type: string
-//  *     responses:
-//  *       200:
-//  *         description: Updated
-//  */
-// router.put('/:id', authToken, updateCharacterController);
-
-// /**
-//  * @swagger
-//  * /characters/{id}:
-//  *   delete:
-//  *     summary: Xóa character (chỉ owner)
-//  *     tags: [Characters]
-//  *     security:
-//  *       - bearerAuth: []
-//  *     parameters:
-//  *       - in: path
-//  *         name: id
-//  *         required: true
-//  *         schema:
-//  *           type: string
-//  *     responses:
-//  *       200:
-//  *         description: Deleted
-//  */
-// router.delete('/:id', authToken, deleteCharacterController);
-
-/**
- * @swagger
- * /characters/attach:
- *   post:
- *     summary: Gắn character vào user hiện tại (lưu giá trị vào `characterId`)
- *     tags: [Characters]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - characterId
- *             properties:
- *               characterId:
- *                 type: string
- *                 example: "63f1a2b4e1d2f3a4b5c6d7e8"
- *     responses:
- *       200:
- *         description: Attached
- */
-router.post('/attach', authToken, attachCharacterToUserController);
-
-/**
- * @swagger
- * /characters/detach:
- *   post:
- *     summary: Bỏ gắn character khỏi user hiện tại (xóa nếu `characterId` trùng khớp)
- *     tags: [Characters]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - characterId
- *             properties:
- *               characterId:
- *                 type: string
- *                 example: "63f1a2b4e1d2f3a4b5c6d7e8"
- *     responses:
- *       200:
- *         description: Detached
- */
-router.post('/detach', authToken, detachCharacterFromUserController);
 
 export default router;

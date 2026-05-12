@@ -24,6 +24,7 @@ import UserActivity from './src/models/userActivity.schema.js';
 import Reward from './src/models/reward.schema.js';
 import RefreshToken from './src/models/refreshToken.schema.js';
 import Character from './src/models/character.schema.js';
+import UserCharacterPurchase from './src/models/userCharacterPurchase.schema.js';
 import RealtimeBattle from './src/models/realtimeBattle.schema.js';
 import Topic from './src/models/topic.schema.js';
 import PreferenceQuestion from './src/models/preferenceQuestion.schema.js';

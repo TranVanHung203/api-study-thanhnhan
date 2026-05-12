@@ -1,20 +1,39 @@
 import Character from '../models/character.schema.js';
 import User from '../models/user.schema.js';
+import Reward from '../models/reward.schema.js';
+import UserCharacterPurchase from '../models/userCharacterPurchase.schema.js';
 import BadRequestError from '../errors/badRequestError.js';
 import NotFoundError from '../errors/notFoundError.js';
 import ForbiddenError from '../errors/forbiddenError.js';
 
-// Create a new character (admin or user can create their own)
+const normalizeRewardPoints = (value, fallback = null) => {
+  if (value === undefined || value === null || value === '') return fallback;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) return null;
+  return Math.floor(parsed);
+};
+
+// Tạo nhân vật mới
 export const createCharacterController = async (req, res, next) => {
   try {
     const userId = req.user.id;
-    const { name, url } = req.body;
+    const { name, url, rewardPoints } = req.body;
 
     if (!name || !url) {
       throw new BadRequestError('name và url là bắt buộc');
     }
 
-    const character = new Character({ name: name.trim(), url: url.trim(), createdBy: userId });
+    const parsedRewardPoints = normalizeRewardPoints(rewardPoints, 0);
+    if (parsedRewardPoints === null) {
+      throw new BadRequestError('rewardPoints phải là số nguyên >= 0');
+    }
+
+    const character = new Character({
+      name: String(name).trim(),
+      url: String(url).trim(),
+      rewardPoints: parsedRewardPoints,
+      createdBy: userId
+    });
     await character.save();
 
     return res.status(201).json({ message: 'Tạo character thành công', character });
@@ -23,22 +42,29 @@ export const createCharacterController = async (req, res, next) => {
   }
 };
 
-// Update character (only owner can update)
+// Cập nhật nhân vật (chỉ chủ sở hữu mới có thể sửa)
 export const updateCharacterController = async (req, res, next) => {
   try {
     const userId = req.user.id;
     const { id } = req.params;
-    const { name, url } = req.body;
+    const { name, url, rewardPoints } = req.body;
 
     const character = await Character.findById(id);
-    if (!character) throw new NotFoundError('Character không tìm thấy');
+    if (!character) throw new NotFoundError('Không tìm thấy character');
 
     if (String(character.createdBy) !== String(userId)) {
       throw new ForbiddenError('Không có quyền sửa character này');
     }
 
-    if (name) character.name = name.trim();
-    if (url) character.url = url.trim();
+    if (name) character.name = String(name).trim();
+    if (url) character.url = String(url).trim();
+    if (rewardPoints !== undefined) {
+      const parsedRewardPoints = normalizeRewardPoints(rewardPoints);
+      if (parsedRewardPoints === null) {
+        throw new BadRequestError('rewardPoints phải là số nguyên >= 0');
+      }
+      character.rewardPoints = parsedRewardPoints;
+    }
 
     await character.save();
 
@@ -48,24 +74,22 @@ export const updateCharacterController = async (req, res, next) => {
   }
 };
 
-// Delete character (only owner can delete)
+// Xóa nhân vật (chỉ chủ sở hữu mới có thể xóa)
 export const deleteCharacterController = async (req, res, next) => {
   try {
     const userId = req.user.id;
     const { id } = req.params;
 
     const character = await Character.findById(id);
-    if (!character) throw new NotFoundError('Character không tìm thấy');
+    if (!character) throw new NotFoundError('Không tìm thấy character');
 
     if (String(character.createdBy) !== String(userId)) {
       throw new ForbiddenError('Không có quyền xóa character này');
     }
 
-
     await Character.deleteOne({ _id: id });
-
-    // Also remove from any user's characterId field if equals this id
     await User.updateMany({ characterId: character._id }, { $set: { characterId: null } });
+    await UserCharacterPurchase.deleteMany({ characterId: character._id });
 
     return res.status(200).json({ message: 'Xóa character thành công' });
   } catch (error) {
@@ -73,25 +97,75 @@ export const deleteCharacterController = async (req, res, next) => {
   }
 };
 
-// List characters with optional filter by owner
+// Danh sách character miễn phí (rewardPoints = 0)
 export const listCharactersController = async (req, res, next) => {
   try {
-    // Return all characters (ignore owner query) per request
-    const characters = await Character.find({}).sort({ createdAt: -1 });
-    return res.status(200).json({ characters });
+    const userId = req.user.id;
+
+    const [characters, user] = await Promise.all([
+      Character.find({ rewardPoints: 0 }).sort({ createdAt: -1 }),
+      User.findById(userId).select('characterId')
+    ]);
+
+    const selectedCharacterId = user?.characterId ? String(user.characterId) : null;
+
+    const enrichedCharacters = characters.map((character) => {
+      const id = String(character._id);
+      return {
+        ...character.toObject(),
+        isPurchased: true,
+        purchaseStatus: 'purchased',
+        isSelected: selectedCharacterId === id
+      };
+    });
+
+    return res.status(200).json({ characters: enrichedCharacters });
   } catch (error) {
     next(error);
   }
 };
 
-// Get single character by id
+// Danh sách cửa hàng: tất cả character và trạng thái đã mua của người dùng hiện tại
+// Character có rewardPoints = 0 luôn được đánh dấu là đã mua
+export const listCharacterStoreController = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+
+    const [characters, purchasedRows, user] = await Promise.all([
+      Character.find({}).sort({ createdAt: -1 }),
+      UserCharacterPurchase.find({ userId }).select('characterId'),
+      User.findById(userId).select('characterId')
+    ]);
+
+    const purchasedSet = new Set(purchasedRows.map((row) => String(row.characterId)));
+    const selectedCharacterId = user?.characterId ? String(user.characterId) : null;
+
+    const enrichedCharacters = characters.map((character) => {
+      const id = String(character._id);
+      const isFreeCharacter = Number(character.rewardPoints || 0) === 0;
+      const isPurchased = isFreeCharacter || purchasedSet.has(id);
+
+      return {
+        ...character.toObject(),
+        isPurchased,
+        isSelected: selectedCharacterId === id
+      };
+    });
+
+    return res.status(200).json({ characters: enrichedCharacters });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Lấy một character theo id
 export const getCharacterByIdController = async (req, res, next) => {
   try {
     const { id } = req.params;
     if (!id) throw new BadRequestError('id là bắt buộc');
 
     const character = await Character.findById(id);
-    if (!character) throw new NotFoundError('Character không tìm thấy');
+    if (!character) throw new NotFoundError('Không tìm thấy character');
 
     return res.status(200).json({ character });
   } catch (error) {
@@ -99,8 +173,8 @@ export const getCharacterByIdController = async (req, res, next) => {
   }
 };
 
-// Attach a character URL to current user (adds url to user's charactersUrl array)
-export const attachCharacterToUserController = async (req, res, next) => {
+// Mua character, trừ điểm thưởng và tự động chọn cho người dùng
+export const buyCharacterController = async (req, res, next) => {
   try {
     const userId = req.user.id;
     const { characterId } = req.body;
@@ -108,18 +182,93 @@ export const attachCharacterToUserController = async (req, res, next) => {
     if (!characterId) throw new BadRequestError('characterId là bắt buộc');
 
     const character = await Character.findById(characterId);
-    if (!character) throw new NotFoundError('Character không tìm thấy');
+    if (!character) throw new NotFoundError('Không tìm thấy character');
 
-    // Set user's selected characterId
-    await User.updateOne({ _id: userId }, { $set: { characterId: character._id } });
+    const existingPurchase = await UserCharacterPurchase.findOne({ userId, characterId });
+    if (existingPurchase) {
+      throw new BadRequestError('Character này bạn đã mua rồi');
+    }
 
-    return res.status(200).json({ message: 'Đã thêm character vào user', characterId: character._id });
+    const cost = Number(character.rewardPoints || 0);
+    let rewardAfterPurchase = null;
+    let deducted = false;
+
+    if (cost > 0) {
+      rewardAfterPurchase = await Reward.findOneAndUpdate(
+        { userId, totalPoints: { $gte: cost } },
+        { $inc: { totalPoints: -cost }, $set: { updatedAt: new Date() } },
+        { new: true }
+      );
+
+      if (!rewardAfterPurchase) {
+        throw new BadRequestError('Không đủ điểm để mua character này');
+      }
+
+      deducted = true;
+    } else {
+      rewardAfterPurchase = await Reward.findOne({ userId });
+    }
+
+    let purchase;
+    try {
+      purchase = await UserCharacterPurchase.create({ userId, characterId });
+    } catch (error) {
+      if (deducted) {
+        await Reward.updateOne(
+          { userId },
+          { $inc: { totalPoints: cost }, $set: { updatedAt: new Date() } }
+        );
+      }
+      throw error;
+    }
+
+    await User.findByIdAndUpdate(userId, { $set: { characterId } });
+
+    return res.status(200).json({
+      message: 'Mua character thành công',
+      characterId,
+      rewardPointsSpent: cost,
+      rewardPointsRemaining: Number(rewardAfterPurchase?.totalPoints || 0)
+    });
   } catch (error) {
     next(error);
   }
 };
 
-// Detach a character URL from current user
+// Chọn character cho người dùng hiện tại (phải mua trước)
+export const selectCharacterController = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const { characterId } = req.body;
+
+    if (!characterId) throw new BadRequestError('characterId là bắt buộc');
+
+    const character = await Character.findById(characterId);
+    if (!character) throw new NotFoundError('Không tìm thấy character');
+
+    const isFreeCharacter = Number(character.rewardPoints || 0) === 0;
+    const purchase = await UserCharacterPurchase.findOne({ userId, characterId });
+    if (!isFreeCharacter && !purchase) {
+      throw new ForbiddenError('Bạn chưa mua character này nên không thể chọn');
+    }
+
+    await User.findByIdAndUpdate(userId, { $set: { characterId } });
+
+    return res.status(200).json({
+      message: 'Đã chọn character thành công',
+      characterId
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Tương thích ngược: endpoint attach cũ giờ theo quy tắc "select"
+export const attachCharacterToUserController = async (req, res, next) => {
+  return selectCharacterController(req, res, next);
+};
+
+// Gỡ character đã chọn khỏi người dùng hiện tại
 export const detachCharacterFromUserController = async (req, res, next) => {
   try {
     const userId = req.user.id;
@@ -127,8 +276,10 @@ export const detachCharacterFromUserController = async (req, res, next) => {
 
     if (!characterId) throw new BadRequestError('characterId là bắt buộc');
 
-    // Only unset if the user's current characterId equals provided id
-    await User.updateOne({ _id: userId, characterId: characterId }, { $set: { characterId: null } });
+    await User.updateOne(
+      { _id: userId, characterId: characterId },
+      { $set: { characterId: null } }
+    );
 
     return res.status(200).json({ message: 'Đã xóa character khỏi user', characterId });
   } catch (error) {
