@@ -7,12 +7,21 @@ import User from '../models/user.schema.js';
 import Chapter from '../models/chapter.schema.js';
 import Lesson from '../models/lesson.schema.js';
 import LessonCompletion from '../models/lessonCompletion.schema.js';
+import ChapterCompletion from '../models/chapterCompletion.schema.js';
 import Progress from '../models/progress.schema.js';
 import BadRequestError from '../errors/badRequestError.js';
 import NotFoundError from '../errors/notFoundError.js';
 import { selectClassController } from './classController.js';
 
 const PASS_PERCENT = 80;
+
+const normalizeOptionalId = (value) => {
+  if (value === undefined || value === null) return '';
+  const normalized = String(value).trim();
+  if (!normalized) return '';
+  if (normalized.toLowerCase() === 'null') return '';
+  return normalized;
+};
 
 const normalizeText = (value) => {
   if (value === undefined || value === null) return '';
@@ -130,7 +139,7 @@ const sampleQuestions = async ({ quizIds, limit, extraMatch = {}, excludedIds = 
   ]);
 };
 
-const markPreviousChapterLessonsCompleted = async ({ userId, classId, chapterId }) => {
+const markPreviousChapterAndLessonCompleted = async ({ userId, classId, chapterId }) => {
   const currentChapter = await Chapter.findById(chapterId).select('_id classId order').lean();
   if (!currentChapter) {
     throw new NotFoundError('Chapter khong ton tai');
@@ -151,20 +160,44 @@ const markPreviousChapterLessonsCompleted = async ({ userId, classId, chapterId 
     .select('_id')
     .lean();
 
+  const markedChapters = previousChapters.length;
   if (previousChapters.length === 0) {
-    return 0;
+    return { markedChapters, markedLessons: 0 };
   }
 
+  const now = new Date();
   const previousChapterIds = previousChapters.map((chapter) => chapter._id);
+  const chapterOps = previousChapterIds.map((id) => ({
+    updateOne: {
+      filter: {
+        userId,
+        chapterId: id
+      },
+      update: {
+        $set: {
+          isCompleted: true,
+          completedAt: now
+        },
+        $setOnInsert: {
+          userId,
+          chapterId: id,
+          createdAt: now
+        }
+      },
+      upsert: true
+    }
+  }));
+  await ChapterCompletion.bulkWrite(chapterOps, { ordered: false });
+
   const previousLessons = await Lesson.find({ chapterId: { $in: previousChapterIds } })
     .select('_id')
     .lean();
 
+  const markedLessons = previousLessons.length;
   if (previousLessons.length === 0) {
-    return 0;
+    return { markedChapters, markedLessons };
   }
 
-  const now = new Date();
   const bulkOps = previousLessons.map((lesson) => ({
     updateOne: {
       filter: {
@@ -187,13 +220,14 @@ const markPreviousChapterLessonsCompleted = async ({ userId, classId, chapterId 
   }));
 
   await LessonCompletion.bulkWrite(bulkOps, { ordered: false });
-  return previousLessons.length;
+  return { markedChapters, markedLessons };
 };
 
 export const getAdvancedLearningQuestionsController = async (req, res, next) => {
   try {
-    const rawClassId = typeof req.query.classId === 'string' ? String(req.query.classId).trim() : '';
-    const rawChapterId = typeof req.query.chapterId === 'string' ? String(req.query.chapterId).trim() : '';
+    const rawClassId = normalizeOptionalId(req.query?.classId);
+    const rawChapterId = normalizeOptionalId(req.query?.chapterId);
+    const isChapterFlow = Boolean(rawChapterId);
     const userId = req.user?.id || req.user?._id;
 
     // Must provide exactly one of classId or chapterId
@@ -247,7 +281,7 @@ export const getAdvancedLearningQuestionsController = async (req, res, next) => 
         throw new NotFoundError('Khong tim thay nguoi dung');
       }
 
-      if (userDoc.classId && mongoose.Types.ObjectId.isValid(String(userDoc.classId))) {
+      if (!isChapterFlow && userDoc.classId && mongoose.Types.ObjectId.isValid(String(userDoc.classId))) {
         const currentClassDoc = await Class.findById(userDoc.classId).select('_id order').lean();
         if (currentClassDoc && Number(classDoc.order) <= Number(currentClassDoc.order)) {
           return res.status(200).json({
@@ -261,7 +295,11 @@ export const getAdvancedLearningQuestionsController = async (req, res, next) => 
       }
     }
 
-    const quizzes = await Quiz.find({ classId })
+    const quizFilter = isChapterFlow
+      ? { chapterId: rawChapterId }
+      : { classId };
+
+    const quizzes = await Quiz.find(quizFilter)
       .select('_id title description classId bonusPoints totalQuestions createdAt')
       .sort({ createdAt: 1, _id: 1 })
       .lean();
@@ -347,8 +385,8 @@ export const getAdvancedLearningQuestionsController = async (req, res, next) => 
 
 export const submitAdvancedLearningController = async (req, res, next) => {
   try {
-    const rawClassId = typeof req.body?.classId === 'string' ? String(req.body.classId).trim() : '';
-    const rawChapterId = typeof req.body?.chapterId === 'string' ? String(req.body.chapterId).trim() : '';
+    const rawClassId = normalizeOptionalId(req.body?.classId);
+    const rawChapterId = normalizeOptionalId(req.body?.chapterId);
     const isChapterFlow = Boolean(rawChapterId);
     const answers = Array.isArray(req.body?.answers) ? req.body.answers : [];
     const userId = req.user?.id || req.user?._id;
@@ -396,7 +434,7 @@ export const submitAdvancedLearningController = async (req, res, next) => {
       throw new NotFoundError('Khong tim thay nguoi dung');
     }
 
-    if (userDoc.classId && mongoose.Types.ObjectId.isValid(String(userDoc.classId))) {
+    if (!isChapterFlow && userDoc.classId && mongoose.Types.ObjectId.isValid(String(userDoc.classId))) {
       const currentClassDoc = await Class.findById(userDoc.classId).select('_id order').lean();
       if (currentClassDoc && Number(classDoc.order) <= Number(currentClassDoc.order)) {
         return res.status(200).json({
@@ -410,9 +448,17 @@ export const submitAdvancedLearningController = async (req, res, next) => {
       }
     }
 
-    const quizzes = await Quiz.find({ classId }).select('_id classId').lean();
+    const quizFilter = isChapterFlow
+      ? { chapterId: targetChapterId }
+      : { classId };
+
+    const quizzes = await Quiz.find(quizFilter).select('_id classId chapterId').lean();
     if (quizzes.length === 0) {
-      throw new BadRequestError('Khong tim thay quiz nao cho class nay');
+      throw new BadRequestError(
+        isChapterFlow
+          ? 'Khong tim thay quiz nao cho chapter nay'
+          : 'Khong tim thay quiz nao cho class nay'
+      );
     }
 
     const quizIds = quizzes.map((quiz) => quiz._id);
@@ -448,7 +494,7 @@ export const submitAdvancedLearningController = async (req, res, next) => {
     let classSelected = false;
     if (passed) {
       if (isChapterFlow && targetChapterId) {
-        const markedCount = await markPreviousChapterLessonsCompleted({
+        const markedResult = await markPreviousChapterAndLessonCompleted({
           userId,
           classId,
           chapterId: targetChapterId
@@ -460,7 +506,8 @@ export const submitAdvancedLearningController = async (req, res, next) => {
           alreadyUnlocked: false,
           passed,
           classSelected: false,
-          markedLessons: markedCount,
+          markedChapters: markedResult.markedChapters,
+          markedLessons: markedResult.markedLessons,
           score: {
             correct: correctCount,
             total: totalQuestions,

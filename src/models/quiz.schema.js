@@ -22,6 +22,12 @@ const QuizSchema = new mongoose.Schema({
     required: false,
     default: null
   },
+  progressId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Progress',
+    required: false,
+    default: null
+  },
   classId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Class',
