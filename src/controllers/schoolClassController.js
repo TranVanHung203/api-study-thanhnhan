@@ -11,6 +11,36 @@ const hasRole = (user, roleName) => {
   return user.roles.some((role) => String(role).toLowerCase() === normalizedRoleName);
 };
 
+const resolveSchoolClassClassId = (schoolClass) => String(schoolClass?.classId || '').trim();
+const syncUsersClassIdFromMappings = async (userIds = []) => {
+  const uniqueUserIds = Array.from(new Set((userIds || []).map((id) => String(id)).filter(Boolean)));
+  if (!uniqueUserIds.length) return;
+
+  const remainingMappings = await UserSchoolClass.find({ userId: { $in: uniqueUserIds } })
+    .populate('schoolClassId', 'classId')
+    .lean();
+
+  const nextClassIdByUserId = new Map();
+  for (const mapping of remainingMappings) {
+    const userId = String(mapping.userId || '');
+    if (!userId || nextClassIdByUserId.has(userId)) continue;
+    const resolvedClassId = resolveSchoolClassClassId(mapping.schoolClassId);
+    if (resolvedClassId && mongoose.Types.ObjectId.isValid(resolvedClassId)) {
+      nextClassIdByUserId.set(userId, resolvedClassId);
+    }
+  }
+
+  await User.bulkWrite(
+    uniqueUserIds.map((userId) => ({
+      updateOne: {
+        filter: { _id: userId },
+        update: { $set: { classId: nextClassIdByUserId.get(userId) || null } }
+      }
+    })),
+    { ordered: false }
+  );
+};
+
 export const getAllSchoolClassesController = async (req, res, next) => {
   try {
     const schoolClasses = await SchoolClass.find()
@@ -144,11 +174,18 @@ export const getSchoolClassByIdController = async (req, res, next) => {
 
 export const createSchoolClassController = async (req, res, next) => {
   try {
-    const { className, schoolId } = req.body || {};
+    const { classId, className, schoolId } = req.body || {};
 
-    if (!className) {
+    if (!classId || !className) {
       return res.status(400).json({
-        message: 'className la bat buoc'
+        message: 'classId, className la bat buoc'
+      });
+    }
+
+    const normalizedClassId = String(classId).trim();
+    if (!mongoose.Types.ObjectId.isValid(normalizedClassId)) {
+      return res.status(400).json({
+        message: 'classId khong hop le'
       });
     }
 
@@ -164,6 +201,7 @@ export const createSchoolClassController = async (req, res, next) => {
     }
 
     const schoolClass = await SchoolClass.create({
+      classId: normalizedClassId,
       className: String(className).trim(),
       schoolId: school._id
     });
@@ -182,7 +220,7 @@ export const createSchoolClassController = async (req, res, next) => {
 export const updateSchoolClassController = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { className, schoolId } = req.body || {};
+    const { classId, className, schoolId } = req.body || {};
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ message: 'id khong hop le' });
@@ -191,6 +229,17 @@ export const updateSchoolClassController = async (req, res, next) => {
     const schoolClass = await SchoolClass.findById(id);
     if (!schoolClass) {
       return res.status(404).json({ message: 'Lop thuc khong ton tai' });
+    }
+
+    if (classId !== undefined) {
+      const normalizedClassId = String(classId || '').trim();
+      if (!normalizedClassId) {
+        return res.status(400).json({ message: 'classId khong duoc de trong' });
+      }
+      if (!mongoose.Types.ObjectId.isValid(normalizedClassId)) {
+        return res.status(400).json({ message: 'classId khong hop le' });
+      }
+      schoolClass.classId = normalizedClassId;
     }
 
     if (className !== undefined) {
@@ -234,10 +283,14 @@ export const deleteSchoolClassController = async (req, res, next) => {
       return res.status(404).json({ message: 'Lop thuc khong ton tai' });
     }
 
+    const affectedMappings = await UserSchoolClass.find({ schoolClassId: id }).select('userId').lean();
+    const affectedUserIds = affectedMappings.map((item) => item.userId).filter(Boolean);
+
     await Promise.all([
       UserSchoolClass.deleteMany({ schoolClassId: id }),
       TeacherSchoolClass.deleteMany({ schoolClassId: id })
     ]);
+    await syncUsersClassIdFromMappings(affectedUserIds);
 
     return res.status(200).json({
       message: 'Xoa lop thuc thanh cong'
@@ -280,8 +333,14 @@ export const addStudentToSchoolClassController = async (req, res, next) => {
       await UserSchoolClass.create({ userId: user._id, schoolClassId: schoolClass._id });
     }
 
-    if (!user.schoolId) {
+    const resolvedClassId = resolveSchoolClassClassId(schoolClass);
+    if (!resolvedClassId || !mongoose.Types.ObjectId.isValid(resolvedClassId)) {
+      return res.status(400).json({ message: 'Lop thuc chua co classId hop le' });
+    }
+
+    if (!user.schoolId || String(user.classId || '') !== resolvedClassId) {
       user.schoolId = schoolClass.schoolId;
+      user.classId = resolvedClassId;
       await user.save();
     }
 
@@ -291,6 +350,7 @@ export const addStudentToSchoolClassController = async (req, res, next) => {
         _id: user._id,
         fullName: user.fullName,
         email: user.email,
+        classId: user.classId || null,
         schoolClassId: schoolClass._id
       }
     });
@@ -314,6 +374,10 @@ export const assignSchoolClassToUserController = async (req, res, next) => {
 
     if (schoolClassId === null || schoolClassId === undefined || schoolClassId === '') {
       const deleted = await UserSchoolClass.deleteMany({ userId: user._id });
+      if (user.classId !== null) {
+        user.classId = null;
+        await user.save();
+      }
 
       return res.status(200).json({
         message: 'Go bo tat ca schoolClassId cua user thanh cong',
@@ -339,14 +403,20 @@ export const assignSchoolClassToUserController = async (req, res, next) => {
       return res.status(400).json({ message: 'Khong the gan user vao lop khac truong' });
     }
 
-    if (!user.schoolId) {
-      user.schoolId = schoolClass.schoolId;
-      await user.save();
-    }
-
     const exists = await UserSchoolClass.findOne({ userId: user._id, schoolClassId: schoolClass._id });
     if (!exists) {
       await UserSchoolClass.create({ userId: user._id, schoolClassId: schoolClass._id });
+    }
+
+    const resolvedClassId = resolveSchoolClassClassId(schoolClass);
+    if (!resolvedClassId || !mongoose.Types.ObjectId.isValid(resolvedClassId)) {
+      return res.status(400).json({ message: 'Lop thuc chua co classId hop le' });
+    }
+
+    if (!user.schoolId || String(user.classId || '') !== resolvedClassId) {
+      user.schoolId = schoolClass.schoolId;
+      user.classId = resolvedClassId;
+      await user.save();
     }
 
     return res.status(200).json({
@@ -355,6 +425,7 @@ export const assignSchoolClassToUserController = async (req, res, next) => {
         _id: user._id,
         fullName: user.fullName,
         email: user.email,
+        classId: user.classId || null,
         schoolClassId: schoolClass._id
       }
     });
@@ -472,12 +543,16 @@ export const removeStudentFromSchoolClassController = async (req, res, next) => 
       return res.status(400).json({ message: 'Hoc sinh khong thuoc lop thuc nay' });
     }
 
+    await syncUsersClassIdFromMappings([user._id]);
+    const refreshedUser = await User.findById(user._id).select('_id fullName email classId').lean();
+
     return res.status(200).json({
       message: 'Xoa hoc sinh khoi lop thuc thanh cong',
       user: {
-        _id: user._id,
-        fullName: user.fullName,
-        email: user.email,
+        _id: refreshedUser?._id || user._id,
+        fullName: refreshedUser?.fullName || user.fullName,
+        email: refreshedUser?.email || user.email,
+        classId: refreshedUser?.classId || null,
         schoolClassId: null
       }
     });

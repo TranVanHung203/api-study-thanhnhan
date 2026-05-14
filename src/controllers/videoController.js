@@ -1,5 +1,7 @@
 import Video from '../models/video.schema.js';
 import cloudinary from '../config/cloudinaryConfig.js';
+import BadRequestError from '../errors/badRequestError.js';
+import NotFoundError from '../errors/notFoundError.js';
 
 // Lấy danh sách videos
 export const getVideosController = async (req, res, next) => {
@@ -23,7 +25,7 @@ export const getVideoByIdController = async (req, res, next) => {
     const video = await Video.findById(videoId);
     
     if (!video) {
-      return res.status(404).json({ message: 'Video không tồn tại' });
+      throw new NotFoundError('Video không tồn tại');
     }
     const out = video.toObject ? video.toObject() : JSON.parse(JSON.stringify(video));
     delete out.duration;
@@ -39,7 +41,7 @@ export const createVideoController = async (req, res, next) => {
     const { title, description, voiceDescription } = req.body;
 
     if (!req.file) {
-      return res.status(400).json({ message: 'Vui lòng upload file video' });
+      throw new BadRequestError('Vui lòng upload file video');
     }
 
     // Upload video lên Cloudinary
@@ -87,7 +89,7 @@ export const updateVideoController = async (req, res, next) => {
 
     const existingVideo = await Video.findById(videoId);
     if (!existingVideo) {
-      return res.status(404).json({ message: 'Video không tồn tại' });
+      throw new NotFoundError('Video không tồn tại');
     }
 
     let updateData = { title, description, voiceDescription };
@@ -138,7 +140,7 @@ export const deleteVideoController = async (req, res, next) => {
     
     const video = await Video.findById(videoId);
     if (!video) {
-      return res.status(404).json({ message: 'Video không tồn tại' });
+      throw new NotFoundError('Video không tồn tại');
     }
 
     // Xóa video trên Cloudinary

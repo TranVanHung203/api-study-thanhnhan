@@ -7,7 +7,7 @@ export const getQuizConfigByProgress = async (req, res, next) => {
   try {
     const { id } = req.params; // progressId
     const config = await QuizConfig.findOne({ progressId: id });
-    if (!config) return res.status(404).json({ message: 'No quiz config found for this progress' });
+    if (!config) throw new NotFoundError('No quiz config found for this progress');
     // Return only the shape expected by clients: { total, parts }
     return res.status(200).json({ total: config.total, parts: config.parts });
   } catch (err) {

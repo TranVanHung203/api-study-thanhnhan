@@ -6,6 +6,8 @@ import Video from '../models/video.schema.js';
 import Quiz from '../models/quiz.schema.js';
 import LessonCompletion from '../models/lessonCompletion.schema.js';
 import ChapterCompletion from '../models/chapterCompletion.schema.js';
+import BadRequestError from '../errors/badRequestError.js';
+import NotFoundError from '../errors/notFoundError.js';
 
 // Tạo chapter mới
 export const createChapterController = async (req, res, next) => {
@@ -13,7 +15,7 @@ export const createChapterController = async (req, res, next) => {
     const { classId, chapterName, description, order } = req.body;
 
     if (!classId || !chapterName) {
-      return res.status(400).json({ message: 'classId và chapterName là bắt buộc' });
+      throw new BadRequestError('classId và chapterName là bắt buộc');
     }
 
     // Nếu không truyền order, tự động lấy order cao nhất + 1
@@ -62,7 +64,7 @@ export const getChapterByIdController = async (req, res, next) => {
     const chapter = await Chapter.findById(id).populate('classId');
 
     if (!chapter) {
-      return res.status(404).json({ message: 'Chapter không tìm thấy' });
+      throw new NotFoundError('Chapter không tìm thấy');
     }
 
     return res.status(200).json({ chapter });
@@ -84,7 +86,7 @@ export const updateChapterController = async (req, res, next) => {
     );
 
     if (!chapter) {
-      return res.status(404).json({ message: 'Chapter không tìm thấy' });
+      throw new NotFoundError('Chapter không tìm thấy');
     }
 
     return res.status(200).json({
@@ -104,7 +106,7 @@ export const deleteChapterController = async (req, res, next) => {
     const chapter = await Chapter.findByIdAndDelete(id);
 
     if (!chapter) {
-      return res.status(404).json({ message: 'Chapter không tìm thấy' });
+      throw new NotFoundError('Chapter không tìm thấy');
     }
 
     // Xóa tất cả Lessons thuộc chapter này
@@ -128,7 +130,7 @@ export const getChapterMapController = async (req, res, next) => {
     const chapters = await Chapter.find({ classId }).sort({ order: 1 });
     
     if (chapters.length === 0) {
-      return res.status(404).json({ message: 'Không tìm thấy chapter nào cho lớp này' });
+      throw new NotFoundError('Không tìm thấy chapter nào cho lớp này');
     }
 
     // 2. Lấy tất cả lessons của các chapters này
@@ -224,7 +226,7 @@ export const insertLessonController = async (req, res, next) => {
     const { chapterId, lessonName, description, afterOrder } = req.body;
 
     if (!chapterId || !lessonName) {
-      return res.status(400).json({ message: 'chapterId và lessonName là bắt buộc' });
+      throw new BadRequestError('chapterId và lessonName là bắt buộc');
     }
 
     // afterOrder = order của lesson mà lesson mới sẽ đứng sau
@@ -284,7 +286,7 @@ export const insertProgressController = async (req, res, next) => {
     }
 
     if (!content) {
-      return res.status(404).json({ message: 'contentId không tồn tại' });
+      throw new NotFoundError('contentId không tồn tại');
     }
 
     // 1. Tăng stepNumber của các progress có stepNumber > afterStepNumber

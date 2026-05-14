@@ -1,4 +1,6 @@
 import Lesson from '../models/lesson.schema.js';
+import BadRequestError from '../errors/badRequestError.js';
+import NotFoundError from '../errors/notFoundError.js';
 
 // Lấy danh sách lessons của một chapter
 export const getLessonsByChapterController = async (req, res, next) => {
@@ -20,7 +22,7 @@ export const createLessonController = async (req, res, next) => {
     const { chapterId, lessonName, description, order } = req.body;
 
     if (!chapterId || !lessonName) {
-      return res.status(400).json({ message: 'chapterId và lessonName là bắt buộc' });
+      throw new BadRequestError('chapterId và lessonName là bắt buộc');
     }
 
     // Nếu không truyền order, tự động lấy order cao nhất + 1
@@ -60,6 +62,10 @@ export const updateLessonController = async (req, res, next) => {
       { new: true }
     );
 
+    if (!lesson) {
+      throw new NotFoundError('Lesson không tìm thấy');
+    }
+
     return res.status(200).json({
       message: 'Cập nhật lesson thành công',
       lesson
@@ -74,7 +80,11 @@ export const deleteLessonController = async (req, res, next) => {
   try {
     const { lessonId } = req.params;
 
-    await Lesson.findByIdAndDelete(lessonId);
+    const deletedLesson = await Lesson.findByIdAndDelete(lessonId);
+
+    if (!deletedLesson) {
+      throw new NotFoundError('Lesson không tìm thấy');
+    }
 
     return res.status(200).json({
       message: 'Xóa lesson thành công'

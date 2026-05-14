@@ -39,7 +39,7 @@ import chapterRoutes from './src/routes/chapterRoutes.js';
 import lessonRoutes from './src/routes/lessonRoutes.js';
 import progressRoutes from './src/routes/progressRoutes.js';
 import videoRoutes from './src/routes/videoRoutes.js';
-import quizNewRoutes from './src/routes/quizNewRoutes.js';
+import quizNewRoutes from './src/routes/quizRoutes.js';
 import questionRoutes from './src/routes/questionRoutes.js';
 import quizAttemptRoutes from './src/routes/quizAttemptRoutes.js';
 import activityRoutes from './src/routes/activityRoutes.js';
@@ -383,7 +383,7 @@ const swaggerOptions = {
     './src/routes/progressRoutes.js',
     './src/routes/quizAttemptRoutes.js',
     // './src/routes/videoRoutes.js',
-    './src/routes/quizNewRoutes.js',
+    './src/routes/quizRoutes.js',
     './src/routes/questionRoutes.js',
     './src/routes/characterRoutes.js',
       //'./src/routes/activityRoutes.js',

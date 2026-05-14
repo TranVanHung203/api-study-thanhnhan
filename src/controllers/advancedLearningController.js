@@ -4,6 +4,10 @@ import Question from '../models/question.schema.js';
 import OverstudyConfig from '../models/overstudyConfig.schema.js';
 import Class from '../models/class.schema.js';
 import User from '../models/user.schema.js';
+import Chapter from '../models/chapter.schema.js';
+import Lesson from '../models/lesson.schema.js';
+import LessonCompletion from '../models/lessonCompletion.schema.js';
+import Progress from '../models/progress.schema.js';
 import BadRequestError from '../errors/badRequestError.js';
 import NotFoundError from '../errors/notFoundError.js';
 import { selectClassController } from './classController.js';
@@ -126,26 +130,115 @@ const sampleQuestions = async ({ quizIds, limit, extraMatch = {}, excludedIds = 
   ]);
 };
 
+const markPreviousChapterLessonsCompleted = async ({ userId, classId, chapterId }) => {
+  const currentChapter = await Chapter.findById(chapterId).select('_id classId order').lean();
+  if (!currentChapter) {
+    throw new NotFoundError('Chapter khong ton tai');
+  }
+
+  if (String(currentChapter.classId) !== String(classId)) {
+    throw new BadRequestError('chapterId khong thuoc classId da truyen');
+  }
+
+  if (!Number.isFinite(Number(currentChapter.order))) {
+    throw new BadRequestError('Chapter hien tai khong co order hop le');
+  }
+
+  const previousChapters = await Chapter.find({
+    classId,
+    order: { $lt: Number(currentChapter.order) }
+  })
+    .select('_id')
+    .lean();
+
+  if (previousChapters.length === 0) {
+    return 0;
+  }
+
+  const previousChapterIds = previousChapters.map((chapter) => chapter._id);
+  const previousLessons = await Lesson.find({ chapterId: { $in: previousChapterIds } })
+    .select('_id')
+    .lean();
+
+  if (previousLessons.length === 0) {
+    return 0;
+  }
+
+  const now = new Date();
+  const bulkOps = previousLessons.map((lesson) => ({
+    updateOne: {
+      filter: {
+        userId,
+        lessonId: lesson._id
+      },
+      update: {
+        $set: {
+          isCompleted: true,
+          completedAt: now
+        },
+        $setOnInsert: {
+          userId,
+          lessonId: lesson._id,
+          createdAt: now
+        }
+      },
+      upsert: true
+    }
+  }));
+
+  await LessonCompletion.bulkWrite(bulkOps, { ordered: false });
+  return previousLessons.length;
+};
+
 export const getAdvancedLearningQuestionsController = async (req, res, next) => {
   try {
-    const classId = String(req.query.classId || '').trim();
+    const rawClassId = typeof req.query.classId === 'string' ? String(req.query.classId).trim() : '';
+    const rawChapterId = typeof req.query.chapterId === 'string' ? String(req.query.chapterId).trim() : '';
     const userId = req.user?.id || req.user?._id;
 
-    if (!classId) {
-      throw new BadRequestError('Missing classId');
-    }
-    if (!mongoose.Types.ObjectId.isValid(classId)) {
-      throw new BadRequestError('classId khong hop le');
+    // Must provide exactly one of classId or chapterId
+    if ((rawClassId && rawChapterId) || (!rawClassId && !rawChapterId)) {
+      throw new BadRequestError('Vui long truyen 1 trong 2: classId hoac chapterId (khong duoc truyen ca hai)');
     }
 
-    const classDoc = await Class.findById(classId).select('_id className order').lean();
-    if (!classDoc) {
-      throw new NotFoundError('Lop khong ton tai');
-    }
+    let classId = null;
+    let overstudyConfig = null;
+    let classDoc = null;
 
-    const overstudyConfig = await OverstudyConfig.findOne({ classId, progressId: null }).lean();
-    if (!overstudyConfig) {
-      throw new NotFoundError('Khong tim thay overstudyConfig cho class nay');
+    if (rawClassId) {
+      if (!mongoose.Types.ObjectId.isValid(rawClassId)) {
+        throw new BadRequestError('classId khong hop le');
+      }
+      classId = rawClassId;
+      classDoc = await Class.findById(classId).select('_id className order').lean();
+      if (!classDoc) {
+        throw new NotFoundError('Lop khong ton tai');
+      }
+      overstudyConfig = await OverstudyConfig.findOne({ classId, chapterId: null }).lean();
+      if (!overstudyConfig) {
+        throw new NotFoundError('Khong tim thay overstudyConfig cho class nay');
+      }
+    } else {
+      // chapterId path
+      if (!mongoose.Types.ObjectId.isValid(rawChapterId)) {
+        throw new BadRequestError('chapterId khong hop le');
+      }
+
+      const chapter = await Chapter.findById(rawChapterId).select('classId').lean();
+      if (!chapter || !chapter.classId) {
+        throw new NotFoundError('Chapter hoac class khong ton tai cho chapterId nay');
+      }
+
+      classId = String(chapter.classId);
+      classDoc = await Class.findById(classId).select('_id className order').lean();
+      if (!classDoc) {
+        throw new NotFoundError('Lop khong ton tai');
+      }
+
+      overstudyConfig = await OverstudyConfig.findOne({ chapterId: rawChapterId }).lean();
+      if (!overstudyConfig) {
+        throw new NotFoundError('Khong tim thay overstudyConfig cho chapter nay');
+      }
     }
 
     if (userId) {
@@ -254,16 +347,41 @@ export const getAdvancedLearningQuestionsController = async (req, res, next) => 
 
 export const submitAdvancedLearningController = async (req, res, next) => {
   try {
-    const classId = String(req.body?.classId || '').trim();
+    const rawClassId = typeof req.body?.classId === 'string' ? String(req.body.classId).trim() : '';
+    const rawChapterId = typeof req.body?.chapterId === 'string' ? String(req.body.chapterId).trim() : '';
+    const isChapterFlow = Boolean(rawChapterId);
     const answers = Array.isArray(req.body?.answers) ? req.body.answers : [];
     const userId = req.user?.id || req.user?._id;
 
     if (!userId) {
       throw new BadRequestError('Khong the xac dinh duoc user');
     }
-    if (!classId) {
-      throw new BadRequestError('Missing classId');
+
+    if ((rawClassId && rawChapterId) || (!rawClassId && !rawChapterId)) {
+      throw new BadRequestError('Vui long truyen 1 trong 2: classId hoac chapterId (khong duoc truyen ca hai)');
     }
+
+    let classId = rawClassId;
+    let targetChapterId = rawChapterId || null;
+
+    if (rawClassId) {
+      if (!mongoose.Types.ObjectId.isValid(rawClassId)) {
+        throw new BadRequestError('classId khong hop le');
+      }
+    } else {
+      if (!mongoose.Types.ObjectId.isValid(rawChapterId)) {
+        throw new BadRequestError('chapterId khong hop le');
+      }
+
+      const chapter = await Chapter.findById(rawChapterId).select('_id classId order').lean();
+      if (!chapter) {
+        throw new NotFoundError('Chapter khong ton tai');
+      }
+
+      classId = String(chapter.classId);
+      targetChapterId = String(chapter._id);
+    }
+
     if (!mongoose.Types.ObjectId.isValid(classId)) {
       throw new BadRequestError('classId khong hop le');
     }
@@ -329,6 +447,30 @@ export const submitAdvancedLearningController = async (req, res, next) => {
 
     let classSelected = false;
     if (passed) {
+      if (isChapterFlow && targetChapterId) {
+        const markedCount = await markPreviousChapterLessonsCompleted({
+          userId,
+          classId,
+          chapterId: targetChapterId
+        });
+
+        return res.status(200).json({
+          classId,
+          chapterId: targetChapterId,
+          alreadyUnlocked: false,
+          passed,
+          classSelected: false,
+          markedLessons: markedCount,
+          score: {
+            correct: correctCount,
+            total: totalQuestions,
+            percent: Number(percentCorrect.toFixed(2)),
+            requiredPercent: PASS_PERCENT
+          },
+          message: passed ? 'Hoc vuot thanh cong' : 'Chua dat 80% de hoc vuot'
+        });
+      }
+
       const selected = await invokeSelectClassController({ req, classId });
       if (!selected || selected.statusCode >= 400) {
         throw new BadRequestError(selected?.payload?.message || 'Khong the gan classId cho user');
@@ -338,6 +480,7 @@ export const submitAdvancedLearningController = async (req, res, next) => {
 
     return res.status(200).json({
       classId,
+      chapterId: targetChapterId,
       alreadyUnlocked: false,
       passed,
       classSelected,

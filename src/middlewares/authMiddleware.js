@@ -3,6 +3,8 @@ import jwt from 'jsonwebtoken';
 import User from '../models/user.schema.js';
 import RefreshToken from '../models/refreshToken.schema.js';
 import { getCurrentSessionId } from '../services/sessionService.js';
+import UnauthorizedError from '../errors/unauthorizedError.js';
+import ForbiddenError from '../errors/forbiddenError.js';
 
 const SECRET_KEY = process.env.SECRET_KEY || 'your-secret-key';
 
@@ -87,10 +89,7 @@ const authToken = async (req, res, next) => {
                 res.setHeader('X-Session-Check-Source', sessionCheck.source);
                 
                 if (!sessionCheck.isValid) {
-                    return res.status(401).json({
-                        message: "Phiên đăng nhập đã kết thúc. Vui lòng đăng nhập lại.",
-                        code: "SESSION_REVOKED"
-                    });
+                    return next(new UnauthorizedError("Phiên đăng nhập đã kết thúc. Vui lòng đăng nhập lại."));
                 }
 
                 if (sessionCheck.source === 'db-fallback') {
@@ -100,21 +99,15 @@ const authToken = async (req, res, next) => {
                 next();
             } catch (error) {
                 if (error.name === "TokenExpiredError") {
-                    return res.status(401).json({
-                        message: "Token đã hết hạn, vui lòng gọi /auth/refresh để lấy token mới"
-                    })
+                    return next(new UnauthorizedError("Token đã hết hạn, vui lòng gọi /auth/refresh để lấy token mới"));
                 }
                 else {
-                    return res.status(401).json({
-                        message: "Token không hợp lệ"
-                    })
+                    return next(new UnauthorizedError("Token không hợp lệ"));
                 }
             }
         }
         else {
-            return res.status(401).json({
-                message: "Không tìm thấy token"
-            })
+            return next(new UnauthorizedError("Không tìm thấy token"));
         }
     }
 }
@@ -124,7 +117,7 @@ const requireGuest = async (req, res, next) => {
         const user = await User.findOne({ _id: req.user.id, isStatus: { $ne: 'deleted' } })
             .select('isGuest');
     if (!user || !user.isGuest) {
-      return res.status(403).json({ message: 'Chỉ tài khoản khách mới được phép thực hiện thao tác này' });
+            return next(new ForbiddenError('Chỉ tài khoản khách mới được phép thực hiện thao tác này'));
     }
     next();
   } catch (error) {

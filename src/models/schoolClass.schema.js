@@ -1,6 +1,11 @@
 import mongoose from 'mongoose';
 
 const SchoolClassSchema = new mongoose.Schema({
+  classId: {
+    type: String,
+    required: true,
+    trim: true
+  },
   className: {
     type: String,
     required: true,

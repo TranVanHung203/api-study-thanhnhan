@@ -6,9 +6,9 @@ const PartSchema = new mongoose.Schema({
 }, { _id: false });
 
 const OverstudyConfigSchema = new mongoose.Schema({
-  progressId: {
+  chapterId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Progress',
+    ref: 'Chapter',
     default: null
   },
   classId: {
@@ -21,19 +21,19 @@ const OverstudyConfigSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 OverstudyConfigSchema.pre('validate', function (next) {
-  const hasProgressId = !!this.progressId;
+  const hasChapterId = !!this.chapterId;
   const hasClassId = !!this.classId;
 
-  if (hasProgressId === hasClassId) {
-    return next(new Error('Exactly one of progressId or classId must be provided'));
+  if (hasChapterId === hasClassId) {
+    return next(new Error('Exactly one of chapterId or classId must be provided'));
   }
 
   return next();
 });
 
 OverstudyConfigSchema.index(
-  { progressId: 1 },
-  { unique: true, partialFilterExpression: { progressId: { $exists: true, $ne: null } } }
+  { chapterId: 1 },
+  { unique: true, partialFilterExpression: { chapterId: { $exists: true, $ne: null } } }
 );
 
 OverstudyConfigSchema.index(

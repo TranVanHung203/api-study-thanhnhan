@@ -9,6 +9,9 @@ import UserActivity from '../models/userActivity.schema.js';
 import Progress from '../models/progress.schema.js';
 import QuizAttempt from '../models/quizAttempt.schema.js';
 import mongoose from 'mongoose';
+import BadRequestError from '../errors/badRequestError.js';
+import NotFoundError from '../errors/notFoundError.js';
+import UnauthorizedError from '../errors/unauthorizedError.js';
 
 // Lấy tất cả classes
 export const getAllClassesController = async (req, res, next) => {
@@ -138,7 +141,7 @@ export const getClassByIdController = async (req, res, next) => {
     const classData = await Class.findById(id);
 
     if (!classData) {
-      return res.status(404).json({ message: 'Lớp không tồn tại' });
+      throw new NotFoundError('Lớp không tồn tại');
     }
 
     const students = await User.find({ classId: id, isStatus: { $ne: 'deleted' } }).select('-passwordHash');
@@ -161,7 +164,7 @@ export const createClassController = async (req, res, next) => {
     const { name, description, level, order } = req.body;
 
     if (!name) {
-      return res.status(400).json({ message: 'Vui lòng nhập tên lớp' });
+      throw new BadRequestError('Vui lòng nhập tên lớp');
     }
 
     const newClass = new Class({
@@ -200,7 +203,7 @@ export const updateClassController = async (req, res, next) => {
     );
 
     if (!classData) {
-      return res.status(404).json({ message: 'Lớp không tồn tại' });
+      throw new NotFoundError('Lớp không tồn tại');
     }
 
     return res.status(200).json({
@@ -220,7 +223,7 @@ export const deleteClassController = async (req, res, next) => {
     const classData = await Class.findByIdAndDelete(id);
 
     if (!classData) {
-      return res.status(404).json({ message: 'Lớp không tồn tại' });
+      throw new NotFoundError('Lớp không tồn tại');
     }
 
     // Xóa classId khỏi tất cả users thuộc class này
@@ -240,17 +243,17 @@ export const addStudentToClassController = async (req, res, next) => {
     const { classId, userId } = req.body;
 
     if (!classId || !userId) {
-      return res.status(400).json({ message: 'Vui lòng cung cấp classId và userId' });
+      throw new BadRequestError('Vui lòng cung cấp classId và userId');
     }
 
     const classData = await Class.findById(classId);
     if (!classData) {
-      return res.status(404).json({ message: 'Lớp không tồn tại' });
+      throw new NotFoundError('Lớp không tồn tại');
     }
 
     const user = await User.findOne({ _id: userId, isStatus: { $ne: 'deleted' } });
     if (!user) {
-      return res.status(404).json({ message: 'Người dùng không tồn tại' });
+      throw new NotFoundError('Người dùng không tồn tại');
     }
 
     // Cập nhật classId cho user
@@ -272,18 +275,18 @@ export const selectClassController = async (req, res, next) => {
     const { classId } = req.params;
     const userId = req.user && (req.user.id || req.user._id);
 
-    if (!userId) return res.status(401).json({ message: 'Không xác định được user' });
+    if (!userId) throw new UnauthorizedError('Không xác định được user');
 
     if (!mongoose.Types.ObjectId.isValid(classId)) {
-      return res.status(400).json({ message: 'classId không hợp lệ' });
+      throw new BadRequestError('classId không hợp lệ');
     }
 
     const cls = await Class.findById(classId);
-    if (!cls) return res.status(404).json({ message: 'Lớp không tồn tại' });
+    if (!cls) throw new NotFoundError('Lớp không tồn tại');
 
     // Update user's classId
     const user = await User.findById(userId);
-    if (!user) return res.status(404).json({ message: 'Người dùng không tồn tại' });
+    if (!user) throw new NotFoundError('Người dùng không tồn tại');
 
     user.classId = cls._id;
     await user.save();

@@ -708,7 +708,7 @@ const validateManagedSchoolClass = async (teacherContext, schoolClassId) => {
     return { error: { status: 403, message: 'Giáo viên không được quản lý lớp học này' } };
   }
 
-  const schoolClass = await SchoolClass.findById(classIdStr).select('_id className schoolId').lean();
+  const schoolClass = await SchoolClass.findById(classIdStr).select('_id classId className schoolId').lean();
   if (!schoolClass) {
     return { error: { status: 404, message: 'Lớp học không tồn tại' } };
   }
@@ -832,6 +832,12 @@ export const createStudentByTeacherController = async (req, res, next) => {
     if (schoolClassResult.error) {
       return res.status(schoolClassResult.error.status).json({ message: schoolClassResult.error.message });
     }
+    const resolvedClassId = schoolClassResult.schoolClass?.classId
+      ? String(schoolClassResult.schoolClass.classId).trim()
+      : '';
+    if (!resolvedClassId || !mongoose.Types.ObjectId.isValid(resolvedClassId)) {
+      return res.status(400).json({ message: 'schoolClassId chua co classId hop le de gan cho hoc sinh' });
+    }
 
     const existingUsername = await User.findOne({ username: normalizedUsername }).select('_id').lean();
 
@@ -852,7 +858,7 @@ export const createStudentByTeacherController = async (req, res, next) => {
         roles: ['student'],
         provider: 'local',
         isGuest: false,
-        classId: null,
+        classId: resolvedClassId,
         schoolId: teacherContext.teacher.schoolId,
         createdByTeacherId: teacherContext.teacher._id
       });
@@ -913,6 +919,7 @@ export const createStudentByTeacherController = async (req, res, next) => {
         schoolId: user.schoolId,
         schoolClass: {
           schoolClassId: schoolClassResult.schoolClass._id,
+          classId: resolvedClassId,
           className: schoolClassResult.schoolClass.className
         },
         dateOfBirth: user.dateOfBirth || null,
@@ -1293,12 +1300,19 @@ export const updateTeacherManagedStudentController = async (req, res, next) => {
       if (schoolClassResult.error) {
         return res.status(schoolClassResult.error.status).json({ message: schoolClassResult.error.message });
       }
+      const resolvedClassId = schoolClassResult.schoolClass?.classId
+        ? String(schoolClassResult.schoolClass.classId).trim()
+        : '';
+      if (!resolvedClassId || !mongoose.Types.ObjectId.isValid(resolvedClassId)) {
+        return res.status(400).json({ message: 'schoolClassId chua co classId hop le de gan cho hoc sinh' });
+      }
 
       await UserSchoolClass.deleteMany({ userId: student._id });
       await UserSchoolClass.create({
         userId: student._id,
         schoolClassId: schoolClassResult.schoolClass._id
       });
+      student.classId = resolvedClassId;
     }
 
     const dobResult = normalizeDateOfBirth(dateOfBirth);
@@ -1385,6 +1399,7 @@ export const updateTeacherManagedStudentController = async (req, res, next) => {
         email: student.email,
         avatarUrl: student.avatarUrl || null,
         gender: student.gender ?? null,
+        classId: student.classId || null,
         schoolId: student.schoolId,
         schoolClasses: classList,
         dateOfBirth: student.dateOfBirth || null,
@@ -1884,12 +1899,19 @@ export const uploadBulkStudentsController = async (req, res, next) => {
 
     const { schoolClassId } = req.params;
     let targetSchoolClassId = null;
+    let targetClassId = null;
     if (schoolClassId) {
       const classValidation = await validateManagedSchoolClass(teacherContext, schoolClassId);
       if (classValidation.error) {
         return res.status(classValidation.error.status).json({ message: classValidation.error.message });
       }
       targetSchoolClassId = classValidation.schoolClass._id;
+      targetClassId = classValidation.schoolClass?.classId
+        ? String(classValidation.schoolClass.classId).trim()
+        : '';
+      if (!targetClassId || !mongoose.Types.ObjectId.isValid(targetClassId)) {
+        return res.status(400).json({ message: 'schoolClassId chua co classId hop le de gan cho hoc sinh' });
+      }
     }
 
     let workbook;
@@ -2164,7 +2186,7 @@ export const uploadBulkStudentsController = async (req, res, next) => {
 
     const managedExistingUsers = orConditions.length
       ? await User.find({ ...managedUsersQuery, $or: orConditions })
-        .select('_id userCode username fullName gender dateOfBirth address avatarUrl')
+        .select('_id userCode username fullName gender dateOfBirth address avatarUrl classId')
         .lean()
       : [];
 
@@ -2287,6 +2309,7 @@ export const uploadBulkStudentsController = async (req, res, next) => {
           dateOfBirth: item.hasDobValue ? item.dobValue : null,
           address: item.address,
           avatarUrl: null,
+          classId: targetClassId || null,
           roles: ['student'],
           schoolId: teacherContext.teacher.schoolId,
           createdByTeacherId: teacherId,
@@ -2354,6 +2377,12 @@ export const uploadBulkStudentsController = async (req, res, next) => {
       const classChanged = targetSchoolClassId
         ? !(currentClassIds.length === 1 && currentClassIds[0] === String(targetSchoolClassId))
         : false;
+      const classIdChanged = targetClassId
+        ? String(student.classId || '') !== String(targetClassId)
+        : false;
+      if (classIdChanged) {
+        updates.classId = targetClassId;
+      }
 
       const hasFieldChanges = Object.keys(updates).length > 0;
       const hasParentChanges = Object.keys(parentUpdates).length > 0;

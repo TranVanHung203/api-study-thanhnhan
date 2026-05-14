@@ -16,9 +16,11 @@ const QuizSchema = new mongoose.Schema({
     type: Number, 
     default: 100 
   },
-  progressId: {
+  chapterId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Progress'
+    ref: 'Chapter',
+    required: false,
+    default: null
   },
   classId: {
     type: mongoose.Schema.Types.ObjectId,

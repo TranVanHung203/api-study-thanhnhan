@@ -142,14 +142,20 @@ router.delete('/:quizId', deleteQuizController);
  * @swagger
  * /quizzes/overstudy/questions:
  *   get:
- *     summary: Lay toan bo cau hoi hoc vuot theo classId
- *     description: Tim cac quiz co classId duoc truyen vao, sau do tra ve toan bo cau hoi thuoc cac quiz do.
+ *     summary: Lay toan bo cau hoi hoc vuot theo classId hoac chapterId
+ *     description: Tim cac quiz theo classId hoac chapterId duoc truyen vao, sau do tra ve toan bo cau hoi thuoc cac quiz do.
  *     tags: [Quizzes]
  *     parameters:
  *       - in: query
  *         name: classId
- *         required: true
+ *         required: false
  *         description: Class ID can lay bo cau hoi hoc vuot
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: chapterId
+ *         required: false
+ *         description: Chapter ID can lay bo cau hoi hoc vuot
  *         schema:
  *           type: string
  *     security:
@@ -179,7 +185,7 @@ router.delete('/:quizId', deleteQuizController);
  *                   items:
  *                     type: object
  *       400:
- *         description: Missing classId hoac classId khong hop le
+ *         description: Missing classId/chapterId hoac tham so khong hop le
  *       404:
  *         description: Lop khong ton tai
  */
@@ -190,7 +196,7 @@ router.get('/overstudy/questions', getAdvancedLearningQuestionsController);
  * /quizzes/overstudy/submit:
  *   post:
  *     summary: Nop bai hoc vuot va tu dong gan class khi dat >= 80%
- *     description: Cham diem tren toan bo cau hoi cua class. Neu dung tu 80 phantram tro len, he thong goi selectClassController de gan classId cho user.
+ *     description: Cham diem tren toan bo cau hoi cua class. Neu truyen chapterId, he thong se gan classId va danh dau hoan thanh tat ca progress cua cac lesson truoc chapter do.
  *     tags: [Quizzes]
  *     requestBody:
  *       required: true
@@ -199,10 +205,11 @@ router.get('/overstudy/questions', getAdvancedLearningQuestionsController);
  *           schema:
  *             type: object
  *             required:
- *               - classId
  *               - answers
  *             properties:
  *               classId:
+ *                 type: string
+ *               chapterId:
  *                 type: string
  *               answers:
  *                 type: array
