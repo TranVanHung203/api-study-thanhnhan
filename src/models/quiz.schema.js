@@ -45,6 +45,11 @@ const QuizSchema = new mongoose.Schema({
   }
 });
 
+QuizSchema.index(
+  { progressId: 1 },
+  { unique: true, partialFilterExpression: { progressId: { $exists: true, $ne: null } } }
+);
+
 const Quiz = mongoose.model('Quiz', QuizSchema);
 
 export default Quiz;

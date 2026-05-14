@@ -79,6 +79,12 @@ router.get('/', getQuizzesController);
  *                 type: string
  *               bonusPoints:
  *                 type: number
+ *               classId:
+ *                 type: string
+ *               chapterId:
+ *                 type: string
+ *               progressId:
+ *                 type: string
  *     responses:
  *       201:
  *         description: Bài quiz được tạo thành công
@@ -114,6 +120,12 @@ router.post('/', createQuizController);
  *                 type: number
  *               bonusPoints:
  *                 type: number
+ *               classId:
+ *                 type: string
+ *               chapterId:
+ *                 type: string
+ *               progressId:
+ *                 type: string
  *     responses:
  *       200:
  *         description: Cập nhật thành công
@@ -266,4 +278,3 @@ router.post('/overstudy/submit', submitAdvancedLearningController);
 
 
 export default router;
-

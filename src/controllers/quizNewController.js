@@ -4,7 +4,14 @@ import QuizAssignment from '../models/quizAssignment.schema.js';
 import AssignmentAttempt from '../models/assignmentAttempt.schema.js';
 import QuizSession from '../models/quizSession.schema.js';
 import mongoose from 'mongoose';
+import BadRequestError from '../errors/badRequestError.js';
 
+const validateOptionalObjectId = (value, fieldName) => {
+  if (value === undefined || value === null || value === '') return;
+  if (!mongoose.Types.ObjectId.isValid(String(value))) {
+    throw new BadRequestError(fieldName + ' khong hop le');
+  }
+};
 // Lấy danh sách quizzes
 export const getQuizzesController = async (req, res, next) => {
   try {
@@ -69,11 +76,11 @@ export const getQuizzesController = async (req, res, next) => {
 // Tạo quiz
 export const createQuizController = async (req, res, next) => {
   try {
-    const { title, description, bonusPoints, classId } = req.body;
+    const { title, description, bonusPoints, classId, chapterId, progressId } = req.body;
 
-    if (classId && !mongoose.Types.ObjectId.isValid(classId)) {
-      return res.status(400).json({ message: 'classId khong hop le' });
-    }
+    validateOptionalObjectId(classId, 'classId');
+    validateOptionalObjectId(chapterId, 'chapterId');
+    validateOptionalObjectId(progressId, 'progressId');
 
     const quiz = new Quiz({
       title,
@@ -81,6 +88,8 @@ export const createQuizController = async (req, res, next) => {
       totalQuestions: 0,
       bonusPoints: bonusPoints || 100,
       classId: classId || null,
+      chapterId: chapterId || null,
+      progressId: progressId || null,
       createdBy: req.user.id
     });
 
@@ -124,15 +133,21 @@ export const getQuizDetailController = async (req, res, next) => {
 export const updateQuizController = async (req, res, next) => {
   try {
     const { quizId } = req.params;
-    const { title, description, totalQuestions, bonusPoints, classId } = req.body;
+    const { title, description, totalQuestions, bonusPoints, classId, chapterId, progressId } = req.body;
 
-    if (classId !== undefined && classId !== null && classId !== '' && !mongoose.Types.ObjectId.isValid(classId)) {
-      return res.status(400).json({ message: 'classId khong hop le' });
-    }
+    validateOptionalObjectId(classId, 'classId');
+    validateOptionalObjectId(chapterId, 'chapterId');
+    validateOptionalObjectId(progressId, 'progressId');
 
     const updatePayload = { title, description, totalQuestions, bonusPoints };
     if (classId !== undefined) {
       updatePayload.classId = classId || null;
+    }
+    if (chapterId !== undefined) {
+      updatePayload.chapterId = chapterId || null;
+    }
+    if (progressId !== undefined) {
+      updatePayload.progressId = progressId || null;
     }
 
     const quiz = await Quiz.findOneAndUpdate(
@@ -183,7 +198,4 @@ export const deleteQuizController = async (req, res, next) => {
     next(error);
   }
 };
-
-
-
 
