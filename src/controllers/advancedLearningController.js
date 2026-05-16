@@ -142,15 +142,15 @@ const sampleQuestions = async ({ quizIds, limit, extraMatch = {}, excludedIds = 
 const markPreviousChapterAndLessonCompleted = async ({ userId, classId, chapterId }) => {
   const currentChapter = await Chapter.findById(chapterId).select('_id classId order').lean();
   if (!currentChapter) {
-    throw new NotFoundError('Chapter khong ton tai');
+    throw new NotFoundError('Chapter không tồn tại');
   }
 
   if (String(currentChapter.classId) !== String(classId)) {
-    throw new BadRequestError('chapterId khong thuoc classId da truyen');
+    throw new BadRequestError('chapterId không thuộc classId đã truyền');
   }
 
   if (!Number.isFinite(Number(currentChapter.order))) {
-    throw new BadRequestError('Chapter hien tai khong co order hop le');
+    throw new BadRequestError('Chapter hiện tại không có order hợp lệ');
   }
 
   const previousChapters = await Chapter.find({
@@ -232,7 +232,7 @@ export const getAdvancedLearningQuestionsController = async (req, res, next) => 
 
     // Must provide exactly one of classId or chapterId
     if ((rawClassId && rawChapterId) || (!rawClassId && !rawChapterId)) {
-      throw new BadRequestError('Vui long truyen 1 trong 2: classId hoac chapterId (khong duoc truyen ca hai)');
+      throw new BadRequestError('Vui lòng truyền 1 trong 2: classId hoac chapterId (khong duoc truyen ca hai)');
     }
 
     let classId = null;

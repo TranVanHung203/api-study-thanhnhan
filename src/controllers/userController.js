@@ -870,6 +870,18 @@ export const createStudentByTeacherController = async (req, res, next) => {
       throw createError;
     }
 
+    await Reward.updateOne(
+      { userId: user._id },
+      {
+        $setOnInsert: {
+          userId: user._id,
+          totalPoints: 0,
+          updatedAt: new Date()
+        }
+      },
+      { upsert: true }
+    );
+
     await UserSchoolClass.create({ userId: user._id, schoolClassId: schoolClassResult.schoolClass._id });
 
     const parentInfoPayload = {
@@ -2455,6 +2467,25 @@ export const uploadBulkStudentsController = async (req, res, next) => {
       });
 
       const createdUsers = await User.insertMany(createDocs, { ordered: false });
+      if (createdUsers.length) {
+        const now = new Date();
+        await Reward.bulkWrite(
+          createdUsers.map((createdUser) => ({
+            updateOne: {
+              filter: { userId: createdUser._id },
+              update: {
+                $setOnInsert: {
+                  userId: createdUser._id,
+                  totalPoints: 0,
+                  updatedAt: now
+                }
+              },
+              upsert: true
+            }
+          })),
+          { ordered: false }
+        );
+      }
       const createdUserMap = new Map(createdUsers.map((user) => [user.username, user]));
 
       for (const item of createMeta) {
