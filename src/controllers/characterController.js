@@ -17,7 +17,7 @@ const normalizeRewardPoints = (value, fallback = null) => {
 export const createCharacterController = async (req, res, next) => {
   try {
     const userId = req.user.id;
-    const { name, url, rewardPoints, staticImageUrl } = req.body;
+    const { name, type, url, rewardPoints, staticImageUrl } = req.body;
 
     if (!name || !url) {
       throw new BadRequestError('name và url là bắt buộc');
@@ -30,6 +30,7 @@ export const createCharacterController = async (req, res, next) => {
 
     const character = new Character({
       name: String(name).trim(),
+      type: type !== undefined && type !== null ? String(type).trim() : null,
       url: String(url).trim(),
       staticImageUrl: staticImageUrl || null,
       rewardPoints: parsedRewardPoints,
@@ -48,7 +49,7 @@ export const updateCharacterController = async (req, res, next) => {
   try {
     const userId = req.user.id;
     const { id } = req.params;
-    const { name, url, rewardPoints, staticImageUrl } = req.body;
+    const { name, type, url, rewardPoints, staticImageUrl } = req.body;
 
     const character = await Character.findById(id);
     if (!character) throw new NotFoundError('Không tìm thấy character');
@@ -58,6 +59,7 @@ export const updateCharacterController = async (req, res, next) => {
     }
 
     if (name) character.name = String(name).trim();
+    if (type !== undefined) character.type = type === null ? null : String(type).trim();
     if (url) character.url = String(url).trim();
     if (staticImageUrl !== undefined) character.staticImageUrl = staticImageUrl || null;
     if (rewardPoints !== undefined) {
@@ -132,9 +134,13 @@ export const listCharactersController = async (req, res, next) => {
 export const listCharacterStoreController = async (req, res, next) => {
   try {
     const userId = req.user.id;
+    const rawType = req.query.type;
+    const type = typeof rawType === 'string' ? rawType.trim() : '';
+    const characterFilter = {};
+    if (type) characterFilter.type = type;
 
     const [characters, purchasedRows, user] = await Promise.all([
-      Character.find({}).sort({ createdAt: -1 }),
+      Character.find(characterFilter).sort({ createdAt: -1 }),
       UserCharacterPurchase.find({ userId }).select('characterId'),
       User.findById(userId).select('characterId')
     ]);

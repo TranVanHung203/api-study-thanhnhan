@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 
 const CharacterSchema = new mongoose.Schema({
   name: { type: String, required: true },
+  type: { type: String, trim: true, default: null },
   url: { type: String, required: true },
   staticImageUrl: { type: String, default: null },
   rewardPoints: { type: Number, required: true, default: 0, min: 0 },

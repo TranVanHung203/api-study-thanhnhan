@@ -28,8 +28,25 @@ const UserStreakSchema = new mongoose.Schema({
     type: String,
     default: null
   },
-  recentCheckins: {
-    type: [String],
+  firstCheckInDate: {
+    type: String,
+    default: null
+  },
+  lastHistoryDate: {
+    type: String,
+    default: null
+  },
+  dailyCheckins: {
+    type: [{
+      date: {
+        type: String,
+        required: true
+      },
+      checkedIn: {
+        type: Boolean,
+        required: true
+      }
+    }],
     default: []
   }
 }, { timestamps: true });

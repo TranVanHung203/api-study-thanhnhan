@@ -30,10 +30,17 @@ router.get('/', authToken, listCharactersController);
  * @swagger
  * /characters/store:
  *   get:
- *     summary: Lay danh sach tat ca character trong cua hang kem trang thai mua
+ *     summary: Lay danh sach tat ca character trong cua hang kem trang thai mua (co the loc theo type)
  *     tags: [Characters]
  *     security:
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: type
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Loc danh sach theo phan loai character (type)
  *     responses:
  *       200:
  *         description: Danh sach character store
