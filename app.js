@@ -32,6 +32,7 @@ import UserStreak from './src/models/userStreak.schema.js';
 import BulkAvatarUploadJob from './src/models/bulkAvatarUploadJob.schema.js';
 import UserUsageSummary from './src/models/userUsageSummary.schema.js';
 import UserUsageDaily from './src/models/userUsageDaily.schema.js';
+import UserUsageRuntimeState from './src/models/userUsageRuntimeState.schema.js';
 //nhanhmoi
 // Import routes mới
 import authRoutes from './src/routes/authRoutes.js';

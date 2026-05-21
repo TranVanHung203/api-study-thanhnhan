@@ -1,6 +1,7 @@
 import redis, { ensureRedisConnected, redisHealthy } from '../config/redisConfig.js';
 import UserUsageSummary from '../models/userUsageSummary.schema.js';
 import UserUsageDaily from '../models/userUsageDaily.schema.js';
+import UserUsageRuntimeState from '../models/userUsageRuntimeState.schema.js';
 
 const USAGE_ACTIVE_USERS_KEY = 'usage:active:userIds';
 const USAGE_DIRTY_USERS_KEY = 'usage:dirty:userIds';
@@ -12,9 +13,6 @@ const SESSION_TIMEOUT_SECONDS = Number.parseInt(process.env.USAGE_SESSION_TIMEOU
 const STATE_TTL_SECONDS = Number.parseInt(process.env.USAGE_STATE_TTL_SECONDS, 10) || (2 * 24 * 60 * 60);
 const FLUSH_BATCH_SIZE = Number.parseInt(process.env.USAGE_FLUSH_BATCH_SIZE, 10) || 500;
 const DAILY_TIMEZONE = process.env.USAGE_DAILY_TIMEZONE || 'UTC';
-
-const fallbackStateByUserId = new Map();
-const fallbackDirtyUserIds = new Set();
 
 const DRAIN_PENDING_SECONDS_LUA = `
 local current = redis.call('HGET', KEYS[1], ARGV[1])
@@ -65,23 +63,7 @@ const getDailyFormatter = () => {
   return dailyFormatter;
 };
 
-const getDateKey = (date) => {
-  return getDailyFormatter().format(date);
-};
-
-const getFallbackState = (userId) => {
-  const normalizedUserId = String(userId);
-  if (!fallbackStateByUserId.has(normalizedUserId)) {
-    fallbackStateByUserId.set(normalizedUserId, {
-      sessionStartedAtMs: null,
-      lastPingAtMs: null,
-      pendingSeconds: 0,
-      isOnline: false,
-      endedAtMs: null
-    });
-  }
-  return fallbackStateByUserId.get(normalizedUserId);
-};
+const getDateKey = (date) => getDailyFormatter().format(date);
 
 const touchUsageStateRedis = async (userId, nowMs = Date.now()) => {
   const normalizedUserId = String(userId);
@@ -126,27 +108,6 @@ const touchUsageStateRedis = async (userId, nowMs = Date.now()) => {
   };
 };
 
-const touchUsageStateFallback = (userId, nowMs = Date.now()) => {
-  const normalizedUserId = String(userId);
-  const state = getFallbackState(normalizedUserId);
-  const deltaSeconds = getDeltaSeconds(state.lastPingAtMs, nowMs);
-  state.pendingSeconds = Number((state.pendingSeconds + deltaSeconds).toFixed(3));
-  state.lastPingAtMs = nowMs;
-  state.sessionStartedAtMs = state.sessionStartedAtMs || nowMs;
-  state.isOnline = true;
-  state.endedAtMs = null;
-
-  if (deltaSeconds > 0) {
-    fallbackDirtyUserIds.add(normalizedUserId);
-  }
-
-  return {
-    source: 'memory',
-    deltaSeconds,
-    pendingSeconds: state.pendingSeconds
-  };
-};
-
 const closeUsageStateRedis = async (userId, nowMs = Date.now(), reason = 'disconnect') => {
   const normalizedUserId = String(userId);
   const usageKey = getUsageUserKey(normalizedUserId);
@@ -187,27 +148,6 @@ const closeUsageStateRedis = async (userId, nowMs = Date.now(), reason = 'discon
     source: 'redis',
     deltaSeconds,
     pendingSeconds: nextPendingSeconds
-  };
-};
-
-const closeUsageStateFallback = (userId, nowMs = Date.now(), reason = 'disconnect') => {
-  const normalizedUserId = String(userId);
-  const state = getFallbackState(normalizedUserId);
-  const deltaSeconds = getDeltaSeconds(state.lastPingAtMs, nowMs);
-  state.pendingSeconds = Number((state.pendingSeconds + deltaSeconds).toFixed(3));
-  state.lastPingAtMs = nowMs;
-  state.isOnline = false;
-  state.endedAtMs = nowMs;
-  state.endReason = String(reason || 'disconnect');
-
-  if (state.pendingSeconds > 0) {
-    fallbackDirtyUserIds.add(normalizedUserId);
-  }
-
-  return {
-    source: 'memory',
-    deltaSeconds,
-    pendingSeconds: state.pendingSeconds
   };
 };
 
@@ -282,6 +222,21 @@ const writeUsageRows = async (rows) => {
   };
 };
 
+const writeUsageIncrementDirect = async (userId, deltaSeconds, nowMs = Date.now()) => {
+  const usageSeconds = getSecondsNumber(deltaSeconds);
+  if (usageSeconds <= 0) {
+    return { processedUsers: 0, flushedSeconds: 0 };
+  }
+
+  return writeUsageRows([
+    {
+      userId,
+      pendingSeconds: usageSeconds,
+      lastPingAtMs: nowMs
+    }
+  ]);
+};
+
 const restoreDrainedRowsToRedis = async (rows) => {
   if (!Array.isArray(rows) || rows.length === 0) return;
   const multi = redis.multi();
@@ -292,6 +247,109 @@ const restoreDrainedRowsToRedis = async (rows) => {
     multi.sadd(USAGE_DIRTY_USERS_KEY, row.userId);
   }
   await multi.exec();
+};
+
+const touchUsageStateDegradedDb = async (userId, nowMs = Date.now()) => {
+  const now = new Date(nowMs);
+  const previousState = await UserUsageRuntimeState.findOneAndUpdate(
+    { userId },
+    {
+      $setOnInsert: {
+        createdAt: now,
+        sessionStartedAt: now
+      },
+      $set: {
+        isOnline: true,
+        lastPingAt: now,
+        updatedAt: now,
+        endedAt: null,
+        endReason: null
+      }
+    },
+    {
+      upsert: true,
+      new: false,
+      lean: true
+    }
+  );
+
+  const lastPingAtMs = previousState?.lastPingAt
+    ? new Date(previousState.lastPingAt).getTime()
+    : null;
+  const deltaSeconds = getDeltaSeconds(lastPingAtMs, nowMs);
+  if (deltaSeconds > 0) {
+    await writeUsageIncrementDirect(userId, deltaSeconds, nowMs);
+  }
+
+  return {
+    source: 'degraded-db',
+    deltaSeconds,
+    pendingSeconds: 0
+  };
+};
+
+const closeUsageStateDegradedDb = async (userId, nowMs = Date.now(), reason = 'disconnect') => {
+  const now = new Date(nowMs);
+  const previousState = await UserUsageRuntimeState.findOneAndUpdate(
+    { userId },
+    {
+      $setOnInsert: {
+        createdAt: now,
+        sessionStartedAt: now
+      },
+      $set: {
+        isOnline: false,
+        lastPingAt: now,
+        updatedAt: now,
+        endedAt: now,
+        endReason: String(reason || 'disconnect')
+      }
+    },
+    {
+      upsert: true,
+      new: false,
+      lean: true
+    }
+  );
+
+  const lastPingAtMs = previousState?.lastPingAt
+    ? new Date(previousState.lastPingAt).getTime()
+    : null;
+  const deltaSeconds = getDeltaSeconds(lastPingAtMs, nowMs);
+  if (deltaSeconds > 0) {
+    await writeUsageIncrementDirect(userId, deltaSeconds, nowMs);
+  }
+
+  return {
+    source: 'degraded-db',
+    deltaSeconds,
+    pendingSeconds: 0
+  };
+};
+
+const closeTimedOutUsageSessionsDegradedDb = async (batchSize, staleBeforeMs, nowMs) => {
+  const staleBeforeDate = new Date(staleBeforeMs);
+  const staleRows = await UserUsageRuntimeState.find({
+    isOnline: true,
+    lastPingAt: { $lt: staleBeforeDate }
+  })
+    .select('userId')
+    .sort({ lastPingAt: 1 })
+    .limit(batchSize)
+    .lean();
+
+  if (!staleRows.length) {
+    return { ok: true, source: 'degraded-db', closedUsers: 0 };
+  }
+
+  let closedUsers = 0;
+  for (const row of staleRows) {
+    if (!row?.userId) continue;
+    await closeUsageStateDegradedDb(String(row.userId), nowMs, 'timeout');
+    closedUsers += 1;
+  }
+
+  return { ok: true, source: 'degraded-db', closedUsers };
 };
 
 const getLiveUsageSnapshot = async (userId) => {
@@ -317,16 +375,19 @@ const getLiveUsageSnapshot = async (userId) => {
       };
     }
   } catch (error) {
-    console.warn('[Usage] Failed to get live snapshot from Redis, fallback to memory:', error?.message || error);
+    console.warn('[Usage] Failed to get live snapshot from Redis, fallback to degraded-db:', error?.message || error);
   }
 
-  const fallbackState = fallbackStateByUserId.get(normalizedUserId);
+  const state = await UserUsageRuntimeState.findOne({ userId: normalizedUserId })
+    .select('isOnline lastPingAt sessionStartedAt')
+    .lean();
+
   return {
-    source: 'memory',
-    pendingSeconds: getSecondsNumber(fallbackState?.pendingSeconds || 0),
-    lastPingAtMs: fallbackState?.lastPingAtMs || null,
-    sessionStartedAtMs: fallbackState?.sessionStartedAtMs || null,
-    isOnline: fallbackState?.isOnline === true
+    source: 'degraded-db',
+    pendingSeconds: 0,
+    lastPingAtMs: state?.lastPingAt ? new Date(state.lastPingAt).getTime() : null,
+    sessionStartedAtMs: state?.sessionStartedAt ? new Date(state.sessionStartedAt).getTime() : null,
+    isOnline: state?.isOnline === true
   };
 };
 
@@ -342,11 +403,11 @@ export const recordUsageActivity = async (userId) => {
       return { ok: true, ...result };
     }
   } catch (error) {
-    console.warn('[Usage] Redis touch failed, fallback to memory:', error?.message || error);
+    console.warn('[Usage] Redis touch failed, fallback to degraded-db:', error?.message || error);
   }
 
-  const fallbackResult = touchUsageStateFallback(normalizedUserId);
-  return { ok: true, ...fallbackResult };
+  const degradedResult = await touchUsageStateDegradedDb(normalizedUserId);
+  return { ok: true, ...degradedResult };
 };
 
 export const closeUsageSession = async (userId, reason = 'disconnect') => {
@@ -361,11 +422,11 @@ export const closeUsageSession = async (userId, reason = 'disconnect') => {
       return { ok: true, ...result };
     }
   } catch (error) {
-    console.warn('[Usage] Redis close session failed, fallback to memory:', error?.message || error);
+    console.warn('[Usage] Redis close session failed, fallback to degraded-db:', error?.message || error);
   }
 
-  const fallbackResult = closeUsageStateFallback(normalizedUserId, Date.now(), reason);
-  return { ok: true, ...fallbackResult };
+  const degradedResult = await closeUsageStateDegradedDb(normalizedUserId, Date.now(), reason);
+  return { ok: true, ...degradedResult };
 };
 
 export const closeTimedOutUsageSessions = async ({ batchSize = FLUSH_BATCH_SIZE } = {}) => {
@@ -402,19 +463,10 @@ export const closeTimedOutUsageSessions = async ({ batchSize = FLUSH_BATCH_SIZE 
       return { ok: true, source: 'redis', closedUsers };
     }
   } catch (error) {
-    console.warn('[Usage] Redis timeout close failed, fallback to memory:', error?.message || error);
+    console.warn('[Usage] Redis timeout close failed, fallback to degraded-db:', error?.message || error);
   }
 
-  let closedUsers = 0;
-  for (const [userId, state] of fallbackStateByUserId.entries()) {
-    if (closedUsers >= safeBatchSize) break;
-    if (!state.isOnline || !Number.isFinite(state.lastPingAtMs)) continue;
-    if (state.lastPingAtMs > staleBeforeMs) continue;
-    closeUsageStateFallback(userId, nowMs, 'timeout');
-    closedUsers += 1;
-  }
-
-  return { ok: true, source: 'memory', closedUsers };
+  return closeTimedOutUsageSessionsDegradedDb(safeBatchSize, staleBeforeMs, nowMs);
 };
 
 export const flushUsageToDatabase = async ({ batchSize = FLUSH_BATCH_SIZE } = {}) => {
@@ -455,45 +507,10 @@ export const flushUsageToDatabase = async ({ batchSize = FLUSH_BATCH_SIZE } = {}
       }
     }
   } catch (error) {
-    console.warn('[Usage] Redis flush failed, fallback to memory:', error?.message || error);
+    console.warn('[Usage] Redis flush failed, fallback to degraded-db:', error?.message || error);
   }
 
-  const userIds = Array.from(fallbackDirtyUserIds).slice(0, safeBatchSize);
-  if (!userIds.length) {
-    return { ok: true, source: 'memory', processedUsers: 0, flushedSeconds: 0 };
-  }
-
-  const rows = [];
-  for (const userId of userIds) {
-    const state = fallbackStateByUserId.get(userId);
-    if (!state) continue;
-    const pendingSeconds = getSecondsNumber(state.pendingSeconds);
-    if (pendingSeconds <= 0) {
-      fallbackDirtyUserIds.delete(userId);
-      continue;
-    }
-    rows.push({
-      userId,
-      pendingSeconds,
-      lastPingAtMs: state.lastPingAtMs
-    });
-  }
-
-  if (!rows.length) {
-    return { ok: true, source: 'memory', processedUsers: 0, flushedSeconds: 0 };
-  }
-
-  const writeResult = await writeUsageRows(rows);
-  for (const row of rows) {
-    const state = fallbackStateByUserId.get(row.userId);
-    if (!state) continue;
-    state.pendingSeconds = Math.max(0, Number((state.pendingSeconds - row.pendingSeconds).toFixed(3)));
-    if (state.pendingSeconds <= 0) {
-      fallbackDirtyUserIds.delete(row.userId);
-    }
-  }
-
-  return { ok: true, source: 'memory', ...writeResult };
+  return { ok: true, source: 'degraded-db', processedUsers: 0, flushedSeconds: 0 };
 };
 
 export const getUsageSummaryForUser = async (userId, { days = 7 } = {}) => {
@@ -563,3 +580,4 @@ export const getUsageSummaryForUser = async (userId, { days = 7 } = {}) => {
     }
   };
 };
+
