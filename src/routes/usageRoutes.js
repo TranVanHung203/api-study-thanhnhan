@@ -23,7 +23,21 @@ router.all('*', authToken);
  *           minimum: 1
  *           maximum: 31
  *           default: 7
- *         description: So ngay gan nhat can tra ve (bao gom hom nay)
+ *         description: So ngay gan nhat can tra ve (bao gom hom nay). Nếu truyền `startDate`/`endDate` thì `days` sẽ bị bỏ qua.
+ *       - in: query
+ *         name: startDate
+ *         required: false
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Ngày bắt đầu của khoảng (định dạng YYYY-MM-DD). Nếu chỉ truyền `startDate` thì lấy 1 ngày.
+ *       - in: query
+ *         name: endDate
+ *         required: false
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Ngày kết thúc của khoảng (định dạng YYYY-MM-DD). Nếu chỉ truyền `endDate` thì lấy 1 ngày.
  *       - in: query
  *         name: userId
  *         required: false

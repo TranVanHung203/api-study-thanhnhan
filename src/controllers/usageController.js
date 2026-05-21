@@ -36,7 +36,44 @@ export const getUsageSummaryController = async (req, res, next) => {
       targetUserId = requestedUserId;
     }
 
-    const days = Math.max(1, Math.min(31, Number.parseInt(req.query.days, 10) || 7));
+    const daysRaw = req.query.days;
+    const startDateRaw = req.query.startDate;
+    const endDateRaw = req.query.endDate;
+
+    if ((startDateRaw || endDateRaw) && daysRaw) {
+      throw new BadRequestError('Truyen days hoac startDate/endDate, khong duoc truyen ca hai');
+    }
+
+    if (startDateRaw || endDateRaw) {
+      const start = startDateRaw ? new Date(startDateRaw) : null;
+      const end = endDateRaw ? new Date(endDateRaw) : null;
+
+      if (startDateRaw && (!start || Number.isNaN(start.getTime()))) {
+        throw new BadRequestError('startDate khong hop le (YYYY-MM-DD)');
+      }
+      if (endDateRaw && (!end || Number.isNaN(end.getTime()))) {
+        throw new BadRequestError('endDate khong hop le (YYYY-MM-DD)');
+      }
+
+      const s = start || end;
+      const e = end || start;
+      if (s > e) {
+        throw new BadRequestError('startDate phai nho hon hoac bang endDate');
+      }
+
+      const startISO = new Date(s.getFullYear(), s.getMonth(), s.getDate()).toISOString().slice(0, 10);
+      const endISO = new Date(e.getFullYear(), e.getMonth(), e.getDate()).toISOString().slice(0, 10);
+
+      const summary = await getUsageSummaryForUser(targetUserId, { startDate: startISO, endDate: endISO });
+
+      return res.status(200).json({
+        ...summary,
+        startDate: startISO,
+        endDate: endISO
+      });
+    }
+
+    const days = Math.max(1, Math.min(31, Number.parseInt(daysRaw, 10) || 7));
     const summary = await getUsageSummaryForUser(targetUserId, { days });
 
     return res.status(200).json({

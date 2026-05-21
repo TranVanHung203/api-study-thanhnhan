@@ -513,7 +513,7 @@ export const flushUsageToDatabase = async ({ batchSize = FLUSH_BATCH_SIZE } = {}
   return { ok: true, source: 'degraded-db', processedUsers: 0, flushedSeconds: 0 };
 };
 
-export const getUsageSummaryForUser = async (userId, { days = 7 } = {}) => {
+export const getUsageSummaryForUser = async (userId, { days = 7, startDate, endDate } = {}) => {
   const normalizedUserId = String(userId || '');
   if (!normalizedUserId) {
     return {
@@ -529,13 +529,32 @@ export const getUsageSummaryForUser = async (userId, { days = 7 } = {}) => {
     };
   }
 
-  const safeDays = Math.max(1, Math.min(31, Number.parseInt(days, 10) || 7));
   const now = new Date();
   const dateKeys = [];
-  for (let i = safeDays - 1; i >= 0; i--) {
-    const date = new Date(now);
-    date.setDate(now.getDate() - i);
-    dateKeys.push(getDateKey(date));
+
+  if (startDate || endDate) {
+    const s = startDate ? new Date(startDate) : null;
+    const e = endDate ? new Date(endDate) : null;
+    const start = s || e;
+    const end = e || s;
+
+    // normalize to date-only (local)
+    const startNorm = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+    const endNorm = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+
+    const diffDays = Math.floor((endNorm - startNorm) / (24 * 60 * 60 * 1000));
+    for (let d = 0; d <= diffDays; d++) {
+      const date = new Date(startNorm);
+      date.setDate(startNorm.getDate() + d);
+      dateKeys.push(getDateKey(date));
+    }
+  } else {
+    const safeDays = Math.max(1, Math.min(31, Number.parseInt(days, 10) || 7));
+    for (let i = safeDays - 1; i >= 0; i--) {
+      const date = new Date(now);
+      date.setDate(now.getDate() - i);
+      dateKeys.push(getDateKey(date));
+    }
   }
 
   const [summaryDoc, dailyDocs, liveSnapshot] = await Promise.all([
