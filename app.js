@@ -30,6 +30,8 @@ import Topic from './src/models/topic.schema.js';
 import PreferenceQuestion from './src/models/preferenceQuestion.schema.js';
 import UserStreak from './src/models/userStreak.schema.js';
 import BulkAvatarUploadJob from './src/models/bulkAvatarUploadJob.schema.js';
+import UserUsageSummary from './src/models/userUsageSummary.schema.js';
+import UserUsageDaily from './src/models/userUsageDaily.schema.js';
 //nhanhmoi
 // Import routes mới
 import authRoutes from './src/routes/authRoutes.js';
@@ -51,6 +53,7 @@ import quizAssignmentRoutes from './src/routes/quizAssignmentRoutes.js';
 import chatbotRoutes from './src/chatbot/routes.js';
 import realtimeBattleRoutes from './src/routes/realtimeBattleRoutes.js';
 import streakRoutes from './src/routes/streakRoutes.js';
+import usageRoutes from './src/routes/usageRoutes.js';
 import { initBattleSocket } from './src/ws/battleSocket.js';
 import { initAuthSocket } from './src/ws/authSocket.js';
 
@@ -104,6 +107,7 @@ function getLocalIP() {
 // Import cleanup jobs
 import { startCleanupJob, startExpiredGuestCleanup } from './src/jobs/cleanupJob.js';
 import { startDailyDatabaseBackupOverwriteJob } from './src/jobs/databaseBackupJob.js';
+import { startUsageAggregationJob } from './src/jobs/usageAggregationJob.js';
 
 const app = express();
 const databaseConfig = new DatabaseConfig();
@@ -391,7 +395,8 @@ const swaggerOptions = {
     // './src/routes/rewardRoutes.js',
     './src/routes/quizAssignmentRoutes.js',
     './src/routes/realtimeBattleRoutes.js',
-    './src/routes/streakRoutes.js'
+    './src/routes/streakRoutes.js',
+    './src/routes/usageRoutes.js'
   ],
 };
 
@@ -590,6 +595,7 @@ app.use('/assignments', quizAssignmentRoutes);
 app.use('/chatbot', chatbotRoutes);
 app.use('/battle', realtimeBattleRoutes);
 app.use('/streaks', streakRoutes);
+app.use('/usage', usageRoutes);
 
 app.use(errorHandler);
 
@@ -610,6 +616,7 @@ const io = new Server(server, {
 
 initBattleSocket(io);
 initAuthSocket(io);
+startUsageAggregationJob();
 
 server.listen(PORT, HOST, () => {
   console.log(`Server running on ${HOST}:${PORT}`);

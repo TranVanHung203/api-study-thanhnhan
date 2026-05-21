@@ -1,120 +1,77 @@
-
-
-
-
-
-
-
-
-{
-    "questions": [
-        {
-            "question_title": "What is the capital of France?",
-            "answers": [
-                {
-                    "answer_text": "Paris",
-                    "is_correct": true
-                },
-                {
-                    "answer_text": "London",
-                    "is_correct": false
-                },
-                {
-                    "answer_text": "Berlin",
-                    "is_correct": false
-                },
-                {
-                    "answer_text": "Madrid",
-                    "is_correct": false
-                }
-            ]
-        },
-        {
-            "question_title": "Which planet is known as the Red Planet?",
-            "answers": [
-                {
-                    "answer_text": "Mars",
-                    "is_correct": true
-                },
-                {
-                    "answer_text": "Earth",
-                    "is_correct": false
-                },
-                {
-                    "answer_text": "Venus",
-                    "is_correct": false
-                },
-                {
-                    "answer_text": "Jupiter",
-                    "is_correct": false
-                }
-            ]
-        }
-    ]
-}
--------------------------
-(Tạo và sửa khóa học) để ý đuôi @
-{
-    "courseName": "Introduction to Programming",
-    "description": "This course provides a basic introduction to programming.",
-    "startDate": "2024-01-01T00:00:00.000Z",
-    "endDate": "2024-03-01T00:00:00.000Z",
-    "emails": [
-        "tvhcptn@gmail.com",
-        "student1@example.com"
-    ]
-}
----------------------------
-(tạo lesson)
-name: Lesson 1: Introduction to Variables
-number: 1
-lesson_details:This lesson covers the basics of variables in programming
-type: Video
-file: 
--------------------------------------
- submit câu hỏi
-{
-   
-  "answers": [
-    {
-      "questionId": "QUESTION_ID_1",
-      "answerId": "ANSWER_ID_1"
-    },
-    {
-      "questionId": "QUESTION_ID_2",
-      "answerId": "ANSWER_ID_2"
-    },
-    {
-      "questionId": "QUESTION_ID_3",
-      "answerId": "ANSWER_ID_3"
-    }
-    // Thêm các cặp questionId-answerId khác nếu quiz có thêm câu hỏi
-  ],
-  "startTime": "2024-11-06T10:00:00Z"
-}
-------------------------------------
-sửa câu hỏi và câu trả lời của nó
-{
-  "question_title": "Updated Question Title",
-  "answers": [
-    {
-      "answer_text": "Answer option 1",
-      "is_correct": false
-    },
-    {
-      "answer_text": "Answer option 2",
-      "is_correct": true
-    },
-    {
-      "answer_text": "Answer option 3",
-      "is_correct": false
-    },
-    {
-      "answer_text": "Answer option 4",
-      "is_correct": false
-    }
-  ]
-}
---------------------------------
-FONTEND GỬI LÊN NHỚ LƯU LẠI DƯỚI DẠNG GIỜ VIỆT name
------------------------------------
+- NGƯỜI DÙNG
+  - Đăng nhập
+    - Tài khoản, mật khẩu
+    - Google
+    - Zalo
+    - Tài khoản khách
+  - Giáo viên
+    - Theo dõi học sinh
+      - Xem thời gian sử dụng ứng dụng
+      - Xem trạng thái tài khoản học sinh
+      - Xem điểm phần luyện tập
+      - Quản lý danh sách học sinh
+      - Xem, sửa, xoá thông tin học sinh
+      - Thêm tài khoản cho học sinh
+      - Chat với học sinh
+    - Giao bài kiểm tra
+      - Tạo bộ câu hỏi
+        - Tạo câu hỏi
+        - Quản lý bộ câu hỏi
+      - Quản lý bài kiểm tra
+      - Giao bài kiểm tra
+      - Xem kết quả kiểm tra của học sinh
+  - Học sinh
+    - Đặt tên, chọn giới tính
+    - Xem trang chủ
+      - Xem danh sách lớp, tiến độ học
+        - Xem roadmap chương, bài học
+          - Khởi động
+            - Video
+            - Âm nhạc
+            - Câu chuyện toán học
+          - Vận dụng
+            - Tích điểm sau khi làm
+            - Bộ dụng cụ học tập
+          - Khám phá
+            - Thao tác
+            - Video bài giảng xen kẽ bài tập
+            - Tích điểm sau khi làm
+            - Bộ dụng cụ học tập
+          - Luyện tập
+            - Tooltip
+            - Gợi ý trong lúc làm
+            - Lựa chọn cách trả lời
+            - Lựa chọn mức độ học
+            - Tích điểm sau khi làm
+            - Bộ dụng cụ học tập
+    - Cá nhân hoá giao diện
+      - Chọn giao diện theo sở thích
+      - Chọn giao diện đơn giản
+      - Tuỳ chỉnh cỡ chữ, âm thanh
+    - Lập mục tiêu kế hoạch
+    - Mua, chọn trang phục nhân vật
+      - Xem và mua các nhân vật
+      - Mua các gói nhân vật
+    - Làm bài kiểm tra
+      - Làm bài kiểm tra thầy cô giao
+      - Làm bài kiểm tra hệ thống theo lớp
+    - Đấu trường toán học
+      - Tạo phòng thi đấu nhiều người
+      - Xếp hạng đấu trường
+    - Trang cá nhân
+      - Xem thành tích, huy chương
+      - Xem chuỗi học tập streak
+      - Xem số điểm thưởng
+      - Kết bạn
+      - Xem danh sách bạn bè
+        - Xem trang cá nhân bạn bè
+        - Thi đấu với bạn bè
+    - Góc thắc mắc
+      - Diễn đàn hỏi đáp
+      - Chat với giáo viên
+    - Khoá học hè
+  - Admin
+    - Quản lý tài khoản người dùng
+    - Quản lý học sinh
+    - Quản lý giáo viên
+    - Quản lý nội dung hệ thống

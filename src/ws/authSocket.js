@@ -8,6 +8,7 @@ import {
   markUserOnline,
   refreshUserPresence
 } from '../services/presenceService.js';
+import { closeUsageSession, recordUsageActivity } from '../services/usageTrackingService.js';
 
 const SECRET_KEY = process.env.SECRET_KEY || 'your-secret-key';
 const USER_ROOM_PREFIX = 'auth:user:';
@@ -170,6 +171,9 @@ export const initAuthSocket = (io) => {
       socket.join(getUserRoom(userId));
 
       const presenceResult = await markUserOnline(userId, socket.id);
+      recordUsageActivity(userId).catch((error) => {
+        console.error('[Usage] Failed to open/refresh usage session on connect:', error);
+      });
       const now = new Date();
       const onlineAt = presenceResult.presence?.onlineAt
         ? new Date(presenceResult.presence.onlineAt)
@@ -229,12 +233,28 @@ export const initAuthSocket = (io) => {
       refreshUserPresence(pingUserId, socket.id).catch((error) => {
         console.error('[Presence] Failed to refresh socket presence:', error);
       });
+      recordUsageActivity(pingUserId).catch((error) => {
+        console.error('[Usage] Failed to record usage from presence:ping:', error);
+      });
 
       User.updateOne(
         { _id: pingUserId, isStatus: { $ne: 'deleted' } },
         { $set: { isOnline: true, lastSeenAt: new Date() } }
       ).catch((error) => {
         console.error('[Presence] Failed to update user heartbeat:', error);
+      });
+    });
+
+    socket.on('usage:ping', () => {
+      const pingUserId = socket.data.user?.id;
+      if (!pingUserId) return;
+
+      refreshUserPresence(pingUserId, socket.id).catch((error) => {
+        console.error('[Presence] Failed to refresh socket presence from usage:ping:', error);
+      });
+
+      recordUsageActivity(pingUserId).catch((error) => {
+        console.error('[Usage] Failed to record usage from usage:ping:', error);
       });
     });
 
@@ -271,6 +291,10 @@ export const initAuthSocket = (io) => {
       const presenceResult = await markUserOffline(disconnectedUserId, socket.id);
 
       if (presenceResult.changed && !presenceResult.isOnline) {
+        closeUsageSession(disconnectedUserId, 'disconnect').catch((error) => {
+          console.error('[Usage] Failed to close usage session on disconnect:', error);
+        });
+
         User.updateOne(
           { _id: disconnectedUserId, isStatus: { $ne: 'deleted' } },
           { $set: { isOnline: false, onlineAt: null, lastSeenAt: now } }
